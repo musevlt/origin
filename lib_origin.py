@@ -1809,7 +1809,8 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     logger = logging.getLogger(__name__)
     logger.info('{}/{} source ID {}'.format(k+1,ktot,i))
     cube = Cube(filename)
-    cubevers = cube.primary_header.get('CUBE_V')
+    cubevers = cube.primary_header.get('CUBE_V', '')
+    origin.append(cubevers)
 
     maxmap = Image(data=maxmap, wcs=cube.wcs)
 
@@ -1823,8 +1824,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     src.add_cube(cube, 'MUSE_CUBE')
     src.add_image(maxmap, 'MAXMAP')
     src.add_attr('SRC_VERS', src_vers, desc='Source version')
-    if cubevers is not None:
-        src.add_attr('CUBE_V', cubevers, desc='Cube version')
+    
     src.add_history('[{}] Source created with Origin'.format(src.SRC_VERS), author)
     
     w = cube.wave.coord(wave_pix, unit=u.angstrom)
@@ -1936,7 +1936,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
     fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', '.1f', '.1f', 'd']
 
     step_wave = wave.get_step(unit=u.angstrom)
-    origin = ('ORIGIN', __version__, os.path.basename(filename))
+    origin = ['ORIGIN', __version__, os.path.basename(filename)]
 
     maxmap = np.amax(correl, axis=0)
     
