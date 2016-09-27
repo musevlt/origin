@@ -38,8 +38,8 @@ import os.path
 from scipy.io import loadmat
 import shutil
 
-from ...obj import Cube, Image, Spectrum
-from ...MUSE import FSF,FieldsMap 
+from mpdaf.obj import Cube, Image, Spectrum
+from mpdaf.MUSE import FSF,FieldsMap 
 from .lib_origin import Compute_PSF, Spatial_Segmentation, \
     Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
     Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \

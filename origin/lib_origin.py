@@ -41,15 +41,13 @@ import time
 from astropy.table import Table, Column, join
 from astropy.utils.console import ProgressBar
 from joblib import Parallel, delayed
-from numpy.fft import rfftn, irfftn
 from scipy import signal, stats, special
 from scipy.ndimage import measurements, morphology
-from scipy.signal.signaltools import _next_regular, _centered
 from scipy.spatial import KDTree
 from six.moves import range, zip
 
-from ...obj import Cube, Image, Spectrum
-from ...sdetect import Source
+from mpdaf.obj import Cube, Image, Spectrum
+from mpdaf.sdetect import Source
 
 __version__ = 'ORIGIN_18122015_02'
 
@@ -556,7 +554,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     norm_fsf = np.empty(shape)
     if weights is None: # one FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/5 Spatial convolution of the weighted data with the '
+        logger.info('Step 1/4 Spatial convolution of the weighted data with the '
                 'zero-mean FSF')
         PSF_Moffat_m = PSF_Moffat \
             - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
@@ -568,7 +566,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         fsf_square = PSF_Moffat_m**2
         del PSF_Moffat_m
         # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/5 Computing Spatial part of the norm of the 3D atoms')
+        logger.info('Step 2/4 Computing Spatial part of the norm of the 3D atoms')
         for i in ProgressBar(list(range(Nz))):
             norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
                                                    fsf_square[i, :, :][::-1, ::-1],
@@ -576,7 +574,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         del fsf_square, inv_var
     else: # several FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/5 Spatial convolution of the weighted data with the '
+        logger.info('Step 1/4 Spatial convolution of the weighted data with the '
                 'zero-mean FSF')
         nfields = len(PSF_Moffat)
         PSF_Moffat_m = []
@@ -598,7 +596,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
             fsf_square.append(PSF_Moffat_m[n]**2)
         del PSF_Moffat_m
         # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/5 Computing Spatial part of the norm of the 3D atoms')
+        logger.info('Step 2/4 Computing Spatial part of the norm of the 3D atoms')
         for i in ProgressBar(list(range(Nz))):
             norm_fsf[i, :, :] = 0
             for n in range(nfields):
@@ -625,29 +623,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     cube_profile = np.empty(shape)
     norm_profile = np.empty(shape)
-
-    s1 = np.array(cube_fsf.shape[0])
-    s2 = np.array(d_j.shape)
-
-    shape = s1 + s2 - 1
-    fslice = tuple([slice(0, int(sz)) for sz in shape])
-    fshape = [_next_regular(int(d)) for d in shape]
-
-    d_j_fft = rfftn(d_j, fshape)
-    profile_square_fft = rfftn(profile_square, fshape)
-
-    cube_fsf_fft = []
-    norm_fsf_fft = []
-    logger.info('Step 3/5 Spatial convolution of the weighted datacube')
-    with ProgressBar(Nx * Ny) as bar:
-        for y in range(Ny):
-            for x in range(Nx):
-                bar.update()
-                cube_fsf_fft.append(rfftn(cube_fsf[:, y, x], fshape))
-                norm_fsf_fft.append(rfftn(norm_fsf[:, y, x], fshape))
-
-    i = 0
-    logger.info('Step 4/5 Spectral convolution of the weighted datacube')
+    
+    logger.info('Step 3/4 Spectral convolution of the weighted datacube')
     with ProgressBar(Nx * Ny) as bar:
         for y in range(Ny):
             for x in range(Nx):
@@ -655,19 +632,13 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 # Spectral convolution of the weighted data cube spreaded
                 # by the FSF and the spectral profile : correlation between the
                 # data and the 3D atom
-                # cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                #                                          mode = 'same')
-                ret = irfftn(cube_fsf_fft[i] * d_j_fft, fshape)[fslice].copy()
-                cube_profile[:, y, x] = _centered(ret, s1)
+                cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
+                                                          mode = 'same')
                 # Spectral convolution between the spatial part of the norm of the
                 # 3D atom and the spectral profile : The norm of the 3D atom
-                # norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                #                                          profile_square,
-                #                                          mode = 'same')
-                ret = irfftn(norm_fsf_fft[i] *
-                             profile_square_fft, fshape)[fslice].copy()
-                norm_profile[:, y, x] = _centered(ret, s1)
-                i = i + 1
+                norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
+                                                          profile_square,
+                                                          mode = 'same')
 
     # Set to the infinity the norm equal to 0
     norm_profile[norm_profile <= 0] = np.inf
@@ -675,30 +646,22 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     GLR = np.zeros((Nz, Ny, Nx, 2))
     GLR[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
 
-    logger.info('Step 5/5 Computing second cube of correlation values')
-
+    logger.info('Step 4/4 Computing second cube of correlation values')
+    
     for k in ProgressBar(list(range(1, Dico.shape[1]))):
         # Second cube of correlation values
         d_j = Dico[:, k]
         d_j = d_j - np.mean(d_j)
         profile_square = d_j**2
 
-        d_j_fft = rfftn(d_j, fshape)
-        profile_square_fft = rfftn(profile_square, fshape)
         i = 0
         for y in range(Ny):
             for x in range(Nx):
-                #                cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                #                                                  mode = 'same')
-                #                norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                #                                                  profile_square,
-                #                                                  mode = 'same')
-                ret = irfftn(cube_fsf_fft[i] * d_j_fft, fshape)[fslice].copy()
-                cube_profile[:, y, x] = _centered(ret, s1)
-                ret = irfftn(norm_fsf_fft[i] *
-                             profile_square_fft, fshape)[fslice].copy()
-                norm_profile[:, y, x] = _centered(ret, s1)
-                i = i + 1
+                cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
+                                                         mode = 'same')
+                norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
+                                                         profile_square,
+                                                         mode = 'same')
 
         norm_profile[norm_profile <= 0] = np.inf
         GLR[:, :, :, 1] = cube_profile / np.sqrt(norm_profile)
