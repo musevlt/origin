@@ -64,21 +64,21 @@ def test_origin():
     Cat4 = my_origin.merge_spectraly(Cat3, Cat_est_line, deltaz)
 
     # list of source objects
-    nsources = my_origin.write_sources(Cat4, Cat_est_line, correl, ncpu=2, name='tmp')
+    nsources = my_origin.write_sources(Cat4, Cat_est_line, correl, ncpu=1, name='tmp')
     assert (nsources == 2)
     
     # test returned sources are valid
     src = Source.from_file('./tmp/tmp-00001.fits')
     Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
-    assert_equal(len(np.unique(Nz)), 1)
+    assert (len(np.unique(Nz)) == 1)
     Ny = np.array([ima.shape[0] for ima in src.images.values()])
-    assert_equal(len(np.unique(Ny)), 1)
+    assert(len(np.unique(Ny)) == 1)
     Nx = np.array([ima.shape[1] for ima in src.images.values()])
-    assert_equal(len(np.unique(Nx)), 1)
+    assert(len(np.unique(Nx)) == 1)
     Nz = np.unique(Nz)[0]
     Ny = np.unique(Ny)[0]
     Nx = np.unique(Nx)[0]
     cNz, cNy, cNx = src.cubes['MUSE_CUBE'].shape
-    assert_equal(cNy, Ny)
-    assert_equal(cNx, Nx)
+    assert(cNy == Ny)
+    assert(cNx == Nx)
     shutil.rmtree('./tmp')

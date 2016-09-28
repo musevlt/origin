@@ -52,6 +52,7 @@ from mpdaf.sdetect import Source
 __version__ = 'ORIGIN_18122015_02'
 
 
+
 def Compute_PSF(wave, Nz, Nfsf, beta, fwhm1, fwhm2, lambda1, lambda2,
                 step_arcsec):
     """Compute PSF with a Moffat function
@@ -87,7 +88,7 @@ def Compute_PSF(wave, Nz, Nfsf, beta, fwhm1, fwhm2, lambda1, lambda2,
     Date  : Dec, 11 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     wavelengths = wave.coord(unit=u.angstrom)
@@ -143,7 +144,7 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Segmentation of the rows vector in Nbsubcube parts from the right to the
@@ -201,7 +202,7 @@ def Compute_PCA_SubCube(NbSubcube, cube_std, intx, inty, Edge_xmin, Edge_xmax,
     Date  : Dec,7 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Initialization
@@ -275,7 +276,7 @@ def Compute_PCA_edge(cube, cube_edge):
     Date  : Dec,3 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # logger.debug(whoami())
     # data cube converted to dictionary of spectra
     cube_v = cube.reshape(cube.shape[0], cube.shape[1] * cube.shape[2])
@@ -316,7 +317,7 @@ def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val, fig):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Initialization
@@ -370,7 +371,7 @@ def Compute_Number_Eigenvectors(eig_val, r0):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # Initialization
     nl = eig_val.shape[0]
     coeffr = np.zeros(nl - 4)
@@ -442,7 +443,7 @@ def Compute_Proj_Eigenvector_Zone(nbkeep, NbSubcube, Nx, Ny, Nz, A, V,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # initialization
@@ -501,7 +502,7 @@ def Compute_Proj_Eigenvector(A, V, r):
     Date  : Dec,7 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # logger.debug(whoami())
     # initialization
     cube_proj_low_v = np.dot(V[:, :r + 1], A[:r + 1, :])
@@ -536,7 +537,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # data cube weighted by the MUSE covariance
@@ -718,7 +719,7 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # initialization
@@ -768,7 +769,7 @@ def Compute_pval_correl(correl_temp_edge):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # logger.debug(whoami())
     moy_est = np.mean(correl_temp_edge)
     std_est = np.std(correl_temp_edge)
@@ -809,7 +810,7 @@ def Compute_pval_channel_Zone(cube_pval_correl, intx, inty, NbSubcube,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # initialization
@@ -866,7 +867,7 @@ def Compute_pval_channel(X, n_lambda, mean_est):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # initialization
     N = np.sum(np.array(X != 1, dtype=np.int))
     # Estimation of p parameter with the mean of the distribution set by the
@@ -906,7 +907,7 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
@@ -955,7 +956,7 @@ def Compute_Connected_Voxel(cube_pval_final, neighboors):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
 #     threshold_log = 10**(-threshold)
@@ -1007,7 +1008,7 @@ def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     grp = measurements.find_objects(labeled_cube)
@@ -1069,7 +1070,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
     Date : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Initialization
@@ -1228,7 +1229,7 @@ def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Catalogue with the rows corresponding to the lines with test values
@@ -1288,7 +1289,7 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
     Date  : Dec, 16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Initialization
@@ -1471,7 +1472,7 @@ def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
     Date  : Dec, 11 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger(__name__)
+    # logger = logging.getLogger('mpdaf')
     # spectral profile
     num_prof = profile[z0, y0, x0]
     profil0 = Dico[:, num_prof]
@@ -1550,7 +1551,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf):
 
     Date : Apr,28 2016
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
 
@@ -1673,7 +1674,7 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     # Initialization
@@ -1741,7 +1742,7 @@ def Add_radec_to_Cat(Cat, wcs):
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     x = Cat['x_centroid']
@@ -1769,7 +1770,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     ----------
     """
 
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.info('{}/{} source ID {}'.format(k+1,ktot,i))
     cube = Cube(filename)
     cubevers = cube.primary_header.get('CUBE_V', '')
@@ -1786,9 +1787,9 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     src.add_white_image(cube)
     src.add_cube(cube, 'MUSE_CUBE')
     src.add_image(maxmap, 'MAXMAP')
-    src.add_attr('SRC_VERS', src_vers, desc='Source version')
+    src.add_attr('SRC_V', src_vers, desc='Source version')
     
-    src.add_history('[{}] Source created with Origin'.format(src.SRC_VERS), author)
+    src.add_history('[{}] Source created with Origin'.format(src.SRC_V), author)
     
     w = cube.wave.coord(wave_pix, unit=u.angstrom)
     names = np.array(['%04d'%w[j] for j in range(nb_lines)])
@@ -1886,7 +1887,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
     Date  : Dec, 16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('mpdaf')
     logger.debug(whoami())
     t0 = time.time()
     uflux = u.erg / (u.s * u.cm**2)

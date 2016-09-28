@@ -146,7 +146,7 @@ class ORIGIN(object):
         FWHM_PSF    : array (Nz)
                       FWHM of the PSFs in pixels.
         """
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger('mpdaf')
         self._logger.info('ORIGIN - Read the Data Cube')
         # create parameters dictionary
         self.param = {}
