@@ -17,58 +17,73 @@ def test_origin():
     # Number of subcubes for the spatial segmentation
     NbSubcube = 1
 
-    my_origin = ORIGIN(MINICUBE, NbSubcube, [2, 2, 1, 3])
+    my_origin = ORIGIN.init(MINICUBE, NbSubcube, [2, 2, 1, 3], name='tmp')
+    my_origin.write()
 
     # Coefficient of determination for projection during PCA
     r0 = 0.67
     # PCA
-    cube_faint, cube_cont = my_origin.compute_PCA(r0)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step01_compute_PCA(r0)
+    my_origin.write()
 
     # TGLR computing (normalized correlations)
-    correl, profile = my_origin.compute_TGLR(cube_faint)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step02_compute_TGLR()
+    my_origin.write()
 
     # threshold applied on pvalues
     threshold = 8
     # compute pvalues
-    cube_pval_correl, cube_pval_channel, cube_pval_final = \
-                               my_origin.compute_pvalues(correl, threshold)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step03_compute_pvalues(threshold)
+    my_origin.write()
 
     # Connectivity of contiguous voxels
     neighboors = 26
     # Compute connected voxels and their referent pixels
-    Cat0 = my_origin.compute_ref_pix(correl, profile, cube_pval_correl,
-                              cube_pval_channel, cube_pval_final,
-                              neighboors)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step04_compute_ref_pix(neighboors)
+    my_origin.write()
 
     # Number of the spectral ranges skipped to compute the controle cube
     nb_ranges = 3
     # Narrow band tests
-    Cat1 = my_origin.compute_NBtests(Cat0, nb_ranges)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step05_compute_NBtests(nb_ranges)
+    my_origin.write()
+    
     # Thresholded narrow bands tests
     thresh_T1 = .2
     thresh_T2 = 2
-
-    Cat1_T1, Cat1_T2 = my_origin.select_NBtests(Cat1, thresh_T1,
-                                                   thresh_T2)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step06_select_NBtests(thresh_T1, thresh_T2)
+    my_origin.write()
 
     # Estimation with the catalogue from the narrow band Test number 2
-    Cat2_T2, Cat_est_line = \
-    my_origin.estimate_line(Cat1_T2, profile, cube_faint)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step07_estimate_line()
+    my_origin.write()
 
     # Spatial merging
-    Cat3 = my_origin.merge_spatialy(Cat2_T2)
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step08_merge_spatialy()
+    my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     # Spectral merging
-    Cat4 = my_origin.merge_spectraly(Cat3, Cat_est_line, deltaz)
-
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step09_merge_spectraly(deltaz)
+    my_origin.write()
+    
     # list of source objects
-    nsources = my_origin.write_sources(Cat4, Cat_est_line, correl, ncpu=1, name='tmp')
+    my_origin = ORIGIN.load('tmp')
+    nsources = my_origin.step10_write_sources(ncpu=1)
     assert (nsources == 2)
     
     # test returned sources are valid
-    src = Source.from_file('./tmp/tmp-00001.fits')
+    src = Source.from_file('./tmp/sources/tmp-00001.fits')
     Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
     assert (len(np.unique(Nz)) == 1)
     Ny = np.array([ima.shape[0] for ima in src.images.values()])
@@ -81,4 +96,5 @@ def test_origin():
     cNz, cNy, cNx = src.cubes['MUSE_CUBE'].shape
     assert(cNy == Ny)
     assert(cNx == Nx)
-    shutil.rmtree('./tmp')
+    shutil.rmtree('tmp')
+#    os.remove('tmp.log')

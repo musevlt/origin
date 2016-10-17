@@ -30,17 +30,21 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 
 from __future__ import absolute_import, division
 
+from astropy.io import fits
+from astropy.table import Table
 import astropy.units as u
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path
-from scipy.io import loadmat
 import shutil
+import sys
+import yaml
 
+from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
-from mpdaf.MUSE import FSF,FieldsMap 
-from .lib_origin import Compute_PSF, Spatial_Segmentation, \
+from mpdaf.MUSE import FSF,FieldsMap, get_FSF_from_cube_keywords
+from .lib_origin import Spatial_Segmentation, \
     Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
     Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \
     Compute_pval_correl_zone, Compute_pval_channel_Zone, \
@@ -109,10 +113,209 @@ class ORIGIN(object):
                         MUSE PSF
         FWHM_PSF      : float
                         Mean of the fwhm of the PSF in pixel
+        wfields       : list of array or None
+                        weight maps (mosaic case: one per fields)
+                        None: just one field
     """
+    
+    def __init__(self, path, name, filename, NbSubcube, margins, profiles,
+                 PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
+                 cube_profile, cube_pval_correl, cube_pval_channel,
+                 cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
+                 Cat3, Cat4, param):
+        """
+        verifier la lecture des PSFs
+        verifier l ecritur des param dans le header
+        """
+        #loggers
+        setup_logging(name='origin', level=logging.DEBUG,
+                           color=False,
+                           fmt='%(name)s[%(levelname)s]: %(message)s',
+                           stream=sys.stdout)
+                           
+        if os.path.exists('%s/%s/%s.log'%(path, name,name)):
+            setup_logfile(name='origfile', level=logging.DEBUG,
+                                       logfile='%s/%s/%s.log'%(path, name, name),
+                                       fmt='%(asctime)s %(message)s')
+        else:
+            setup_logfile(name='origfile', level=logging.DEBUG,
+                                       logfile='%s/%s.log'%(path, name),
+                                       fmt='%(asctime)s %(message)s')                           
+        self._log_stdout = logging.getLogger('origin')
+        self._log_file = logging.getLogger('origfile')
+        self._log_file.setLevel(logging.INFO)
+                                       
+        self._log_file.info('00 - Initialization')
+        self._log_stdout.info('Step 00 - Initialization')
+        self._log_stdout.info('Read the Data Cube')
+        
+        self.path = path
+        self.name = name
+        if param is None:
+            self.param = {}
+        else:
+            self.param = param
+        self.filename = filename
+        
+        # MUSE data cube
+        self.param['cubename'] = filename
+        cub = Cube(self.filename)
+        # Flux - set to 0 the Nan
+        self.cube_raw = cub.data.filled(fill_value=0)
+        # variance - set to Inf the Nan
+        self.var = cub.var
+        self.var[np.isnan(self.var)] = np.inf
+        # RA-DEC coordinates
+        self.wcs = cub.wcs
+        # spectral coordinates
+        self.wave = cub.wave
+        # Dimensions
+        self.Nz, self.Ny, self.Nx = cub.shape
+        
+        # ORIGIN parameters
+        self.param['nbsubcube'] = NbSubcube
+        self.param['margin'] = margins
+        self.NbSubcube = NbSubcube
+        self.Edge_xmin = margins[2]
+        self.Edge_xmax = self.Nx - margins[3]
+        self.Edge_ymin = margins[0]
+        self.Edge_ymax = self.Ny - margins[1]
+        
+        # Dictionary of spectral profile
+        self.param['profiles'] = profiles
+        if profiles is None:
+            self._log_stdout.info('Load dictionary of spectral profile')
+            DIR = os.path.dirname(__file__)
+            profiles = DIR + '/Dico_FWHM_2_12.fits'
+        self.profiles = []
+        self.FWHM_profiles = []
+        fprof = fits.open(profiles)
+        for hdu in fprof[1:]:
+            self.profiles.append(hdu.data)
+            self.FWHM_profiles.append(hdu.header['FWHM'])
+        fprof.close()
+        
+        #FSF
+        # FSF cube(s)
+        self._log_stdout.info('Load FSF')
+        step_arcsec = self.wcs.get_step(unit=u.arcsec)[0]
+        # map fileds in the case of MUSE mosaic
+        self.wfields = None
+        if PSF is None or FWHM_PSF is None:
+            Nfsf=13
+            if 'FSFMODE' in cub.primary_header:
+                # FSF created from FSF*** keywords
+                PSF, fwhm_pix, fwhm_arcsec = get_FSF_from_cube_keywords(cub,
+                                                                        Nfsf)
+                self.param['PSF'] = cub.primary_header['FSFMODE']
+                nfields = cub.primary_header['NFIELDS']
+                if nfields == 1: # just one FSF
+                    # Normalization
+                    self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
+                                                                 np.newaxis]
+                    # mean of the fwhm of the FSF in pixel
+                    self.FWHM_PSF = np.mean(fwhm_pix)
+                else: # mosaic: one FSF cube per field
+                    self.PSF = []
+                    self.FWHM_PSF = []
+                    for i in range(1, nfields+1):
+                        # Normalization 
+                        PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
+                                                             np.newaxis]
+                        self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))\
+                                                    [:, np.newaxis,np.newaxis])
+                        # mean of the fwhm of the FSF in pixel
+                        self.FWHM_PSF.append(np.mean(fwhm_pix[i]))
+                    fmap = FieldsMap(self.filename, extname='FIELDMAP')
+                    # weighted field map
+                    self.wfields = fmap.compute_weights()
+            else:
+                self.param['PSF'] = 'MOFFAT1'
+                FSF_model = FSF('MOFFAT1')
+                beta = 2.6
+                a = 0.97
+                b = -4.4e-5
+                PSF, fwhm_pix, fwhm_arcsec = \
+                    FSF_model.get_FSF_cube(cub, Nfsf, beta=beta, a=a, b=b)
+                # Normalization
+                self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
+                                                                 np.newaxis]
+                # mean of the fwhm of the FSF in pixel
+                self.FWHM_PSF = np.mean(fwhm_pix)
 
-    def __init__(self, cube, NbSubcube, margins, profiles=None,
-                 FWHM_profiles=None, PSF=None, FWHM_PSF=None):
+        else:
+            self.param['PSF'] = PSF
+            cubePSF = Cube(PSF)
+            if cubePSF.shape[1] != cubePSF.shape[2]:
+                raise IOError('PSF must be a square image.')
+            if not cubePSF.shape[1]%2:
+                raise IOError('The spatial size of the PSF must be odd.')
+            if cubePSF.shape[0] != self.Nz:
+                raise IOError('PSF and data cube have not the same dimensions',
+                              ' along the spectral axis.')
+            if not np.isclose(cubePSF.wcs.get_step(unit=u.arcsec)[0],
+                              step_arcsec):
+                raise IOError('PSF and data cube have not the same pixel ',
+                              'sizes.')
+
+            self.PSF = cubePSF._data
+            # mean of the fwhm of the FSF in pixel
+            self.FWHM_PSF = np.mean(FWHM_PSF)
+            self.param['FWHM PSF'] = FWHM_PSF.tolist()
+        
+        del cub
+        
+        
+        # Spatial segmentation
+        if intx is None or inty is None:
+            self._log_stdout.info('Spatial segmentation')
+            self.inty, self.intx = Spatial_Segmentation(self.Nx, self.Ny,
+                                                    NbSubcube)
+        else:                
+            self.inty = inty
+            self.intx = intx
+        self.param['intx'] = self.intx.tolist()
+        self.param['inty'] = self.inty.tolist()
+        
+        
+        # step1
+        self.cube_faint = cube_faint
+        self.cube_cont = cube_cont
+        
+        # step2
+        self.cube_correl = cube_correl
+        self.cube_profile = cube_profile
+        
+        # step3
+        self.cube_pval_correl = cube_pval_correl
+        self.cube_pval_channel = cube_pval_channel
+        self.cube_pval_final = cube_pval_final
+        
+        # step4
+        self.Cat0 = Cat0
+        
+        # step5
+        self.Cat1 = Cat1
+        
+        # step6
+        self.Cat1_T1 = Cat1_T1
+        self.Cat1_T2 = Cat1_T2
+        
+        # step7
+        self.Cat2 = Cat2
+        self.spectra = spectra
+        
+        # step8
+        self.Cat3 = Cat3
+        
+        # step9
+        self.Cat4 = Cat4
+        
+        self._log_file.info('00 Done')
+        
+    @classmethod
+    def init(cls, cube, NbSubcube, margins, profiles=None,
+                 PSF=None, FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -124,7 +327,8 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        cube        : string (Cube FITS file name) or cube object
+        cube        : string
+                      Cube FITS file name
         NbSubcube   : integer
                       Number of sub-cubes for the spatial segmentation
         margin      : (int, int, int, int)
@@ -133,11 +337,9 @@ class ORIGIN(object):
                       (ymin, Ny-ymax, xmin, Nx-xmax)
                       Pixels in margins will not be taken
                       into account to compute p-values.
-        profiles    : array (Size_profile, N_profile)
-                      Dictionary of spectral profiles
+        profiles    : string
+                      FITS of spectral profiles
                       If None, a default dictionary of 20 profiles is used.
-        FWHM_profiles : array (N_profile)
-                        FWHM of the profiles in pixels.
         PSF         : string
                       Cube FITS filename containing a MUSE PSF per wavelength.
                       If None, PSF are computed with a Moffat function
@@ -145,133 +347,213 @@ class ORIGIN(object):
                       lambda1=4750, lambda2=7000)
         FWHM_PSF    : array (Nz)
                       FWHM of the PSFs in pixels.
+        name : str
+               Name of this session and basename for the sources.
         """
-        self._logger = logging.getLogger('mpdaf')
-        self._logger.info('ORIGIN - Read the Data Cube')
-        # create parameters dictionary
-        self.param = {}
-        self.param['cubename'] = cube
-        self.param['nbsubcube'] = NbSubcube
-        self.param['margin'] = margins
-        self.param['PSF'] = PSF
-        if type(cube) is Cube:
-            self.filename = cube.filename
-            cub = cube
+                           
+        return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
+                   margins=margins, profiles=profiles, PSF=PSF,
+                   FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
+                   cube_cont=None, cube_correl=None, cube_profile=None,
+                   cube_pval_correl=None, cube_pval_channel=None,
+                   cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
+                   Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
+                   param=None)
+        
+    @classmethod
+    def load(cls, folder):
+        """Load a previous session of ORIGIN
+        
+        Parameters
+        ----------
+        folder : string
+                 path
+        """
+        path = os.path.dirname(os.path.abspath(folder))
+        name = os.path.basename(folder)
+        
+        stream = file('%s/%s.yaml'%(folder, name), 'r')
+        param = yaml.load(stream)
+
+        if os.path.isfile(param['PSF']):
+            PSF = param['PSF']
+            FWHM_PSF = np.asarray(param['FWHM PSF'])
         else:
-            # Read cube
-            self.filename = cube
-            cub = Cube(self.filename)
-        # Raw data cube
-        # Set to 0 the Nan
-        self.cube_raw = cub.data.filled(fill_value=0)
-        # variance
-        self.var = cub.var
-        # RA-DEC coordinates
-        self.wcs = cub.wcs
-        # spectral coordinates
-        self.wave = cub.wave
-
-        # Dimensions
-        self.Nz, self.Ny, self.Nx = cub.shape
-
-        # Set to Inf the Nana
-        self.var[np.isnan(self.var)] = np.inf
-
-        self.NbSubcube = NbSubcube
-
-        self.Edge_xmin = margins[2]
-        self.Edge_xmax = self.Nx - margins[3]
-        self.Edge_ymin = margins[0]
-        self.Edge_ymax = self.Ny - margins[1]
-
-        # Dictionary of spectral profile
-        if profiles is None or FWHM_profiles is None:
-            self._logger.info('ORIGIN - Load dictionary of spectral profile')
-            DIR = os.path.dirname(__file__)
-            self.profiles = loadmat(DIR + '/Dico_FWHM_2_12.mat')['Dico']
-            self.FWHM_profiles = np.linspace(2, 12, 20)  # pixels
-        else:
-            self.profiles = profiles
-            self.FWHM_profiles = FWHM_profiles
-
-        # FSF cube(s)
-        self._logger.info('ORIGIN - Compute PSF')
-        step_arcsec = self.wcs.get_step(unit=u.arcsec)[0]
-        self.wfields = None
-        if PSF is None or FWHM_PSF is None:
-            Nfsf=13
-            try:
-                FSF_mode = cub.primary_header['FSFMODE']
-                if FSF_mode != 'MOFFAT1':
-                    raise IOError('This method is coded only for FSFMODE=MOFFAT1')
-            except:
-                FSF_mode = None
-                
-            if FSF_mode is None:
-                self.PSF, fwhm_pix, fwhm_arcsec = \
-                Compute_PSF(self.wave, self.Nz, Nfsf=Nfsf, beta=2.6,
-                            fwhm1=0.76, fwhm2=0.66, lambda1=4750,
-                            lambda2=7000, step_arcsec=step_arcsec)
-                # mean of the fwhm of the FSF in pixel
-                self.FWHM_PSF = np.mean(fwhm_arcsec) / step_arcsec
-            else:
-                self.param['PSF'] = FSF_mode
-                nfields = cub.primary_header['NFIELDS']
-                FSF_model = FSF(FSF_mode)
-                if nfields == 1: # just one FSF
-                    nf = 0
-                    beta = cub.primary_header['FSF%02dBET'%nf]
-                    a = cub.primary_header['FSF%02dFWA'%nf]
-                    b = cub.primary_header['FSF%02dFWB'%nf]
-                    self.PSF, fwhm_pix, fwhm_arcsec = \
-                    FSF_model.get_FSF_cube(cub, Nfsf, beta=beta, a=a, b=b)
-                    # Normalization
-                    self.PSF = self.PSF / np.sum(self.PSF, axis=(1, 2))\
-                    [:, np.newaxis, np.newaxis]
-                    # mean of the fwhm of the FSF in pixel
-                    self.FWHM_PSF = np.mean(fwhm_arcsec) / step_arcsec
-                else:
-                    self.PSF = []
-                    self.FWHM_PSF = []
-                    for i in range(1, nfields+1):
-                        beta = cub.primary_header['FSF%02dBET'%i]
-                        a = cub.primary_header['FSF%02dFWA'%i]
-                        b = cub.primary_header['FSF%02dFWB'%i]
-                        PSF, fwhm_pix, fwhm_arcsec = \
-                        FSF_model.get_FSF_cube(cub, Nfsf, beta=beta,
-                                               a=a, b=b)
-                        # Normalization (???)
-                        PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
-                                                             np.newaxis]
-                        self.PSF.append(PSF)
-                        # mean of the fwhm of the FSF in pixel
-                        self.FWHM_PSF.append(np.mean(fwhm_arcsec) / step_arcsec)
-                    fmap = FieldsMap(self.filename, extname='FIELDMAP')
-                    self.wfields = fmap.compute_weights()
-
-        else:
-            cubePSF = Cube(PSF)
-            if cubePSF.shape[1] != cubePSF.shape[2]:
-                raise IOError('PSF must be a square image.')
-            if not cubePSF.shape[1]%2:
-                raise IOError('The spatial size of the PSF must be odd.')
-            if cubePSF.shape[0] != self.Nz:
-                raise IOError('PSF and data cube have not the same dimensions along the spectral axis.')
-            if not np.isclose(cubePSF.wcs.get_step(unit=u.arcsec)[0], step_arcsec):
-                raise IOError('PSF and data cube have not the same pixel sizes.')
-
-            self.PSF = cubePSF._data
-            # mean of the fwhm of the FSF in pixel
-            self.FWHM_PSF = np.mean(FWHM_PSF)
+            PSF = None
+            FWHM_PSF = None
             
-        del cub
+        
+        if os.path.isfile('%s/cube_faint.fits'%folder):
+            cube_faint = Cube('%s/cube_faint.fits'%folder)
+        else:
+            cube_faint = None
+        if os.path.isfile('%s/cube_cont.fits'%folder):
+            cube_cont = Cube('%s/cube_cont.fits'%folder)
+        else:
+            cube_cont = None
+        if os.path.isfile('%s/cube_correl.fits'%folder):
+            cube_correl = Cube('%s/cube_correl.fits'%folder)
+        else:
+            cube_correl = None
+        if os.path.isfile('%s/cube_profile.fits'%folder):
+            cube_profile = Cube('%s/cube_profile.fits'%folder)
+        else:
+            cube_profile = None
+        if os.path.isfile('%s/cube_pval_correl.fits'%folder):
+            cube_pval_correl = Cube('%s/cube_pval_correl.fits'%folder,
+                                    mask=np.ma.nomask, dtype=np.float64)
+        else:
+            cube_pval_correl = None
+        if os.path.isfile('%s/cube_pval_channel.fits'%folder):
+            cube_pval_channel = Cube('%s/cube_pval_channel.fits'%folder,
+                                     mask=np.ma.nomask, dtype=np.float64)
+        else:
+            cube_pval_channel = None
+        if os.path.isfile('%s/cube_pval_final.fits'%folder):
+            cube_pval_final = Cube('%s/cube_pval_final.fits'%folder,
+                                   mask=np.ma.nomask, dtype=np.float64)
+        else:
+            cube_pval_final = None
+        if os.path.isfile('%s/Cat0.fits'%folder):
+            Cat0 = Table.read('%s/Cat0.fits'%folder)
+        else:
+            Cat0 = None
+        if os.path.isfile('%s/Cat1.fits'%folder):
+            Cat1 = Table.read('%s/Cat1.fits'%folder)
+        else:
+            Cat1 = None
+        if os.path.isfile('%s/Cat1_T1.fits'%folder):
+            Cat1_T1 = Table.read('%s/Cat1_T1.fits'%folder)
+        else:
+            Cat1_T1 = None
+        if os.path.isfile('%s/Cat1_T2.fits'%folder):
+            Cat1_T2 = Table.read('%s/Cat1_T2.fits'%folder)
+        else:
+            Cat1_T2 = None
+        if os.path.isfile('%s/Cat2.fits'%folder):
+            Cat2 = Table.read('%s/Cat2.fits'%folder)
+        else:
+            Cat2 = None
+        if os.path.isfile('%s/spectra.fits'%folder):
+            spectra = []
+            fspectra = fits.open('%s/spectra.fits'%folder)
+            for i in range(len(fspectra)//2):
+                spectra.append(Spectrum('%s/spectra.fits'%folder,
+                                        hdulist=fspectra,
+                                        ext=('DATA%d'%i, 'STAT%d'%i)))
+            fspectra.close()
+        else:
+            spectra = None
+        if os.path.isfile('%s/Cat3.fits'%folder):
+            Cat3 = Table.read('%s/Cat3.fits'%folder)
+        else:
+            Cat3 = None
+        if os.path.isfile('%s/Cat4.fits'%folder):
+            Cat4 = Table.read('%s/Cat4.fits'%folder)
+        else:
+            Cat4 = None
+                
+        return cls(path=path,  name=name, filename=param['cubename'],
+                   NbSubcube=param['nbsubcube'], margins=param['margin'],
+                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
+                   intx=np.asarray(param['intx']),
+                   inty=np.asarray(param['inty']),
+                   cube_faint=cube_faint, cube_cont=cube_cont,
+                   cube_correl=cube_correl, cube_profile=cube_profile,
+                   cube_pval_correl=cube_pval_correl,
+                   cube_pval_channel=cube_pval_channel,
+                   cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
+                   Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
+                   spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param)
+                   
+    def write(self, path=None):
+        """Save the current session in a folder
+        
+        Parameters
+        ----------
+        path : string
+               Path where the ORIGIN data will be stored.
+               If None, the name of the session is used
+        """
+        # path
+        if path is not None:
+            self.path = path
+        if not os.path.exists(self.path):
+            raise IOError("Invalid path: {0}".format(self.path))
 
-        # Spatial segmentation
-        self._logger.info('ORIGIN - Spatial segmentation')
-        self.inty, self.intx = Spatial_Segmentation(self.Nx, self.Ny,
-                                                    NbSubcube)
+        path = os.path.abspath(self.path)
 
-    def compute_PCA(self, r0=0.67, fig=None):
+        path2 = path + '/' + self.name
+        if not os.path.exists(path2):
+            os.makedirs(path2)
+        
+        # parameters in .yaml
+        stream = file('%s/%s.yaml'%(path2, self.name), 'w')
+        yaml.dump(self.param, stream)
+        stream.close()
+        
+        # log file
+        currentlog = self._log_file.handlers[0].baseFilename
+        newlog = os.path.abspath('%s/%s.log'%(path2, self.name))
+        if (currentlog != newlog):
+            clear_loggers('origfile')
+            shutil.move(currentlog, newlog)
+            setup_logfile(name='origfile', level=logging.DEBUG,
+                                           logfile=newlog,
+                                           fmt='%(asctime)s %(message)s')
+            self._log_file = logging.getLogger('origfile')
+            self._log_file.setLevel(logging.INFO)
+        
+        #step1
+        if self.cube_faint is not None:
+            self.cube_faint.write('%s/cube_faint.fits'%path2)
+        if self.cube_cont is not None:
+            self.cube_cont.write('%s/cube_cont.fits'%path2)
+        # step2
+        if self.cube_correl is not None:
+            self.cube_correl.write('%s/cube_correl.fits'%path2)
+        if self.cube_profile is not None:
+            self.cube_profile.write('%s/cube_profile.fits'%path2)
+        # step3
+        if self.cube_pval_correl is not None:
+            self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
+        if self.cube_pval_channel is not None:
+            self.cube_pval_channel.write('%s/cube_pval_channel.fits'%path2)
+        if self.cube_pval_final is not None:
+            self.cube_pval_final.write('%s/cube_pval_final.fits'%path2)
+        # step4
+        if self.Cat0 is not None:
+            self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
+        # step5
+        if self.Cat1 is not None:
+            self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
+        # step6
+        if self.Cat1_T1 is not None:
+            self.Cat1_T1.write('%s/Cat1_T1.fits'%path2, overwrite=True)
+        if self.Cat1_T2 is not None:
+            self.Cat1_T2.write('%s/Cat1_T2.fits'%path2, overwrite=True)
+        # step7
+        if self.Cat2 is not None:
+            self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
+        if self.spectra is not None:
+            hdulist = fits.HDUList([fits.PrimaryHDU()])
+            for i in range(len(self.spectra)):
+                hdu = self.spectra[i].get_data_hdu(name='DATA%d'%i,
+                                                   savemask='nan')
+                hdulist.append(hdu)
+                hdu = self.spectra[i].get_stat_hdu(name='STAT%d'%i)
+                if hdu is not None:
+                    hdulist.append(hdu)
+            hdulist.writeto('%s/spectra.fits'%path2, clobber=True)
+        # step8
+        if self.Cat3 is not None:
+            self.Cat3.write('%s/Cat3.fits'%path2, overwrite=True)
+        # step9
+        if self.Cat4 is not None:
+            self.Cat4.write('%s/Cat4.fits'%path2, overwrite=True)
+        
+
+    def step01_compute_PCA(self, r0=0.67, fig=None):
         """ Loop on each zone of the data cube and compute the PCA,
         the number of eigenvectors to keep for the projection
         (with a linear regression and its associated determination
@@ -287,21 +569,23 @@ class ORIGIN(object):
 
         Returns
         -------
-        cube_faint : `~mpdaf.obj.Cube`
+        self.cube_faint : `~mpdaf.obj.Cube`
                      Projection on the eigenvectors associated to the lower
                      eigenvalues of the data cube
                      (representing the faint signal)
-        cube_cont  : `~mpdaf.obj.Cube`
+        self.cube_cont  : `~mpdaf.obj.Cube`
                      Projection on the eigenvectors associated to the higher
                      eigenvalues of the data cube
                      (representing the continuum)
         """
-        # save paaremeters values in object
+        self._log_file.info('01 - PCA computation r0=%0.2f'%r0)
+        self._log_stdout.info('Step 01 - PCA computation')
         self.param['r0PCA'] = r0
+        
         # Weigthed data cube
         cube_std = self.cube_raw / np.sqrt(self.var)
         # Compute PCA results
-        self._logger.info('ORIGIN - Compute the PCA on each zone')
+        self._log_stdout.info('Compute the PCA on each zone')
         A, V, eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
                                                         cube_std,
                                                         self.intx, self.inty,
@@ -313,11 +597,12 @@ class ORIGIN(object):
         # Number of eigenvectors for each zone
         # Parameter set to 1 if we want to plot the results
         # Parameters for projection during PCA
-        self._logger.info('ORIGIN - Compute the number of eigenvectors to keep for the projection')
+        self._log_stdout.info('Compute the number of eigenvectors to keep for the projection')
         list_r0 = np.resize(r0, self.NbSubcube**2)
-        nbkeep = Compute_Number_Eigenvectors_Zone(self.NbSubcube, list_r0, eig_val, fig)
+        nbkeep = Compute_Number_Eigenvectors_Zone(self.NbSubcube, list_r0,
+                                                  eig_val, fig)
         # Adaptive projection of the cube on the eigenvectors
-        self._logger.info('ORIGIN - Adaptive projection of the cube on the eigenvectors')
+        self._log_stdout.info('Adaptive projection of the cube on the eigenvectors')
         cube_faint, cube_cont = Compute_Proj_Eigenvector_Zone(nbkeep,
                                                               self.NbSubcube,
                                                               self.Nx,
@@ -325,43 +610,50 @@ class ORIGIN(object):
                                                               self.Nz,
                                                               A, V,
                                                               nx, ny, nz,
-                                                              self.inty, self.intx)
-        cube_faint = Cube(data=cube_faint, wave=self.wave, wcs=self.wcs,
+                                                              self.inty,
+                                                              self.intx)
+                                                              
+        self._log_stdout.info('Save the faint signal in self.cube_faint')
+        self.cube_faint = Cube(data=cube_faint, wave=self.wave, wcs=self.wcs,
                           mask=np.ma.nomask)
-        cube_cont = Cube(data=cube_cont, wave=self.wave, wcs=self.wcs,
+        self._log_stdout.info('Save the continuum in self.cube_cont')
+        self.cube_cont = Cube(data=cube_cont, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)
-        return cube_faint, cube_cont
+        self._log_file.info('01 Done')
 
-    def compute_TGLR(self, cube_faint):
-        """Compute the cube of GLR test values obtained with the given
-        PSF and dictionary of spectral profile.
+    def step02_compute_TGLR(self):
+        """Compute the cube of GLR test values.
+        The test is done on the cube containing the faint signal
+        (self.cube_faint) and it uses the PSF and the spectral profile.
 
-        Parameters
-        ----------
-        cube_faint : mpdaf.obj.cube
-                     data cube on test
-
+        
         Returns
         -------
-        correl  : `~mpdaf.obj.Cube`
-                  cube of T_GLR values
-        profile : `~mpdaf.obj.Cube` (type int)
-                  Number of the profile associated to the T_GLR
-                  profile = Cube('profile.fits', dtype=int)
+        self.cube_correl  : `~mpdaf.obj.Cube`
+                            Cube of T_GLR values
+        self.cube_profile : `~mpdaf.obj.Cube` (type int)
+                             Number of the profile associated to the T_GLR
         """
+        self._log_file.info('02 GLR test')
+        self._log_stdout.info('Step 02 - GLR test')
+        if self.cube_faint is None:
+            raise IOError('Run the step 01 to initialize self.cube_faint')
+            
         # TGLR computing (normalized correlations)
-        self._logger.info('ORIGIN - Compute the GLR test')
-        correl, profile = Correlation_GLR_test(cube_faint._data, self.var,
+        correl, profile = Correlation_GLR_test(self.cube_faint._data, self.var,
                                                self.PSF, self.wfields,
                                                self.profiles)
-        correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
+                                               
+        self._log_stdout.info('Save the TGLR value in self.cube_correl')
+        self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
-        profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
+        self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
+        self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
-        return correl, profile
+        self._log_file.info('Done')
 
-    def compute_pvalues(self, correl, threshold=8):
-        """Loop on each zone of the data cube and compute for each zone:
+    def step03_compute_pvalues(self, threshold=8):
+        """Loop on each zone of self.cube_correl and compute for each zone:
 
         - the p-values associated to the T_GLR values,
         - the p-values associated to the number of thresholded p-values
@@ -378,57 +670,64 @@ class ORIGIN(object):
 
         Returns
         -------
-        cube_pval_correl  : `~mpdaf.obj.Cube`
-                            Cube of thresholded p-values associated
-                            to the T_GLR values
-        cube_pval_channel : `~mpdaf.obj.Cube`
-                            Cube of p-values associated to the number of
-                            thresholded p-values of the correlations
-                            per spectral channel for each zone
-        cube_pval_final   : `~mpdaf.obj.Cube`
-                            Cube of final thresholded p-values
+        self.cube_pval_correl  : `~mpdaf.obj.Cube`
+                                 Cube of thresholded p-values associated
+                                 to the T_GLR values
+        self.cube_pval_channel : `~mpdaf.obj.Cube`
+                                 Cube of p-values associated to the number of
+                                 thresholded p-values of the correlations
+                                 per spectral channel for each zone
+        self.cube_pval_final   : `~mpdaf.obj.Cube`
+                                 Cube of final thresholded p-values
         """
-        # p-values of correlation values
-        self._logger.info('ORIGIN - Compute p-values of correlation values')
+        self._log_file.info('03 p-values computation threshold=%.1f'%threshold)
+        self._log_stdout.info('Step 03 - p-values computation')
+        self._log_stdout.info('Compute p-values of correlation values')
         self.param['ThresholdPval'] = threshold
-        cube_pval_correl = Compute_pval_correl_zone(correl._data, self.intx,
-                                                    self.inty, self.NbSubcube,
+        if self.cube_correl is None:
+            raise IOError('Run the step 02 to initialize self.cube_correl')
+
+        cube_pval_correl = Compute_pval_correl_zone(self.cube_correl._data,
+                                                    self.intx, self.inty,
+                                                    self.NbSubcube,
                                                     self.Edge_xmin,
                                                     self.Edge_xmax,
                                                     self.Edge_ymin,
                                                     self.Edge_ymax,
                                                     threshold)
+        self._log_stdout.info('Save the result in self.cube_pval_correl')
+        self.cube_pval_correl = Cube(data=cube_pval_correl, wave=self.wave,
+                                     wcs=self.wcs, mask=np.ma.nomask)
+
         # p-values of spectral channel
         # Estimated mean for p-values distribution related
         # to the Rayleigh criterium
-        self._logger.info('ORIGIN - Compute p-values of spectral channel')
+        self._log_stdout.info('Compute p-values of spectral channel')
         try:
             mean_est = self.FWHM_PSF**2
+            self.param['meanestPvalChan'] = np.asscalar(mean_est)
         except:
             mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
-        self.param['meanestPvalChan'] = mean_est
+            self.param['meanestPvalChan'] = mean_est.tolist()
         cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
                                                       self.intx, self.inty,
                                                       self.NbSubcube,
                                                       mean_est, self.wfields)
+        self._log_stdout.info('Save the result in self.cube_pval_channel')
+        self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
+                                      wcs=self.wcs, mask=np.ma.nomask)
 
         # Final p-values
-        self._logger.info('ORIGIN - Compute final p-values')
-        cube_pval_final = Compute_pval_final(cube_pval_correl, cube_pval_channel,
+        self._log_stdout.info('Compute final p-values')
+        cube_pval_final = Compute_pval_final(cube_pval_correl,
+                                             cube_pval_channel,
                                              threshold)
+        self._log_stdout.info('Save the result in self.cube_pval_final')
+        self.cube_pval_final = Cube(data=cube_pval_final, wave=self.wave,
+                                    wcs=self.wcs, mask=np.ma.nomask)
+        self._log_file.info('03 Done')
 
-        cube_pval_correl = Cube(data=cube_pval_correl, wave=self.wave, wcs=self.wcs,
-                                mask=np.ma.nomask)
-        cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave, wcs=self.wcs,
-                                 mask=np.ma.nomask)
-        cube_pval_final = Cube(data=cube_pval_final, wave=self.wave, wcs=self.wcs,
-                               mask=np.ma.nomask)
-
-        return cube_pval_correl, cube_pval_channel, cube_pval_final
-
-    def compute_ref_pix(self, correl, profile, cube_pval_correl,
-                        cube_pval_channel, cube_pval_final,
-                        neighboors=26):
+    def step04_compute_ref_pix(self, neighboors=26):
         """compute the groups of connected voxels with a flood-fill algorithm
         on the cube of final thresholded p-values. Then compute referent
         voxel of each group of connected voxels using the voxel with the
@@ -436,48 +735,47 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        correl            : `~mpdaf.obj.Cube`
-                            Cube of T_GLR values
-        profile           : `~mpdaf.obj.Cube` (type int)
-                            Number of the profile associated to the T_GLR
-        cube_pval_correl  : `~mpdaf.obj.Cube`
-                           Cube of thresholded p-values associated
-                           to the T_GLR values
-        cube_pval_channel : `~mpdaf.obj.Cube`
-                            Cube of spectral p-values
-        cube_pval_final   : `~mpdaf.obj.Cube`
-                            Cube of final thresholded p-values
         neighboors        : integer
                             Connectivity of contiguous voxels
 
         Returns
         -------
-        Cat0 : astropy.Table
-               Catalogue of the referent voxels for each group.
-               Coordinates are in pixels.
-               Columns of Cat_ref : x y z T_GLR profile pvalC pvalS pvalF
+        self.Cat0 : astropy.Table
+                    Catalogue of the referent voxels for each group.
+                    Columns: x y z T_GLR profile pvalC pvalS pvalF
+                    Coordinates are in pixels.
         """
-        # connected voxels
-        self._logger.info('ORIGIN - Compute connected voxels')
+        self._log_file.info('04 compute referent pixels neighboors=%d'%neighboors)
+        self._log_stdout.info('Step 04 - referent pixels')
+        
+        # connected voxel
+        self._log_stdout.info('Compute connected voxels')
         self.param['neighboors'] = neighboors
-        labeled_cube, Ngp = Compute_Connected_Voxel(cube_pval_final._data, neighboors)
-        self._logger.info('ORIGIN - %d connected voxels detected' % Ngp)
+        labeled_cube, Ngp = Compute_Connected_Voxel(self.cube_pval_final._data,
+                                                    neighboors)
+        self._log_stdout.info('%d connected voxels detected' % Ngp)
         # Referent pixel
-        self._logger.info('ORIGIN - Compute referent pixels')
-        Cat0 = Compute_Referent_Voxel(correl._data, profile._data, cube_pval_correl._data,
-                                      cube_pval_channel._data, cube_pval_final._data, Ngp,
-                                      labeled_cube)
-        return Cat0
+        self._log_stdout.info('Compute referent pixels')
+        if self.cube_correl is None or self.cube_profile is None:
+            raise IOError('Run the step 02 to initialize self.cube_correl and self.cube_profile')
+        if self.cube_pval_correl is None or self.cube_pval_channel is None \
+                                         or self.cube_pval_final is None:
+            raise IOError('Run the step 03 to initialize self.cube_pval_* cubes')
+            
+        self.Cat0 = Compute_Referent_Voxel(self.cube_correl._data,
+                                           self.cube_profile._data,
+                                           self.cube_pval_correl._data,
+                                           self.cube_pval_channel._data,
+                                           self.cube_pval_final._data, Ngp,
+                                           labeled_cube)
+        self._log_stdout.info('Save a first version of the catalogue of emission lines in self.Cat0')
+        self._log_file.info('04 Done')
 
-    def compute_NBtests(self, Cat0, nb_ranges=3, plot_narrow=False):
+    def step05_compute_NBtests(self, nb_ranges=3, plot_narrow=False):
         """compute the 2 narrow band tests for each detected emission line.
 
         Parameters
         ----------
-        Cat0        : astropy.Table
-                      Catalogue of parameters of detected emission lines.
-                      Columns of the Catalogue Cat0 :
-                      x y z T_GLR profile pvalC pvalS pvalF
         nb_ranges   : integer
                       Number of the spectral ranges skipped to compute the
                       controle cube
@@ -486,27 +784,28 @@ class ORIGIN(object):
 
         Returns
         -------
-        Cat1 : astropy.Table
+        self.Cat1 : astropy.Table
                Catalogue of parameters of detected emission lines.
-               Columns of the Catalogue Cat1 :
-               x y z T_GLR profile pvalC pvalS pvalF T1 T2
+               Columns: x y z T_GLR profile pvalC pvalS pvalF T1 T2
         """
+        self._log_file.info('05 NB tests nb_ranges=%d'%nb_ranges)
+        self._log_stdout.info('Step 05 - NB tests')
         # Parameter set to 1 if we want to plot the results and associated folder
         plot_narrow = False
-        self._logger.info('ORIGIN - Compute narrow band tests')
         self.param['NBranges'] = nb_ranges
-        Cat1 = Narrow_Band_Test(Cat0, self.cube_raw, self.profiles,
+        if self.Cat0 is None:
+            raise IOError('Run the step 04 to initialize self.Cat0')
+        self.Cat1 = Narrow_Band_Test(self.Cat0, self.cube_raw, self.profiles,
                                 self.PSF, self.wfields, nb_ranges,
                                 plot_narrow, self.wcs)
-        return Cat1
+        self._log_stdout.info('Save the updated catalogue in self.Cat1')
+        self._log_file.info('05 Done')
 
-    def select_NBtests(self, Cat1, thresh_T1=0.2, thresh_T2=2):
+    def step06_select_NBtests(self, thresh_T1=0.2, thresh_T2=2):
         """select emission lines according to the 2 narrow band tests.
 
         Parameters
         ----------
-        Cat1      : astropy.Table
-                    Catalogue of detected emission lines.
         thresh_T1 : float
                     Threshold for the test 1
         thresh_T2 : float
@@ -514,26 +813,33 @@ class ORIGIN(object):
 
         Returns
         -------
-        Cat1_T1 : astropy.Table
-                  Catalogue of parameters of detected emission lines selected with
-                  the test 1
-        Cat1_T2 : astropy.Table
-                  Catalogue of parameters of detected emission lines selected with
-                  the test 2
+        self.Cat1_T1 : astropy.Table
+                       Catalogue of parameters of detected emission lines
+                       selected with the test 1
+        self.Cat1_T2 : astropy.Table
+                       Catalogue of parameters of detected emission lines
+                       selected with the test 2
 
         Columns of the catalogues :
         x y z T_GLR profile pvalC pvalS pvalF T1 T2
         """
+        self._log_file.info('06 Selection according to NB tests thresh_T1=%.1f thresh_T2=%.1f'%(thresh_T1, thresh_T2))
+        self._log_stdout.info('Step 06 - Selection according to NB tests')
         self.param['threshT1'] = thresh_T1
         self.param['threshT2'] = thresh_T2
+        if self.Cat1 is None:
+            raise IOError('Run the step 05 to initialize self.Cat1')
         # Thresholded narrow bands tests
-        Cat1_T1, Cat1_T2 = Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2)
-        self._logger.info('ORIGIN - %d emission lines selected with the test 1' % len(Cat1_T1))
-        self._logger.info('ORIGIN - %d emission lines selected with the test 2' % len(Cat1_T2))
-        return Cat1_T1, Cat1_T2
+        self.Cat1_T1, self.Cat1_T2 = Narrow_Band_Threshold(self.Cat1,
+                                                           thresh_T1,
+                                                           thresh_T2)
+        self._log_stdout.info('%d emission lines selected with the test 1' % len(self.Cat1_T1))
+        self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T1')
+        self._log_stdout.info('%d emission lines selected with the test 2' % len(self.Cat1_T2))
+        self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T2')
+        self._log_file.info('06 Done')
 
-    def estimate_line(self, Cat1_T, profile, cube_faint,
-                      grid_dxy=0, grid_dz=0):
+    def step07_estimate_line(self, T=2, grid_dxy=0, grid_dz=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -541,16 +847,9 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        Cat1_T     : astropy.Table
-                     Catalogue of parameters of detected emission lines selected
-                     with a narrow band test.
-                     Columns of the Catalogue Cat1_T:
-                     x y z T_GLR profile pvalC pvalS pvalF T1 T2
-        profile    : `~mpdaf.obj.Cube`
-                     Number of the profile associated to the T_GLR
-        cube_faint : `~mpdaf.obj.Cube`
-                     Projection on the eigenvectors associated to the lower
-                     eigenvalues
+        T          : 1 or 2
+                     if T=1, self.Cat1_T1 is used as input
+                     if T=2, self.Cat1_T2 is used as input
         grid_dxy   : integer
                      Maximum spatial shift for the grid
         grid_dz    : integer
@@ -558,101 +857,103 @@ class ORIGIN(object):
 
         Returns
         -------
-        Cat2_T           : astropy.Table
-                           Catalogue of parameters of detected emission lines.
-                           Columns of the Catalogue Cat2:
-                           x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual
-                           flux num_line
-        Cat_est_line : list of `~mpdaf.obj.Spectrum`
-                        Estimated lines
+        self.Cat2    : astropy.Table
+                       Catalogue of parameters of detected emission lines.
+                       Columns: x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                       residual flux num_line
+        self.spectra : list of `~mpdaf.obj.Spectrum`
+                       Estimated lines
         """
-        self._logger.info('ORIGIN - Lines estimation')
+        self._log_file.info('07 Lines estimation T=%d grid_dxy=%d grid_dz=%d'%(T, grid_dxy, grid_dz))
+        self._log_stdout.info('Step 07 - Lines estimation')
+        self.param['NBtest'] = 'T%d'%T
         self.param['grid_dxy'] = grid_dxy
         self.param['grid_dz'] = grid_dz
-        Cat2_T, Cat_est_line_raw_T, Cat_est_line_std_T = \
-            Estimation_Line(Cat1_T, profile._data, self.Nx, self.Ny, self.Nz, self.var, cube_faint._data,
-                            grid_dxy, grid_dz, self.PSF, self.wfields, self.profiles)
-        Cat_est_line = []
+        if T==1:
+            Cat1_T = self.Cat1_T1
+        elif T==2:
+            Cat1_T = self.Cat1_T2
+        else:
+            raise IOError('Invalid parameter T')
+        if self.cube_faint is None:
+            raise IOError('Run the step 01 to initialize self.cube_faint')
+        if self.cube_profile is None:
+            raise IOError('Run the step 02 to initialize self.cube_profile')
+        if Cat1_T is None:
+            raise IOError('Run the step 06 to initialize self.Cat1_T* catalogs')
+        self.Cat2, Cat_est_line_raw_T, Cat_est_line_std_T = \
+            Estimation_Line(Cat1_T, self.cube_profile._data, self.Nx, self.Ny,
+                            self.Nz, self.var, self.cube_faint._data, grid_dxy,
+                            grid_dz, self.PSF, self.wfields, self.profiles)
+        self._log_stdout.info('Save the updated catalogue in self.Cat2')
+        self.spectra = []
         for data, std in zip(Cat_est_line_raw_T, Cat_est_line_std_T):
-            spe = Spectrum(data=data, var=std**2, wave=self.wave, mask=np.ma.nomask)
-            Cat_est_line.append(spe)
-        return Cat2_T, Cat_est_line
+            spe = Spectrum(data=data, var=std**2, wave=self.wave,
+                           mask=np.ma.nomask)
+            self.spectra.append(spe)
+        self._log_stdout.info('Save the estimated spectrum of each line in self.spectra')
+        self._log_file.info('07 Done')
 
-    def merge_spatialy(self, Cat2_T):
+    def step08_merge_spatialy(self):
         """Construct a catalogue of sources by spatial merging of the
         detected emission lines in a circle with a diameter equal to
         the mean over the wavelengths of the FWHM of the FSF.
 
-        Parameters
-        ----------
-        Cat2_T   : astropy.Table
-                   catalogue
-                   Columns of Cat2_T:
-                   x y z T_GLR profile pvalC pvalS pvalF T1 T2
-                   residual flux num_line
-
         Returns
         -------
-        Cat3 : astropy.Table
-               Columns of Cat3:
-               ID x_circle y_circle x_centroid y_centroid nb_lines
-               x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux num_line
+        self.Cat3 : astropy.Table
+                    Columns of Cat3:
+                    ID x_circle y_circle x_centroid y_centroid nb_lines
+                    x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                    residual flux num_line
         """
-        self._logger.info('ORIGIN - Spatial merging')
+        self._log_file.info('08 Spatial merging')
+        self._log_stdout.info('Step 08 - Spatial merging')
         if self.wfields is None:
             fwhm = self.FWHM_PSF
         else:
             fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved !!
-        Cat3 = Spatial_Merging_Circle(Cat2_T, fwhm)
-        return Cat3
+        if self.Cat2 is None:
+            raise IOError('Run the step 07 to initialize self.Cat2')
+        self.Cat3 = Spatial_Merging_Circle(self.Cat2, fwhm)
+        self._log_stdout.info('Save the updated catalogue in self.Cat3')
+        self._log_file.info('08 Done')
 
-    def merge_spectraly(self, Cat3, Cat_est_line, deltaz=1):
+    def step09_merge_spectraly(self, deltaz=1):
         """Merge the detected emission lines distants to less than deltaz
            spectral channel in each group.
 
         Parameters
         ----------
-        Cat3         : astropy.Table
-                       Catalogue of detected emission lines
-                       Columns of Cat:
-                       ID x_circle y_circle x_centroid y_centroid nb_lines
-                       x y z T_GLR profile pvalC pvalS pvalF T1 T2
-                       residual flux num_line
-        Cat_est_line : list of `~mpdaf.obj.Spectrum`
-                       List of estimated lines
-        deltaz       : integer
-                       Distance maximum between 2 different lines
+        deltaz : integer
+                 Distance maximum between 2 different lines
 
         Returns
         -------
-        Cat4 : astropy.Table
-               Catalogue
-               Columns of Cat4:
-               ID x_circle y_circle x_centroid y_centroid nb_lines
-               x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux num_line
+        self.Cat4 : astropy.Table
+                    Catalogue
+                    Columns: ID x_circle y_circle x_centroid y_centroid
+                             nb_lines x y z T_GLR profile pvalC pvalS pvalF
+                             T1 T2 residual flux num_line
         """
-        self._logger.info('ORIGIN - Spectral merging')
+        self._log_file.info('09 spectral merging deltaz=%d'%deltaz)
+        self._log_stdout.info('Step 09 - Spectral merging')
         self.param['deltaz'] = deltaz
-        Cat_est_line_raw = [spe._data for spe in Cat_est_line]
-        Cat4 = Spectral_Merging(Cat3, Cat_est_line_raw, deltaz)
-        return Cat4
+        if self.Cat3 is None:
+            raise IOError('Run the step 08 to initialize self.Cat3')
+        Cat_est_line_raw = [spe._data for spe in self.spectra]
+        self.Cat4 = Spectral_Merging(self.Cat3, Cat_est_line_raw, deltaz)
+        self._log_file.info('09 Done')
 
-    def write_sources(self, Cat4, Cat_est_line, correl, name='origin', path='.', overwrite=True, fmt='default', src_vers='0.1', author='undef',ncpu=1):
+    def step10_write_sources(self, path=None, overwrite=True,
+                             fmt='default', src_vers='0.1',
+                             author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
         write the final sources.
 
 
         Parameters
         ----------
-        Cat4             : astropy.Table
-                           Catalogue of the detected emission lines:
-                           ID x_circle y_circle x_centroid y_centroid
-                           nb_lines x y z T_GLR profile pvalC pvalS pvalF
-                           T1 T2 residual flux num_line
-        Cat_est_line : list of `~mpdaf.obj.Spectrum`
-                           List of estimated lines
-        correl           : `~mpdaf.obj.Cube`
-                           Cube of T_GLR values
         name : str
             Basename for the sources.
         path : str
@@ -667,17 +968,23 @@ class ORIGIN(object):
         sources : mpdaf.sdetect.SourceList
                   List of sources
         """
+        self._log_file.info('10 Sources creation')
         # Add RA-DEC to the catalogue
-        self._logger.info('ORIGIN - Add RA-DEC to the catalogue')
-        CatF_radec = Add_radec_to_Cat(Cat4, self.wcs)
+        self._log_stdout.info('Step 10 - Sources creation')
+        self._log_stdout.info('Add RA-DEC to the catalogue')
+        if self.Cat4 is None:
+            raise IOError('Run the step 10 to initialize self.Cat4')
+        CatF_radec = Add_radec_to_Cat(self.Cat4, self.wcs)
 
         # path
-        if not os.path.exists(path):
+        if path is not None and not os.path.exists(path):
             raise IOError("Invalid path: {0}".format(path))
-
-        path = os.path.normpath(path)
-
-        path2 = path + '/' + name
+            
+        if path is None:
+            path2 = '%s/%s/sources'%(self.path, self.name)
+        else:
+            path = os.path.normpath(path)
+            path2 = path + '/' + self.name
         if not os.path.exists(path2):
             os.makedirs(path2)
         else:
@@ -686,23 +993,27 @@ class ORIGIN(object):
                 os.makedirs(path2)
 
         # list of source objects
-        self._logger.info('ORIGIN - Create the list of sources')
-        nsources = Construct_Object_Catalogue(CatF_radec, Cat_est_line,
-                                              correl._data, self.wave,
-                                              self.filename, self.FWHM_profiles,
-                                              path2, name, self.param,
+        self._log_stdout.info('Create the list of sources')
+        if self.cube_correl is None:
+            raise IOError('Run the step 02 to initialize self.cube_correl')
+        if self.spectra is None:
+            raise IOError('Run the step 07 to initialize self.spectra')
+        nsources = Construct_Object_Catalogue(CatF_radec, self.spectra,
+                                              self.cube_correl._data,
+                                              self.wave, self.filename,
+                                              self.FWHM_profiles,
+                                              path2, self.name, self.param,
                                               src_vers, author,ncpu)
+        self._log_file.info('10 Done')
 
         return nsources
 
-    def plot(self, correl, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
+    def plot(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
         """Plot detected emission lines on the 2D map of maximum of the T_GLR
         values over the spectral channels.
 
         Parameters
         ----------
-        correl : `~mpdaf.obj.Cube`
-                 Cube of T_GLR values
         x      : array
                  Coordinates along the x-axis of the estimated lines
                  in pixels (column).
@@ -719,12 +1030,14 @@ class ORIGIN(object):
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
         """
+        if self.cube_correl is None:
+            raise IOError('Run the step 02 to initialize self.cube_correl')
         if self.wfields is None:
             fwhm = self.FWHM_PSF
         else:
             fwhm = np.max(np.array(self.FWHM_PSF))
             
-        carte_2D_correl = np.amax(correl._data, axis=0)
+        carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         carte_2D_correl_ = Image(data=carte_2D_correl, wcs=self.wcs)
 
         if ax is None:
@@ -739,60 +1052,10 @@ class ORIGIN(object):
                 ax.add_artist(c)
         carte_2D_correl_.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
         
-        
-    def merge_extended_objects(self, incat, ima, fwhm=0.7, threshold=2.0, kernel_size=3, minsize=5.0):
-        self._logger.info('ORIGIN - Extended Objects Merging')
-        
-        from photutils import detect_sources, source_properties, properties_table
-        from astropy.convolution import Gaussian2DKernel
-        from astropy.stats import gaussian_fwhm_to_sigma
-        
-        self._logger.info('Creating segmentation image with threshold {}'.format(threshold))
-        nsource_init = len(np.unique(incat['ID']))
-        sigma = gaussian_fwhm_to_sigma * fwhm/0.2
-        kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
-        kernel.normalize()
-        segm = ima.clone()
-        segobj = detect_sources(ima.data, threshold, npixels=5, filter_kernel=kernel)
-        segm.data = segobj.data
-        props = source_properties(ima.data, segm.data)
-        tab = properties_table(props)
-        self._logger.info('{} detected objects'.format(len(tab)))
-        
-        stab = tab[tab['area']>minsize**2]
-        stab.sort('area')
-        stab.reverse()
-        self._logger.info('Selected {} sources with linear size > {} spaxels'.format(len(stab),minsize))
-        
-        k,l = (np.round(incat['y_circle']).astype(int), np.round(incat['x_circle']).astype(int))
-        vals = segm.data[k,l]
-        
-        incat['OLD_ID'] = incat['ID']
-        
-        for k in stab['id']:
-            mask = vals==k
-            srclist = incat[mask]
-            if len(srclist) > 0:
-                #self._logger.debug('merging {} sources for id {}'.format(len(srclist),k))  
-                iden = srclist['ID'].min()
-                clipflux = np.clip(srclist['flux'],0,np.infty)
-                if clipflux.sum() == 0: 
-                    self._logger.warning('all line flux are <=0, skipped')
-                    continue
-                xc = np.average(srclist['x_centroid'], weights=clipflux)
-                yc = np.average(srclist['y_centroid'], weights=clipflux) 
-                incat['ID'][mask] = iden
-                incat['x_centroid'][mask] = xc
-                incat['y_centroid'][mask] = yc  
-        self._logger.debug('Recreate IDs for the catalog')
-        current_ids = np.unique(incat['ID'])
-        current_ids.sort()
-        for k,iden in enumerate(current_ids):
-            mask = incat['ID'] == iden
-            incat['ID'][mask] = k + 1
-        nsource_final = len(np.unique(incat['ID']))   
-        nmerged = nsource_init - nsource_final
-        self._logger.info('{}/{} sources merged in catalog [{}]'.format(nmerged,nsource_init,nsource_final))
-            
-        return incat, segm
+    def info(self):
+        currentlog = self._log_file.handlers[0].baseFilename
+        with open(currentlog) as f:
+            for line in f:
+                if line.find('Done') == -1:
+                    self._log_stdout.info(line)
         

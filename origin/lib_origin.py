@@ -51,77 +51,6 @@ from mpdaf.sdetect import Source
 
 __version__ = 'ORIGIN_18122015_02'
 
-
-
-def Compute_PSF(wave, Nz, Nfsf, beta, fwhm1, fwhm2, lambda1, lambda2,
-                step_arcsec):
-    """Compute PSF with a Moffat function
-
-    Parameters
-    ----------
-    wave    : `mpdaf.obj.WaveCoord`
-              Spectral coordinates
-    Nz      : int
-              Number of spectral channels
-    Nfsf    : int
-              Spatial dimension of the FSF
-    beta    : float
-              Moffat Beta parameter
-    fwhm1   : float
-              fwhm en arcsec of the first point
-    fwhm2   : float
-              fwhm en arcsec of the second point
-    lambda1 : float
-              wavelength in angstrom of the first point
-    lambda2 : float
-              wavelength in angstrom of the second point
-
-    Returns
-    -------
-    PSF_Moffat : array (Nz, Nfsf, Nfsf)
-                 MUSE PSF
-    fwhm_pix   : array (Nz)
-                 fwhm of the PSF in pixels
-    fwhm_arcsec : array (Nz)
-                  fwhm of the PSF in arcsec
-
-    Date  : Dec, 11 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
-    t0 = time.time()
-    wavelengths = wave.coord(unit=u.angstrom)
-
-    slope = (fwhm2 - fwhm1) / (lambda2 - lambda1)
-    ordon_or = fwhm2 - slope * lambda2
-    # fwhm curve in arcsec
-    fwhm_arcsec = slope * wavelengths + ordon_or
-    # conversion fwhm arcsec -> pixels
-    fwhm_pix = fwhm_arcsec / step_arcsec
-
-    # x vector
-    x = np.arange(-np.floor(Nfsf / 2), np.floor(Nfsf / 2) + 1)
-    # y vector
-    y = np.arange(-np.floor(Nfsf / 2), np.floor(Nfsf / 2) + 1)
-    # alpha coefficient in pixel
-    alpha = fwhm_pix / (2 * np.sqrt(2**(1 / beta) - 1))
-
-    # figure,plot(wavelengths,alpha)
-    PSF_Moffat = np.empty((Nz, Nfsf, Nfsf))
-
-    for i in range(Nz):
-        for dx in range(Nfsf):
-            for dy in range(Nfsf):
-                PSF_Moffat[i, dx, dy] = (1 + (np.sqrt(x[dx]**2 + y[dy]**2) /
-                                              alpha[i])**2)**(-beta)
-    # Normalization
-    PSF_Moffat = PSF_Moffat / np.sum(PSF_Moffat, axis=(1, 2))\
-        [:, np.newaxis, np.newaxis]
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return PSF_Moffat, fwhm_pix, fwhm_arcsec
-
-
 def Spatial_Segmentation(Nx, Ny, NbSubcube):
     """Function to compute the limits in pixels for each zone.
     Each zone is computed from the left to the right and the top to the bottom
@@ -144,8 +73,7 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Segmentation of the rows vector in Nbsubcube parts from the right to the
     # left
@@ -202,8 +130,7 @@ def Compute_PCA_SubCube(NbSubcube, cube_std, intx, inty, Edge_xmin, Edge_xmax,
     Date  : Dec,7 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Initialization
     nx = np.empty((NbSubcube, NbSubcube), dtype=np.int)
@@ -276,8 +203,6 @@ def Compute_PCA_edge(cube, cube_edge):
     Date  : Dec,3 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
-    # logger.debug(whoami())
     # data cube converted to dictionary of spectra
     cube_v = cube.reshape(cube.shape[0], cube.shape[1] * cube.shape[2])
     # data cube without undesired spectra converted to dictionary of spectra
@@ -317,8 +242,7 @@ def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val, fig):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Initialization
     nbkeep = np.empty((NbSubcube, NbSubcube), dtype=np.int)
@@ -371,7 +295,6 @@ def Compute_Number_Eigenvectors(eig_val, r0):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
     # Initialization
     nl = eig_val.shape[0]
     coeffr = np.zeros(nl - 4)
@@ -443,8 +366,7 @@ def Compute_Proj_Eigenvector_Zone(nbkeep, NbSubcube, Nx, Ny, Nz, A, V,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # initialization
     cube_faint = np.zeros((Nz, Ny, Nx))
@@ -502,8 +424,6 @@ def Compute_Proj_Eigenvector(A, V, r):
     Date  : Dec,7 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
-    # logger.debug(whoami())
     # initialization
     cube_proj_low_v = np.dot(V[:, :r + 1], A[:r + 1, :])
     cube_proj_high_v = np.dot(V[:, r + 1:], A[r + 1:, :])
@@ -537,8 +457,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # data cube weighted by the MUSE covariance
     cube_var = cube / np.sqrt(sigma)
@@ -612,7 +531,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     # First spectral profile
     k0 = 0
-    d_j = Dico[:, k0]
+    d_j = Dico[k0]
     # zero-mean spectral profile
     d_j = d_j - np.mean(d_j)
     # Compute the square of the spectral profile
@@ -649,9 +568,9 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     logger.info('Step 4/4 Computing second cube of correlation values')
     
-    for k in ProgressBar(list(range(1, Dico.shape[1]))):
+    for k in ProgressBar(list(range(1, len(Dico)))):
         # Second cube of correlation values
-        d_j = Dico[:, k]
+        d_j = Dico[k]
         d_j = d_j - np.mean(d_j)
         profile_square = d_j**2
 
@@ -719,8 +638,7 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # initialization
     cube_pval_correl = np.ones(correl.shape)
@@ -769,8 +687,6 @@ def Compute_pval_correl(correl_temp_edge):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
-    # logger.debug(whoami())
     moy_est = np.mean(correl_temp_edge)
     std_est = np.std(correl_temp_edge)
     # hypothesis : T_GLR are distributed according a normal distribution
@@ -810,8 +726,7 @@ def Compute_pval_channel_Zone(cube_pval_correl, intx, inty, NbSubcube,
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # initialization
     cube_pval_channel = np.zeros(cube_pval_correl.shape)
@@ -867,7 +782,6 @@ def Compute_pval_channel(X, n_lambda, mean_est):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
     # initialization
     N = np.sum(np.array(X != 1, dtype=np.int))
     # Estimation of p parameter with the mean of the distribution set by the
@@ -907,8 +821,7 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
     ksel_correl = (cube_pval_correl==0)
@@ -956,8 +869,7 @@ def Compute_Connected_Voxel(cube_pval_final, neighboors):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
 #     threshold_log = 10**(-threshold)
 #     # The p-values higher than the thresholded are previously set to 1, here we
@@ -1008,8 +920,7 @@ def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     grp = measurements.find_objects(labeled_cube)
     argmax = [np.argmax(correl[grp[i]]) for i in range(Ngp)]
@@ -1070,8 +981,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
     Date : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Initialization
     T1 = []
@@ -1090,7 +1000,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
         
         # spectral profile
         num_prof = Cat0[i]['profile']
-        profil0 = Dico[:, num_prof]
+        profil0 = Dico[num_prof]
         # length of the spectral profile
         profil1 = profil0[profil0 > 1e-13]
         long0 = profil1.shape[0]
@@ -1229,8 +1139,7 @@ def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Catalogue with the rows corresponding to the lines with test values
     # greater than the given threshold
@@ -1289,8 +1198,7 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
     Date  : Dec, 16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Initialization
     Cat2_x = []
@@ -1472,10 +1380,9 @@ def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
     Date  : Dec, 11 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # logger = logging.getLogger('mpdaf')
     # spectral profile
     num_prof = profile[z0, y0, x0]
-    profil0 = Dico[:, num_prof]
+    profil0 = Dico[num_prof]
     profil1 = profil0[profil0 > 1e-20]
     long0 = profil1.shape[0]
     longz = long0 // 2
@@ -1551,8 +1458,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf):
 
     Date : Apr,28 2016
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
 
     colF = []
@@ -1674,8 +1580,7 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     # Initialization
     CatF = Table()
@@ -1742,8 +1647,7 @@ def Add_radec_to_Cat(Cat, wcs):
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     x = Cat['x_centroid']
     y = Cat['y_centroid']
@@ -1770,7 +1674,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     ----------
     """
 
-    logger = logging.getLogger('mpdaf')
+    logger = logging.getLogger('origin')
     logger.info('{}/{} source ID {}'.format(k+1,ktot,i))
     cube = Cube(filename)
     cubevers = cube.primary_header.get('CUBE_V', '')
@@ -1816,7 +1720,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         # FWHM in arcsec of the profile
         profile_num = num_profil[j]
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
-        #profile_dico = Dico[:, profile_num]
+        #profile_dico = Dico[profile_num]
         fl = flux[j]
         vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
                     pvalF[j], T1[j], T2[j], profile_num]
@@ -1887,8 +1791,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
     Date  : Dec, 16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('mpdaf')
-    logger.debug(whoami())
+    logger = logging.getLogger('origin')
     t0 = time.time()
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
