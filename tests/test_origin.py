@@ -6,7 +6,7 @@ import numpy as np
 import os
 import shutil
 
-from mpdaf.sdetect import Source
+from mpdaf.sdetect import Source, Catalog
 from origin import ORIGIN
 
 MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)), 
@@ -81,6 +81,8 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     nsources = my_origin.step10_write_sources(ncpu=1)
     assert (nsources == 2)
+    cat = Catalog.read('tmp/sources/tmp.fits')
+    assert (len(cat) == 2)
     
     # test returned sources are valid
     src = Source.from_file('./tmp/sources/tmp-00001.fits')
@@ -97,4 +99,3 @@ def test_origin():
     assert(cNy == Ny)
     assert(cNx == Nx)
     shutil.rmtree('tmp')
-#    os.remove('tmp.log')

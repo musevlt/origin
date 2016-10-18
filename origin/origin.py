@@ -999,6 +999,9 @@ class ORIGIN(object):
             if overwrite:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
+                
+        # write the final catalog
+        CatF_radec.write('%s/%s.fits'%(path2, self.name), overwrite=True)
 
         # list of source objects
         self._log_stdout.info('Create the list of sources')
