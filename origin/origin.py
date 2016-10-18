@@ -53,6 +53,8 @@ from .lib_origin import Spatial_Segmentation, \
     Narrow_Band_Threshold, Estimation_Line, \
     Spatial_Merging_Circle, Spectral_Merging, \
     Add_radec_to_Cat, Construct_Object_Catalogue
+    
+__version__ ='1.0'
 
 
 class ORIGIN(object):
@@ -145,7 +147,7 @@ class ORIGIN(object):
         self._log_file = logging.getLogger('origfile')
         self._log_file.setLevel(logging.INFO)
                                        
-        self._log_file.info('00 - Initialization')
+        self._log_file.info('00 - Initialization ORIGIN v%s'%__version__)
         self._log_stdout.info('Step 00 - Initialization')
         self._log_stdout.info('Read the Data Cube')
         
