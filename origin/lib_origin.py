@@ -1693,7 +1693,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     src.add_image(maxmap, 'MAXMAP')
     src.add_attr('SRC_V', src_vers, desc='Source version')
     
-    src.add_history('[{}] Source created with Origin'.format(src.SRC_V), author)
+    src.add_history('Source created with Origin', author)
     
     w = cube.wave.coord(wave_pix, unit=u.angstrom)
     names = np.array(['%04d'%w[j] for j in range(nb_lines)])
