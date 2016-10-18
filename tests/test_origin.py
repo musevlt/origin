@@ -62,19 +62,19 @@ def test_origin():
 
     # Estimation with the catalogue from the narrow band Test number 2
     my_origin = ORIGIN.load('tmp')
-    my_origin.step07_estimate_line()
+    my_origin.step07_compute_spectra()
     my_origin.write()
 
     # Spatial merging
     my_origin = ORIGIN.load('tmp')
-    my_origin.step08_merge_spatialy()
+    my_origin.step08_spatial_merging()
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     # Spectral merging
     my_origin = ORIGIN.load('tmp')
-    my_origin.step09_merge_spectraly(deltaz)
+    my_origin.step09_spectral_merging(deltaz)
     my_origin.write()
     
     # list of source objects

@@ -847,7 +847,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T2')
         self._log_file.info('06 Done')
 
-    def step07_estimate_line(self, T=2, grid_dxy=0, grid_dz=0):
+    def step07_compute_spectra(self, T=2, grid_dxy=0, grid_dz=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -902,7 +902,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the estimated spectrum of each line in self.spectra')
         self._log_file.info('07 Done')
 
-    def step08_merge_spatialy(self):
+    def step08_spatial_merging(self):
         """Construct a catalogue of sources by spatial merging of the
         detected emission lines in a circle with a diameter equal to
         the mean over the wavelengths of the FWHM of the FSF.
@@ -927,7 +927,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the updated catalogue in self.Cat3')
         self._log_file.info('08 Done')
 
-    def step09_merge_spectraly(self, deltaz=1):
+    def step09_spectral_merging(self, deltaz=1):
         """Merge the detected emission lines distants to less than deltaz
            spectral channel in each group.
 
