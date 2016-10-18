@@ -466,7 +466,7 @@ class ORIGIN(object):
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param)
                    
-    def write(self, path=None):
+    def write(self, path=None, overwrite=False):
         """Save the current session in a folder
         
         Parameters
@@ -474,6 +474,8 @@ class ORIGIN(object):
         path : string
                Path where the ORIGIN data will be stored.
                If None, the name of the session is used
+        overwrite : bool
+                    remove the folder if it exists
         """
         # path
         if path is not None:
@@ -486,6 +488,10 @@ class ORIGIN(object):
         path2 = path + '/' + self.name
         if not os.path.exists(path2):
             os.makedirs(path2)
+        else:
+            if overwrite:
+                shutil.rmtree(path2)
+                os.makedirs(path2)
         
         # parameters in .yaml
         stream = file('%s/%s.yaml'%(path2, self.name), 'w')
