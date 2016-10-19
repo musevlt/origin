@@ -124,7 +124,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param):
+                 Cat3, Cat4, param, eig_val, nbkeep):
         """
         verifier la lecture des PSFs
         verifier l ecritur des param dans le header
@@ -281,6 +281,8 @@ class ORIGIN(object):
         
         
         # step1
+        self.eig_val = eig_val
+        self.nbkeep = nbkeep
         self.cube_faint = cube_faint
         self.cube_cont = cube_cont
         
@@ -360,7 +362,7 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None)
+                   param=None, eig_val=None, nbkeep=None)
         
     @classmethod
     def load(cls, folder):
@@ -384,7 +386,22 @@ class ORIGIN(object):
             PSF = None
             FWHM_PSF = None
             
-        
+        intx = np.asarray(param['intx'])
+        inty = np.asarray(param['inty'])
+        NbSubcube = param['nbsubcube']
+        if os.path.isfile('%s/eigval_%d_%d.txt'%(folder, NbSubcube-1,
+                                                 NbSubcube-1)):
+            eig_val = {}
+            for i in range(NbSubcube):
+                for j in range(NbSubcube):
+                    eig_val[(i,j)] = np.loadtxt('%s/eigval_%d_%d.txt'%(folder, i,j))
+        else:
+            eig_val = None
+        if os.path.isfile('%s/nbkeep.txt'%(folder)):
+            nbkeep = np.loadtxt('%s/nbkeep.txt'%(folder)).\
+            reshape((NbSubcube, NbSubcube)).astype(np.int)
+        else:
+            nbkeep = None
         if os.path.isfile('%s/cube_faint.fits'%folder):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
@@ -456,17 +473,17 @@ class ORIGIN(object):
             Cat4 = None
                 
         return cls(path=path,  name=name, filename=param['cubename'],
-                   NbSubcube=param['nbsubcube'], margins=param['margin'],
+                   NbSubcube=NbSubcube, margins=param['margin'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   intx=np.asarray(param['intx']),
-                   inty=np.asarray(param['inty']),
+                   intx=intx, inty=inty,
                    cube_faint=cube_faint, cube_cont=cube_cont,
                    cube_correl=cube_correl, cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
                    cube_pval_channel=cube_pval_channel,
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
-                   spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param)
+                   spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
+                   eig_val=eig_val, nbkeep=nbkeep)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -513,6 +530,13 @@ class ORIGIN(object):
             self._log_file.setLevel(logging.INFO)
         
         #step1
+        if self.eig_val is not None:
+            for i in range(self.NbSubcube):
+                for j in range(self.NbSubcube):
+                    np.savetxt('%s/eigval_%d_%d.txt'%(path2, i,j),
+                               self.eig_val[(i,j)])
+        if self.nbkeep is not None:
+            np.savetxt('%s/nbkeep.txt'%path2, self.nbkeep)
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
         if self.cube_cont is not None:
@@ -561,7 +585,7 @@ class ORIGIN(object):
             self.Cat4.write('%s/Cat4.fits'%path2, overwrite=True)
         
 
-    def step01_compute_PCA(self, r0=0.67, fig=None):
+    def step01_compute_PCA(self, r0=0.67):
         """ Loop on each zone of the data cube and compute the PCA,
         the number of eigenvectors to keep for the projection
         (with a linear regression and its associated determination
@@ -572,11 +596,14 @@ class ORIGIN(object):
         ----------
         r0          : float
                       Coefficient of determination for projection during PCA
-        fig : figure instance
-                      If not None, plot the eigenvalues and the separation point.
 
         Returns
         -------
+        self.eig_val    : dictionary
+                          Eigenvalues of each spatio-spectral zone
+        self.nbkeep     : array
+                          Number of eigenvalues for each zone used to compute
+                          the projection
         self.cube_faint : `~mpdaf.obj.Cube`
                      Projection on the eigenvectors associated to the lower
                      eigenvalues of the data cube
@@ -594,7 +621,7 @@ class ORIGIN(object):
         cube_std = self.cube_raw / np.sqrt(self.var)
         # Compute PCA results
         self._log_stdout.info('Compute the PCA on each zone')
-        A, V, eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
+        A, V, self.eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
                                                         cube_std,
                                                         self.intx, self.inty,
                                                         self.Edge_xmin,
@@ -607,11 +634,11 @@ class ORIGIN(object):
         # Parameters for projection during PCA
         self._log_stdout.info('Compute the number of eigenvectors to keep for the projection')
         list_r0 = np.resize(r0, self.NbSubcube**2)
-        nbkeep = Compute_Number_Eigenvectors_Zone(self.NbSubcube, list_r0,
-                                                  eig_val, fig)
+        self.nbkeep = Compute_Number_Eigenvectors_Zone(self.NbSubcube, list_r0,
+                                                  self.eig_val)
         # Adaptive projection of the cube on the eigenvectors
         self._log_stdout.info('Adaptive projection of the cube on the eigenvectors')
-        cube_faint, cube_cont = Compute_Proj_Eigenvector_Zone(nbkeep,
+        cube_faint, cube_cont = Compute_Proj_Eigenvector_Zone(self.nbkeep,
                                                               self.NbSubcube,
                                                               self.Nx,
                                                               self.Ny,
@@ -1018,6 +1045,30 @@ class ORIGIN(object):
         self._log_file.info('10 Done')
 
         return nsources
+        
+    def plot_PCA(self, i, j, ax=None):
+        """ Plot the eigenvalues and the separation point
+        
+        Parameters
+        ----------
+        i: integer in [0, NbSubCube[
+           x-coordinate of the zone
+        j: integer in [0, NbSubCube[
+           y-coordinate of the zone
+        """
+        if self.eig_val is None or self.nbkeep is None:
+            raise IOError('Run the step 01 to initialize self.eig_val and selb.nbkeep')
+            
+        if ax is None:
+            ax = plt.gca()
+        
+        lambdat = self.eig_val[(i, j)]
+        nbt = self.nbkeep[i, j]
+        ax.semilogy(lambdat)
+        ax.semilogy(nbt, lambdat[nbt], 'r+')
+        plt.title('zone (%d, %d)' %(i,j))
+        
+    
 
     def plot(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
         """Plot detected emission lines on the 2D map of maximum of the T_GLR

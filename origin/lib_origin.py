@@ -217,7 +217,7 @@ def Compute_PCA_edge(cube, cube_edge):
     return A, eig_vec, eig_val
 
 
-def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val, fig):
+def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val):
     """Function to compute the number of eigenvectors to keep for the
     projection for each zone by calling the function
     Compute_Number_Eigenvectors.
@@ -257,19 +257,6 @@ def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val, fig):
             nbkeep[numx, numy] = Compute_Number_Eigenvectors(lambdat,
                                                              list_r0[zone])
             zone = zone + 1
-
-    # plot the ln of the eigenvalues and the separation point for each zone
-    if fig is not None:
-        zone = 0
-        for numy in range(NbSubcube):
-            for numx in range(NbSubcube):
-                lambdat = eig_val[(numx, numy)]
-                nbt = nbkeep[numx, numy]
-                zone = zone + 1
-                plt.subplot(NbSubcube, NbSubcube, zone)
-                plt.semilogy(lambdat)
-                plt.semilogy(nbt, lambdat[nbt], 'r+')
-                plt.title('zone %d' % zone)
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return nbkeep
