@@ -935,7 +935,7 @@ def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
 
 
 def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
-                     nb_ranges, plot_narrow, wcs):
+                     nb_ranges, wcs):
     """Function to compute the 2 narrow band tests for each detected
     emission line
 
@@ -953,8 +953,6 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
                   FSF for this data cube
     nb_ranges   : integer
                   Number of skipped intervals for computing control cube
-    plot_narrow : boolean
-                  If True, plot the narrow bands images
     wcs         : `mpdaf.obj.WCS`
                   Spatial coordinates
 
@@ -1003,17 +1001,6 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
         intx1 = max(0, x0 - longxy)
         intx2 = min(cube_raw.shape[2], x0 + longxy + 1)
         cube_test = cube_raw[intz1:intz2, inty1:inty2, intx1:intx2]
-        # Larger spatial ranges for the plots
-        longxy0 = 20
-        y01 = max(0, y0 - longxy0)
-        y02 = min(cube_raw.shape[1], y0 + longxy0 + 1)
-        x01 = max(0, x0 - longxy0)
-        x02 = min(cube_raw.shape[2], x0 + longxy0 + 1)
-        # Coordinates in this window
-        y00 = y0 - y01
-        x00 = x0 - x01
-        # subcube for the plot
-        cube_test_plot = cube_raw[intz1:intz2, y01:y02, x01:x02]
 
         # controle cube
         if (z0 + longz + nb_ranges * long0) < cube_raw.shape[0]:
@@ -1023,11 +1010,9 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
             intz1c = intz1 - nb_ranges * long0
             intz2c = intz2 - nb_ranges * long0
         cube_controle = cube_raw[intz1c:intz2c, inty1:inty2, intx1:intx2]
-        cube_controle_plot = cube_raw[intz1c:intz2c, y01:y02, x01:x02]
 
         # (1/sqrt(2)) * difference of the 2 sububes
         diff_cube = (1. / np.sqrt(2)) * (cube_test - cube_controle)
-        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
 
         # Test 1
         s1 = np.ones_like(cube_test)
@@ -1059,35 +1044,6 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
 
         # Test 2
         T2.append(np.inner(diff_cube.flatten(), s2.flatten()))
-
-        # Plot the narrow bands images
-        if plot_narrow:
-            plt.figure()
-            plt.plot(x00, y00, 'm+')
-            ima_test_plot = Image(data=cube_test_plot.sum(axis=0),
-                                  wcs=wcs[y01:y02, x01:x02])
-            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
-                    'T1=%.3f T2=%.3f\n' % (T1[i], T2[i]) + \
-                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
-            ima_test_plot.plot(colorbar='v', title=title)
-
-            plt.figure()
-            plt.plot(x00, y00, 'm+')
-            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0),
-                                      wcs=wcs[y01:y02, x01:x02])
-            title = 'check - (%d,%d)\n' % (x0, y0) + \
-                    'T1=%.3f T2=%.3f\n' % (T1[i], T2[i]) + \
-                    'int=[%d,%d[' % (intz1c, intz2c)
-            ima_controle_plot.plot(colorbar='v', title=title)
-
-            plt.figure()
-            plt.plot(x00, y00, 'm+')
-            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0),
-                                  wcs=wcs[y01:y02, x01:x02])
-            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
-                    'T1=%.3f T2=%.3f\n' % (T1[i], T2[i]) + \
-                    'int=[%d,%d[' % (intz1c, intz2c)
-            ima_diff_plot.plot(colorbar='v', title=title)
 
     col_t1 = Column(name='T1', data=T1)
     col_t2 = Column(name='T2', data=T2)

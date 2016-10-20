@@ -806,7 +806,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save a first version of the catalogue of emission lines in self.Cat0')
         self._log_file.info('04 Done')
 
-    def step05_compute_NBtests(self, nb_ranges=3, plot_narrow=False):
+    def step05_compute_NBtests(self, nb_ranges=3):
         """compute the 2 narrow band tests for each detected emission line.
 
         Parameters
@@ -814,8 +814,6 @@ class ORIGIN(object):
         nb_ranges   : integer
                       Number of the spectral ranges skipped to compute the
                       controle cube
-        plot_narrow : boolean
-                      If True, plot the narrow bands images
 
         Returns
         -------
@@ -825,14 +823,11 @@ class ORIGIN(object):
         """
         self._log_file.info('05 NB tests nb_ranges=%d'%nb_ranges)
         self._log_stdout.info('Step 05 - NB tests')
-        # Parameter set to 1 if we want to plot the results and associated folder
-        plot_narrow = False
         self.param['NBranges'] = nb_ranges
         if self.Cat0 is None:
             raise IOError('Run the step 04 to initialize self.Cat0')
         self.Cat1 = Narrow_Band_Test(self.Cat0, self.cube_raw, self.profiles,
-                                self.PSF, self.wfields, nb_ranges,
-                                plot_narrow, self.wcs)
+                                self.PSF, self.wfields, nb_ranges, self.wcs)
         self._log_stdout.info('Save the updated catalogue in self.Cat1')
         self._log_file.info('05 Done')
 
@@ -1055,6 +1050,8 @@ class ORIGIN(object):
            x-coordinate of the zone
         j: integer in [0, NbSubCube[
            y-coordinate of the zone
+        ax : matplotlib.Axes
+                the Axes instance in which the image is drawn
         """
         if self.eig_val is None or self.nbkeep is None:
             raise IOError('Run the step 01 to initialize self.eig_val and selb.nbkeep')
@@ -1068,6 +1065,98 @@ class ORIGIN(object):
         ax.semilogy(nbt, lambdat[nbt], 'r+')
         plt.title('zone (%d, %d)' %(i,j))
         
+    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
+        """Plot the narrow bands images
+        
+        i : integer
+            index of the object in self.Cat1
+        ax1 : matplotlib.Axes
+              The Axes instance in which the NB image
+              around the source is drawn
+        ax2 : matplotlib.Axes
+              The Axes instance in which a other NB image for check is drawn
+        ax3 : matplotlib.Axes
+              The Axes instance in which the difference is drawn
+        """
+        if self.Cat1 is None:
+            raise IOError('Run the step 05 to initialize self.Cat1')
+            
+        if ax1 is None and ax2 is None and ax3 is None:
+            ax1 = plt.subplot(1,3,1)
+            ax2 = plt.subplot(1,3,2)
+            ax3 = plt.subplot(1,3,3)
+            
+        # Coordinates of the source
+        x0 = self.Cat1[i]['x']
+        y0 = self.Cat1[i]['y']
+        z0 = self.Cat1[i]['z']
+        # Larger spatial ranges for the plots
+        longxy0 = 20
+        y01 = max(0, y0 - longxy0)
+        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
+        x01 = max(0, x0 - longxy0)
+        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
+        # Coordinates in this window
+        y00 = y0 - y01
+        x00 = x0 - x01
+        # spectral profile
+        num_prof = self.Cat1[i]['profile']
+        profil0 = self.profiles[num_prof]
+        # length of the spectral profile
+        profil1 = profil0[profil0 > 1e-13]
+        long0 = profil1.shape[0]
+        # half-length of the spectral profile
+        longz = long0 // 2
+        # spectral range
+        intz1 = max(0, z0 - longz)
+        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
+        # subcube for the plot
+        cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
+        wcs = self.wcs[y01:y02, x01:x02]
+        # controle cube
+        nb_ranges = self.param['NBranges']
+        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
+            intz1c = intz1 + nb_ranges * long0
+            intz2c = intz2 + nb_ranges * long0
+        else:
+            intz1c = intz1 - nb_ranges * long0
+            intz2c = intz2 - nb_ranges * long0
+        cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
+        # (1/sqrt(2)) * difference of the 2 sububes
+        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
+        # tests
+        T1 = self.Cat1[i]['T1']
+        T2 = self.Cat1[i]['T2']
+        
+        if ax1 is not None:
+            ax1.plot(x00, y00, 'm+')
+            ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
+            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
+                    'T1=%.3f T2=%.3f\n' % (T1,T2) + \
+                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
+            ima_test_plot.plot(colorbar='v', title=title, ax=ax1)
+            ax1.get_xaxis().set_visible(False)
+            ax1.get_yaxis().set_visible(False)
+
+        if ax2 is not None:
+            ax2.plot(x00, y00, 'm+')
+            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
+            title = 'check - (%d,%d)\n' % (x0, y0) + \
+                        'T1=%.3f T2=%.3f\n' % (T1, T2) + \
+                        'int=[%d,%d[' % (intz1c, intz2c)
+            ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
+            ax2.get_xaxis().set_visible(False)
+            ax2.get_yaxis().set_visible(False)
+
+        if ax3 is not None:
+            ax3.plot(x00, y00, 'm+')
+            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0), wcs=wcs)
+            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
+                    'T1=%.3f T2=%.3f\n' % (T1, T2) + \
+                    'int=[%d,%d[' % (intz1c, intz2c)
+            ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
+            ax3.get_xaxis().set_visible(False)
+            ax3.get_yaxis().set_visible(False)
     
 
     def plot(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
