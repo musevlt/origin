@@ -1,21 +1,4 @@
-"""Copyright 2010-2016 CNRS/CRAL
-
-This file is part of MPDAF.
-
-MPDAF is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 3 of the License, or
-(at your option) any later version
-
-MPDAF is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with MPDAF.  If not, see <http://www.gnu.org/licenses/>.
-
-
+"""
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
 This software has been developped by Carole Clastres under the supervision of
@@ -75,49 +58,107 @@ class ORIGIN(object):
 
         Attributes
         ----------
-        filename      : string
-                        Cube FITS file name.
-        cube_raw      : array (Nz, Ny, Nx)
-                        Raw data.
-        var           : array (Nz, Ny, Nx)
-                        Covariance.
-        Nx            : integer
-                        Number of columns
-        Ny            : integer
-                        Number of rows
-        Nz            : int
-                        Number of spectral channels
-        wcs           : `mpdaf.obj.WCS`
-                        RA-DEC coordinates.
-        wave          : `mpdaf.obj.WaveCoord`
-                        Spectral coordinates.
-        intx          : array
-                        Limits in pixels of the columns for each zone
-        inty          : array
-                        Limits in pixels of the rows for each zone
-        Edge_xmin     : int
-                        Minimum limits along the x-axis in pixel
-                        of the data cube taken to compute p-values
-        Edge_xmax     : int
-                        Maximum limits along the x-axis in pixel
-                        of the data cube taken to compute p-values
-        Edge_ymin     : int
-                        Minimum limits along the y-axis in pixel
-                        of the data cube taken to compute p-values
-        Edge_ymax     : int
-                        Maximum limits along the y-axis in pixel
-                        of the data cube taken to compute p-values
-        profiles      : array
-                        Dictionary of spectral profiles to test
-        FWHM_profiles : array
-                        FWHM of the profiles in pixels.
-        PSF           : array (Nz, Nfsf, Nfsf)
-                        MUSE PSF
-        FWHM_PSF      : float
-                        Mean of the fwhm of the PSF in pixel
-        wfields       : list of array or None
-                        weight maps (mosaic case: one per fields)
-                        None: just one field
+        path               : string
+                             Path where the ORIGIN data will be stored.
+        name               : string
+                             Name of the session and basename for the sources.
+        param              : dict
+                             Parameters values.
+        cube_raw           : array (Nz, Ny, Nx)
+                             Raw data.
+        var                : array (Nz, Ny, Nx)
+                             Variance.               
+        Nx                 : integer
+                             Number of columns
+        Ny                 : integer
+                             Number of rows
+        Nz                 : int
+                             Number of spectral channels
+        wcs                : `mpdaf.obj.WCS`
+                             RA-DEC coordinates.
+        wave               : `mpdaf.obj.WaveCoord`
+                             Spectral coordinates.
+        NbSubcube          : integer
+                             Number of sub-cubes for the spatial segmentation 
+        Edge_xmin          : int
+                             Minimum limits along the x-axis in pixel
+                             of the data cube taken to compute p-values
+        Edge_xmax          : int
+                             Maximum limits along the x-axis in pixel
+                             of the data cube taken to compute p-values
+        Edge_ymin          : int
+                             Minimum limits along the y-axis in pixel
+                             of the data cube taken to compute p-values
+        Edge_ymax          : int
+                             Maximum limits along the y-axis in pixel
+                             of the data cube taken to compute p-values
+        profiles           : list of array
+                             List of spectral profiles to test
+        FWHM_profiles      : list
+                             FWHM of the profiles in pixels.
+        wfields            : None or list of arrays
+                             List of weight maps (one per fields in the case
+                             of MUSE mosaic)
+                             None: just one field
+        PSF                : array (Nz, Nfsf, Nfsf) or list of arrays
+                             MUSE PSF (one per field)
+        FWHM_PSF           : float or list of float
+                             Mean of the fwhm of the PSF in pixel (one per
+                             field).                
+        intx               : array
+                             Limits in pixels of the columns for each zone.
+        inty               : array
+                             Limits in pixels of the rows for each zone.
+        eig_val            : dict
+                             Eigenvalues of each spatio-spectral zone.
+                             Result of step01_compute_PCA.
+        nbkeep             : array
+                             Number of eigenvalues for each zone used to
+                             compute the projection. Result of
+                             step01_compute_PCA.
+        cube_faint         : `~mpdaf.obj.Cube`
+                             Projection on the eigenvectors associated to the
+                             lower eigenvalues of the data cube (representing
+                             the faint signal). Result of step01_compute_PCA.
+        cube_cont          : `~mpdaf.obj.Cube`
+                             Projection on the eigenvectors associated to the
+                             higher eigenvalues of the data cube (representing
+                             the continuum). Result of step01_compute_PCA.
+        cube_correl        : `~mpdaf.obj.Cube`
+                             Cube of T_GLR values. Result of
+                             step02_compute_TGLR.
+        cube_profile       : `~mpdaf.obj.Cube` (type int)
+                             Number of the profile associated to the T_GLR.
+                             Result of step02_compute_TGLR.
+        cube_pval_correl   : `~mpdaf.obj.Cube`
+                             Cube of thresholded p-values associated to the
+                             T_GLR values. Result of step03_compute_pvalues.
+        scube_pval_channel : `~mpdaf.obj.Cube`
+                             Cube of p-values associated to the number of
+                             thresholded p-values of the correlations per
+                             spectral channel for each zone. Result of
+                             step03_compute_pvalues.
+        scube_pval_final   : `~mpdaf.obj.Cube`
+                             Cube of final thresholded p-values. Result of
+                             step03_compute_pvalues.
+        Cat0               : astropy.Table
+                             Catalog returned by step04_compute_ref_pix
+        Cat1               : astropy.Table
+                             Catalog returned by step05_compute_NBtests
+        Cat1_T1            : astropy.Table
+                             Catalog corresponding to the first test of 
+                             step06_select_NBtests.
+        Cat1_T2            : astropy.Table
+                             Catalog corresponding to the second test of 
+                             step06_select_NBtests.
+        Cat2               : astropy.Table
+                             Catalog returned by step07_compute_spectra.
+        spectra            : list of `~mpdaf.obj.Spectrum`
+                             Estimated lines. Result of step07_compute_spectra.
+        Cat3               : astropy.Table
+                             Catalog returned by step08_spatial_merging.
+        Cat4               : astropy.Table
+                             Catalog returned by step09_spectral_merging.
     """
     
     def __init__(self, path, name, filename, NbSubcube, margins, profiles,
@@ -125,10 +166,6 @@ class ORIGIN(object):
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
                  Cat3, Cat4, param, eig_val, nbkeep):
-        """
-        verifier la lecture des PSFs
-        verifier l ecritur des param dans le header
-        """
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -157,11 +194,10 @@ class ORIGIN(object):
             self.param = {}
         else:
             self.param = param
-        self.filename = filename
         
         # MUSE data cube
         self.param['cubename'] = filename
-        cub = Cube(self.filename)
+        cub = Cube(filename)
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
         # variance - set to Inf the Nan
@@ -183,7 +219,7 @@ class ORIGIN(object):
         self.Edge_ymin = margins[0]
         self.Edge_ymax = self.Ny - margins[1]
         
-        # Dictionary of spectral profile
+        # List of spectral profile
         self.param['profiles'] = profiles
         if profiles is None:
             self._log_stdout.info('Load dictionary of spectral profile')
@@ -228,7 +264,7 @@ class ORIGIN(object):
                                                     [:, np.newaxis,np.newaxis])
                         # mean of the fwhm of the FSF in pixel
                         self.FWHM_PSF.append(np.mean(fwhm_pix[i]))
-                    fmap = FieldsMap(self.filename, extname='FIELDMAP')
+                    fmap = FieldsMap(filename, extname='FIELDMAP')
                     # weighted field map
                     self.wfields = fmap.compute_weights()
             else:
@@ -351,10 +387,9 @@ class ORIGIN(object):
                       lambda1=4750, lambda2=7000)
         FWHM_PSF    : array (Nz)
                       FWHM of the PSFs in pixels.
-        name : str
-               Name of this session and basename for the sources.
+        name        : str
+                      Name of this session and basename for the sources.
         """
-                           
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    margins=margins, profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
@@ -490,9 +525,9 @@ class ORIGIN(object):
         
         Parameters
         ----------
-        path : string
-               Path where the ORIGIN data will be stored.
-               If None, the name of the session is used
+        path      : string
+                    Path where the ORIGIN data will be stored.
+                    If None, the name of the session is used
         overwrite : bool
                     remove the folder if it exists
         """
@@ -1033,8 +1068,7 @@ class ORIGIN(object):
             raise IOError('Run the step 07 to initialize self.spectra')
         nsources = Construct_Object_Catalogue(CatF_radec, self.spectra,
                                               self.cube_correl._data,
-                                              self.wave, self.filename,
-                                              self.FWHM_profiles,
+                                              self.wave, self.FWHM_profiles,
                                               path2, self.name, self.param,
                                               src_vers, author,ncpu)
         self._log_file.info('10 Done')
@@ -1159,7 +1193,7 @@ class ORIGIN(object):
             ax3.get_yaxis().set_visible(False)
     
 
-    def plot(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
+    def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
         """Plot detected emission lines on the 2D map of maximum of the T_GLR
         values over the spectral channels.
 
@@ -1204,6 +1238,8 @@ class ORIGIN(object):
         carte_2D_correl_.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
         
     def info(self):
+        """ plot information
+        """
         currentlog = self._log_file.handlers[0].baseFilename
         with open(currentlog) as f:
             for line in f:

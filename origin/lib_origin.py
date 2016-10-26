@@ -1709,8 +1709,8 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         src.write('%s/%s-%05d.fits' % (path, name, src.ID))
 
 
-def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
-                               fwhm_profiles, path, name, param, src_vers, author, ncpu=1):
+def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
+                               path, name, param, src_vers, author, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -1725,8 +1725,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
                         Cube of T_GLR values
     wave              : `mpdaf.obj.WaveCoord`
                         Spectral coordinates
-    filename          : string
-                        Name of the cube
     fwhm_profiles     : array
                         List of fwhm values (in pixels) of the input spectra profiles (DICO).
 
@@ -1746,6 +1744,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, filename,
     fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', '.1f', '.1f', 'd']
 
     step_wave = wave.get_step(unit=u.angstrom)
+    filename = param['cubename']
     origin = ['ORIGIN', __version__, os.path.basename(filename)]
 
     maxmap = np.amax(correl, axis=0)
