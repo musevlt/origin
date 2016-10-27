@@ -1008,6 +1008,7 @@ class ORIGIN(object):
             raise IOError('Run the step 08 to initialize self.Cat3')
         Cat_est_line_raw = [spe._data for spe in self.spectra]
         self.Cat4 = Spectral_Merging(self.Cat3, Cat_est_line_raw, deltaz)
+        self._log_stdout.info('Save the updated catalogue in self.Cat4')
         self._log_file.info('09 Done')
 
     def step10_write_sources(self, path=None, overwrite=True,
@@ -1226,7 +1227,6 @@ class ORIGIN(object):
         carte_2D_correl_ = Image(data=carte_2D_correl, wcs=self.wcs)
 
         if ax is None:
-            plt.figure()
             ax = plt.gca()
 
         ax.plot(x, y, 'k+')
