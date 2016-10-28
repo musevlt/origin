@@ -411,8 +411,9 @@ class ORIGIN(object):
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
         
-        stream = file('%s/%s.yaml'%(folder, name), 'r')
+        stream = open('%s/%s.yaml'%(folder, name), 'r')
         param = yaml.load(stream)
+        stream.close()
 
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
@@ -548,7 +549,7 @@ class ORIGIN(object):
                 os.makedirs(path2)
         
         # parameters in .yaml
-        stream = file('%s/%s.yaml'%(path2, self.name), 'w')
+        stream = open('%s/%s.yaml'%(path2, self.name), 'w')
         yaml.dump(self.param, stream)
         stream.close()
         
