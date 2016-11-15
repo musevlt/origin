@@ -1,0 +1,13 @@
+.directory
+*~
+*.pyc
+*.so
+*.egg-info/
+.coverage
+.tox/
+tags
+build/
+dist/
+doc/api/
+doc/_build/
+htmlcov/
