@@ -455,7 +455,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     Nz = cube_var.shape[0]
     Ny = cube_var.shape[1]
     Nx = cube_var.shape[2]
-    
+
     cube_fsf = np.empty(shape)
     norm_fsf = np.empty(shape)
     if weights is None: # one FSF
@@ -529,7 +529,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     cube_profile = np.empty(shape)
     norm_profile = np.empty(shape)
-    
+
     logger.info('Step 3/4 Spectral convolution of the weighted datacube')
     with ProgressBar(Nx * Ny) as bar:
         for y in range(Ny):
@@ -553,7 +553,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     GLR[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
 
     logger.info('Step 4/4 Computing second cube of correlation values')
-    
+
     for k in ProgressBar(list(range(1, len(Dico)))):
         # Second cube of correlation values
         d_j = Dico[k]
@@ -652,7 +652,7 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
     # Threshold the pvalues
     threshold_log = 10**(-threshold)
     cube_pval_correl[cube_pval_correl >= threshold_log] = 1
-    
+
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_pval_correl
 
@@ -725,7 +725,7 @@ def Compute_pval_channel_Zone(cube_pval_correl, intx, inty, NbSubcube,
             x2 = intx[numx + 1]
             y2 = inty[numy]
             y1 = inty[numy + 1]
-            
+
             if weights is None:
                 m = mean_est
             else:
@@ -816,7 +816,7 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
     # zero
     cube_pval_correl[ksel_correl] = np.spacing(1)**6
     cube_pval_channel[ksel_channel] = np.spacing(1)**6
-    probafinale = cube_pval_correl / cube_pval_channel
+    probafinale = cube_pval_correl # / cube_pval_channel
     cube_pval_correl[ksel_correl] = 0
     cube_pval_channel[ksel_channel] = 0
     # pvalue = probability/2
@@ -981,7 +981,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
     # Initialization
     T1 = []
     T2 = []
-    
+
     for i in range(len(Cat0)):
         # Coordinates of the voxel
         x0 = Cat0[i]['x']
@@ -992,7 +992,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
             FSF = PSF_Moffat
         else:
             FSF = np.sum(np.array([weights[n][y0,x0]*PSF_Moffat[n] for n in range(len(weights))]), axis=0)
-        
+
         # spectral profile
         num_prof = Cat0[i]['profile']
         profil0 = Dico[num_prof]
@@ -1229,13 +1229,13 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
             spad = (slice(None, None, 1),
                     slice(y1[n], y2[n], 1),
                     slice(x1[n], x2[n], 1))
-            
+
             #FSF
             if weights is None:
                 FSF = PSF_Moffat
             else:
                 FSF = np.sum(np.array([weights[k][y_f[n], x_f[n]]*PSF_Moffat[k] for k in range(len(weights))]), axis=0)
-            
+
             f, res, lraw, lstd = Compute_Estim_Grid(x_f[n], y_f[n], z_f[n],
                                                     grid_dxy, profile, Nx, Ny,
                                                     Nz, sigma[:, y_f[n], x_f[n]],
@@ -1243,7 +1243,7 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
                                                     cube_faint_pad[spad],
                                                     FSF, longxy, Dico,
                                                     xmin[n], ymin[n])
-            
+
             flux[n] = f
             residual[n] = res
             line_est_raw[n, :] = lraw
@@ -1609,7 +1609,7 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
 
 
 def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
-                     origin, filename, maxmap, correl, fwhm_profiles, 
+                     origin, filename, maxmap, correl, fwhm_profiles,
                      param, path, name, i, ra, dec, x_centroid,
                      y_centroid, wave_pix, GLR, num_profil, pvalC, pvalS,
                      pvalF, T1, T2, nb_lines, Cat_est_line_data,
@@ -1638,9 +1638,9 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     src.add_cube(cube, 'MUSE_CUBE')
     src.add_image(maxmap, 'MAXMAP')
     src.add_attr('SRC_V', src_vers, desc='Source version')
-    
+
     src.add_history('Source created with Origin', author)
-    
+
     w = cube.wave.coord(wave_pix, unit=u.angstrom)
     names = np.array(['%04d'%w[j] for j in range(nb_lines)])
     if np.unique(names).shape != names.shape:
@@ -1648,11 +1648,11 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         while(not ((names[1:]-names[:-1]) == 0).all()):
             names[1:][(names[:-1]-names[1:]) == 0] += 1
         names = names.astype(np.str)
-        
+
     correl_ = Cube(data=correl, wcs=cube.wcs, wave=cube.wave, mask=cube._mask, copy=False)
-    
+
     for j in range(nb_lines):
-        sp_est = Spectrum(data=Cat_est_line_data[j, :], 
+        sp_est = Spectrum(data=Cat_est_line_data[j, :],
                           wave=cube.wave)
         ksel = np.where(sp_est._data != 0)
         z1 = ksel[0][0]
@@ -1751,8 +1751,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     origin = ['ORIGIN', __version__, os.path.basename(filename)]
 
     maxmap = np.amax(correl, axis=0)
-    
-    sources_arglist = []  
+
+    sources_arglist = []
 
     for i in np.unique(Cat['ID']):
         # Source = group
@@ -1780,19 +1780,19 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         y = E['y']
         x = E['x']
         flux = E['flux']
-        
+
         source_arglist = (i, ra, dec, x_centroid,
                      y_centroid, wave_pix, GLR, num_profil, pvalC, pvalS,
                      pvalF, T1, T2, nb_lines, Cat_est_line_data,
                      Cat_est_line_var, y, x, flux, src_vers, author)
         sources_arglist.append(source_arglist)
-        
+
     if ncpu > 1:
         # run in parallel
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
             delayed(Construct_Object)(k, len(sources_arglist), uflux, unone, cols, units, desc,
                                       fmt, step_wave, origin, filename,
-                                      maxmap, correl, fwhm_profiles, 
+                                      maxmap, correl, fwhm_profiles,
                                       param, path, name, *source_arglist)
             for k,source_arglist in enumerate(sources_arglist))
         # print error messages if any
@@ -1803,11 +1803,11 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         for k,source_arglist in enumerate(sources_arglist):
             msg = Construct_Object(k, len(sources_arglist), uflux, unone, cols, units, desc,
                                       fmt, step_wave, origin, filename,
-                                      maxmap, correl, fwhm_profiles, 
+                                      maxmap, correl, fwhm_profiles,
                                       param, path, name, *source_arglist)
             if msg is not None:
                 logger.error(msg)
-        
+
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return len(np.unique(Cat['ID']))
 
