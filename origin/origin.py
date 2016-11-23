@@ -27,6 +27,7 @@ import yaml
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FSF,FieldsMap, get_FSF_from_cube_keywords
+from mpdaf.sdetect import Catalog
 from .lib_origin import Spatial_Segmentation, \
     Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
     Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \
@@ -35,7 +36,7 @@ from .lib_origin import Spatial_Segmentation, \
     Compute_Referent_Voxel, Narrow_Band_Test, \
     Narrow_Band_Threshold, Estimation_Line, \
     Spatial_Merging_Circle, Spectral_Merging, \
-    Add_radec_to_Cat, Construct_Object_Catalogue
+    Construct_Object_Catalogue
 
 __version__ ='1.0'
 
@@ -167,7 +168,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep,sky):
+                 Cat3, Cat4, param, eig_val, nbkeep, sky):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -359,7 +360,7 @@ class ORIGIN(object):
 
     @classmethod
     def init(cls, cube, NbSubcube, margins, profiles=None,
-                 PSF=None, FWHM_PSF=None, name='origin',sky=True):
+                 PSF=None, FWHM_PSF=None, name='origin', sky=True):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -393,6 +394,8 @@ class ORIGIN(object):
                       FWHM of the PSFs in pixels.
         name        : str
                       Name of this session and basename for the sources.
+        sky         : Boolean enable or disable the "sky normalization"
+                      for the calculus of the pvalue for the detection
         """
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    margins=margins, profiles=profiles, PSF=PSF,
@@ -401,22 +404,29 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None,sky=sky)
+                   param=None, eig_val=None, nbkeep=None, sky=sky)
 
     @classmethod
-    def load(cls, folder):
+    def load(cls, folder, newpath=None, newname=None):
         """Load a previous session of ORIGIN
 
         Parameters
         ----------
         folder : string
                  path
+        newpath : string
+                  The session is loaded from the given folder but it will be
+                  saved in a new folder under the new path.
+        newname : string
+                  The session is loaded from the given folder but it will be
+                  saved in a new folder.
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
 
-        stream = file('%s/%s.yaml'%(folder, name), 'r')
+        stream = open('%s/%s.yaml'%(folder, name), 'r')
         param = yaml.load(stream)
+        stream.close()
 
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
@@ -512,6 +522,11 @@ class ORIGIN(object):
         else:
             Cat4 = None
 
+        if newpath is not None:
+            path = newpath
+        if newname is not None:
+            name = newname
+
         return cls(path=path,  name=name, filename=param['cubename'],
                    NbSubcube=NbSubcube, margins=param['margin'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
@@ -523,7 +538,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep,sky=sky)
+                   eig_val=eig_val, nbkeep=nbkeep sky=sky)
 
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -552,11 +567,11 @@ class ORIGIN(object):
                 shutil.rmtree(path2)
                 os.makedirs(path2)
 
-        # in case of 'sky' have been changed by User update de dict
+        # in case of 'sky' have been changed by User -> update de dict
         self.param["sky"] = self.sky
 
         # parameters in .yaml
-        stream = file('%s/%s.yaml'%(path2, self.name), 'w')
+        stream = open('%s/%s.yaml'%(path2, self.name), 'w')
         yaml.dump(self.param, stream)
         stream.close()
 
@@ -805,7 +820,7 @@ class ORIGIN(object):
         self._log_stdout.info('Compute final p-values')
         cube_pval_final = Compute_pval_final(cube_pval_correl,
                                              cube_pval_channel,
-                                             threshold,self.sky)
+                                             threshold, self.sky)
         self._log_stdout.info('Save the result in self.cube_pval_final')
         self.cube_pval_final = Cube(data=cube_pval_final, wave=self.wave,
                                     wcs=self.wcs, mask=np.ma.nomask)
@@ -826,7 +841,7 @@ class ORIGIN(object):
         -------
         self.Cat0 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: x y z T_GLR profile pvalC pvalS pvalF
+                    Columns: x y z ra dec lbda T_GLR profile pvalC pvalS pvalF
                     Coordinates are in pixels.
         """
         self._log_file.info('04 compute referent pixels neighboors=%d'%neighboors)
@@ -851,7 +866,7 @@ class ORIGIN(object):
                                            self.cube_pval_correl._data,
                                            self.cube_pval_channel._data,
                                            self.cube_pval_final._data, Ngp,
-                                           labeled_cube)
+                                           labeled_cube, self.wcs, self.wave)
         self._log_stdout.info('Save a first version of the catalogue of emission lines in self.Cat0')
         self._log_file.info('04 Done')
 
@@ -868,7 +883,7 @@ class ORIGIN(object):
         -------
         self.Cat1 : astropy.Table
                Catalogue of parameters of detected emission lines.
-               Columns: x y z T_GLR profile pvalC pvalS pvalF T1 T2
+               Columns: x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
         """
         self._log_file.info('05 NB tests nb_ranges=%d'%nb_ranges)
         self._log_stdout.info('Step 05 - NB tests')
@@ -900,7 +915,7 @@ class ORIGIN(object):
                        selected with the test 2
 
         Columns of the catalogues :
-        x y z T_GLR profile pvalC pvalS pvalF T1 T2
+        x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
         """
         self._log_file.info('06 Selection according to NB tests thresh_T1=%.1f thresh_T2=%.1f'%(thresh_T1, thresh_T2))
         self._log_stdout.info('Step 06 - Selection according to NB tests')
@@ -938,7 +953,8 @@ class ORIGIN(object):
         -------
         self.Cat2    : astropy.Table
                        Catalogue of parameters of detected emission lines.
-                       Columns: x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                       Columns: x y z ra dec lbda T_GLR profile pvalC pvalS
+                                pvalF T1 T2
                        residual flux num_line
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
@@ -963,7 +979,8 @@ class ORIGIN(object):
         self.Cat2, Cat_est_line_raw_T, Cat_est_line_std_T = \
             Estimation_Line(Cat1_T, self.cube_profile._data, self.Nx, self.Ny,
                             self.Nz, self.var, self.cube_faint._data, grid_dxy,
-                            grid_dz, self.PSF, self.wfields, self.profiles)
+                            grid_dz, self.PSF, self.wfields, self.profiles,
+                            self.wcs, self.wave)
         self._log_stdout.info('Save the updated catalogue in self.Cat2')
         self.spectra = []
         for data, std in zip(Cat_est_line_raw_T, Cat_est_line_std_T):
@@ -981,9 +998,9 @@ class ORIGIN(object):
         Returns
         -------
         self.Cat3 : astropy.Table
-                    Columns of Cat3:
-                    ID x_circle y_circle x_centroid y_centroid nb_lines
-                    x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                    Columns: ID x_circle y_circle ra_circle dec_circle
+                    x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
+                    z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
                     residual flux num_line
         """
         self._log_file.info('08 Spatial merging')
@@ -994,7 +1011,7 @@ class ORIGIN(object):
             fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved !!
         if self.Cat2 is None:
             raise IOError('Run the step 07 to initialize self.Cat2')
-        self.Cat3 = Spatial_Merging_Circle(self.Cat2, fwhm)
+        self.Cat3 = Spatial_Merging_Circle(self.Cat2, fwhm, self.wcs)
         self._log_stdout.info('Save the updated catalogue in self.Cat3')
         self._log_file.info('08 Done')
 
@@ -1011,9 +1028,10 @@ class ORIGIN(object):
         -------
         self.Cat4 : astropy.Table
                     Catalogue
-                    Columns: ID x_circle y_circle x_centroid y_centroid
-                             nb_lines x y z T_GLR profile pvalC pvalS pvalF
-                             T1 T2 residual flux num_line
+                    Columns: ID x_circle y_circle ra_circle dec_circle
+                    x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
+                    z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
+                    residual flux num_line
         """
         self._log_file.info('09 spectral merging deltaz=%d'%deltaz)
         self._log_stdout.info('Step 09 - Spectral merging')
@@ -1022,6 +1040,7 @@ class ORIGIN(object):
             raise IOError('Run the step 08 to initialize self.Cat3')
         Cat_est_line_raw = [spe._data for spe in self.spectra]
         self.Cat4 = Spectral_Merging(self.Cat3, Cat_est_line_raw, deltaz)
+        self._log_stdout.info('Save the updated catalogue in self.Cat4')
         self._log_file.info('09 Done')
 
     def step10_write_sources(self, path=None, overwrite=True,
@@ -1053,26 +1072,25 @@ class ORIGIN(object):
         self._log_stdout.info('Add RA-DEC to the catalogue')
         if self.Cat4 is None:
             raise IOError('Run the step 10 to initialize self.Cat4')
-        CatF_radec = Add_radec_to_Cat(self.Cat4, self.wcs)
 
         # path
         if path is not None and not os.path.exists(path):
             raise IOError("Invalid path: {0}".format(path))
 
         if path is None:
-            path2 = '%s/%s/sources'%(self.path, self.name)
+            path_src = '%s/%s/sources'%(self.path, self.name)
+            catname = '%s/%s/%s.fits'%(self.path, self.name, self.name)
         else:
             path = os.path.normpath(path)
-            path2 = path + '/' + self.name
-        if not os.path.exists(path2):
-            os.makedirs(path2)
+            path_src = '%s/%s/sources'%(path, self.name)
+            catname = '%s/%s/%s.fits'%(path, self.name, self.name)
+
+        if not os.path.exists(path_src):
+            os.makedirs(path_src)
         else:
             if overwrite:
-                shutil.rmtree(path2)
-                os.makedirs(path2)
-
-        # write the final catalog
-        CatF_radec.write('%s/%s.fits'%(path2, self.name), overwrite=True)
+                shutil.rmtree(path_src)
+                os.makedirs(path_src)
 
         # list of source objects
         self._log_stdout.info('Create the list of sources')
@@ -1080,11 +1098,17 @@ class ORIGIN(object):
             raise IOError('Run the step 02 to initialize self.cube_correl')
         if self.spectra is None:
             raise IOError('Run the step 07 to initialize self.spectra')
-        nsources = Construct_Object_Catalogue(CatF_radec, self.spectra,
+        nsources = Construct_Object_Catalogue(self.Cat4, self.spectra,
                                               self.cube_correl._data,
                                               self.wave, self.FWHM_profiles,
-                                              path2, self.name, self.param,
-                                              src_vers, author,ncpu)
+                                              path_src, self.name, self.param,
+                                              src_vers, author, ncpu)
+
+        # create the final catalog
+        self._log_stdout.info('Create the final catalog')
+        catF = Catalog.from_path(path_src, fmt='working')
+        catF.write(catname)
+
         self._log_file.info('10 Done')
 
         return nsources
@@ -1240,7 +1264,6 @@ class ORIGIN(object):
         carte_2D_correl_ = Image(data=carte_2D_correl, wcs=self.wcs)
 
         if ax is None:
-            plt.figure()
             ax = plt.gca()
 
         ax.plot(x, y, 'k+')
