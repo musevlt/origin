@@ -32,7 +32,6 @@ from __future__ import absolute_import, division
 
 import astropy.units as u
 import logging
-import matplotlib.pyplot as plt
 import numpy as np
 import os.path
 import sys
@@ -875,7 +874,7 @@ def Compute_Connected_Voxel(cube_pval_final, neighboors):
 
 def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
                            cube_pval_channel, cube_pval_final, Ngp,
-                           labeled_cube):
+                           labeled_cube, wcs, wave):
     """Function to compute refrerent voxel of each group of connected voxels
     using the voxel with the higher T_GLR value.
 
@@ -897,12 +896,17 @@ def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
     labeled_cube      : array
                         An integer array where each unique feature in
                         cube_pval_final has a unique label.
+    wcs               : `mpdaf.obj.WCS`
+                         RA-DEC coordinates.
+    wave              : `mpdaf.obj.WaveCoord`
+                         Spectral coordinates.
 
     Returns
     -------
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : x y z T_GLR profile pvalC pvalS pvalF
+              Columns of Cat_ref : x y z ra dec lba,
+                                   T_GLR profile pvalC pvalS pvalF
 
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
@@ -923,10 +927,16 @@ def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
     pvalC = cube_pval_correl[zpixRef, ypixRef, xpixRef]
     pvalS = cube_pval_channel[zpixRef, ypixRef, xpixRef]
     pvalF = cube_pval_final[zpixRef, ypixRef, xpixRef]
+    # add real coordinates
+    pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
+    skycrd = wcs.pix2sky(pixcrd)
+    ra = skycrd[:, 1]
+    dec = skycrd[:, 0]
+    lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
-    Cat_ref = Table([xpixRef, ypixRef, zpixRef, correl_max,
+    Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
                      profile_max, pvalC, pvalS, pvalF],
-                    names=('x', 'y', 'z', 'T_GLR',
+                    names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
                            'profile', 'pvalC', 'pvalS', 'pvalF'))
     # Catalogue sorted along the Z axis
     Cat_ref.sort('z')
@@ -961,7 +971,7 @@ def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
     Cat1 : astropy.Table
            Catalogue of parameters of detected emission lines:
            Columns of the Catalogue Cat1 :
-           x y z T_GLR profile pvalC pvalS pvalF T1 T2
+           x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
 
     Date : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
@@ -1076,7 +1086,7 @@ def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
               the test 2
 
     Columns of the Catalogues :
-        [col line; row line; spectral channel line; T_GLR line ;
+        [col line; row line; spectral channel line; ra; dec; T_GLR line ;
         spectral profile ; pval T_GLR;  pval channel;  final pval ; T1 ; T2]
 
     Date  : Dec,10 2015
@@ -1093,7 +1103,7 @@ def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
 
 
 def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
-                    grid_dxy, grid_dz, PSF_Moffat, weights, Dico):
+                    grid_dxy, grid_dz, PSF_Moffat, weights, Dico, wcs, wave):
     """Function to compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
@@ -1125,14 +1135,18 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
                  FSF for this data cube
     Dico       : array
                  Dictionary of spectral profiles to test
+    wcs        : `mpdaf.obj.WCS`
+                  RA-DEC coordinates.
+    wave       : `mpdaf.obj.WaveCoord`
+                 Spectral coordinates.
 
     Returns
     -------
     Cat2             : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
-                       x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual
-                       flux num_line
+                       x y z ra dec lbda, T_GLR profile pvalC pvalS pvalF
+                       T1 T2 residual flux num_line
     Cat_est_line_raw : list of arrays
                        Estimated lines in data space
     Cat_est_line_std : list of arrays
@@ -1254,6 +1268,16 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
     Cat2['x'] = Cat2_x
     Cat2['y'] = Cat2_y
     Cat2['z'] = Cat2_z
+    # add real coordinates
+    pixcrd = [[p, q] for p, q in zip(Cat2_y, Cat2_x)]
+    skycrd = wcs.pix2sky(pixcrd)
+    ra = skycrd[:, 1]
+    dec = skycrd[:, 0]
+    lbda = wave.coord(Cat2_z)
+    Cat2['ra'] = ra
+    Cat2['dec'] = dec
+    Cat2['lbda'] = lbda
+    #
     col_res = Column(name='residual', data=Cat2_res_min)
     col_flux = Column(name='flux', data=Cat2_flux)
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
@@ -1377,7 +1401,7 @@ def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
     return flux, res, line_est_raw, line_est
 
 
-def Spatial_Merging_Circle(Cat0, fwhm_fsf):
+def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     """Construct a catalogue of sources by spatial merging of the detected
     emission lines in a circle with a diameter equal to the mean over the
     wavelengths of the FWHM of the FSF
@@ -1387,19 +1411,20 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf):
     Cat0     : astropy.Table
                catalogue
                Columns of Cat0:
-               x y z T_GLR profile pvalC pvalS pvalF T1 T2
+               x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
                residual flux num_line
     fwhm_fsf : float
                The mean over the wavelengths of the FWHM of the FSF
+    wcs      : `mpdaf.obj.WCS`
+               RA-DEC coordinates.
 
     Returns
     -------
     CatF : astropy.Table
            Columns of CatF:
-           ID x_circle y_circle x_centroid y_centroid nb_lines
-           x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux num_line
-
-    Date : Apr,28 2016
+           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
+           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
+           pvalC pvalS pvalF T1 T2 residual flux num_line
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
@@ -1480,13 +1505,28 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf):
 
     CatF = Cat0[np.concatenate(colF)].copy()
     col_id = Column(name='ID', data=np.concatenate(colF_id))
-    col_x = Column(name='x_circle', data=np.concatenate(colF_x))
-    col_y = Column(name='y_circle', data=np.concatenate(colF_y))
-    col_xc = Column(name='x_centroid', data=np.concatenate(colF_xc))
-    col_yc = Column(name='y_centroid', data=np.concatenate(colF_yc))
+    colF_x = np.concatenate(colF_x)
+    col_x = Column(name='x_circle', data=colF_x)
+    colF_y = np.concatenate(colF_y)
+    col_y = Column(name='y_circle', data=colF_y)
+    colF_xc = np.concatenate(colF_xc)
+    col_xc = Column(name='x_centroid', data=colF_xc)
+    colF_yc = np.concatenate(colF_yc)
+    col_yc = Column(name='y_centroid', data=colF_yc)
     col_nlines = Column(name='nb_lines', data=np.concatenate(colF_nlines))
-    CatF.add_columns([col_id, col_x, col_y, col_xc, col_yc, col_nlines],
-                     indexes=[0, 0, 0, 0, 0, 0])
+    # add real coordinates
+    pixcrd = [[p, q] for p, q in zip(colF_y, colF_x)]
+    skycrd = wcs.pix2sky(pixcrd)
+    col_ra = Column(name='ra_circle', data=skycrd[:, 1])
+    col_dec = Column(name='dec_circle', data=skycrd[:, 0])
+    pixcrd = [[p, q] for p, q in zip(colF_yc, colF_xc)]
+    skycrd = wcs.pix2sky(pixcrd)
+    col_rac = Column(name='ra_centroid', data=skycrd[:, 1])
+    col_decc = Column(name='dec_centroid', data=skycrd[:, 0])
+    
+    CatF.add_columns([col_id, col_x, col_y, col_ra, col_dec, col_xc, col_yc,
+                      col_rac, col_decc, col_nlines],
+                     indexes=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
     nid = len(np.unique(CatF['ID']))
     logger.info('%d sources identified in catalog after spatial merging', nid)
@@ -1504,8 +1544,9 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     Cat          : astropy.Table
                    Catalogue of detected emission lines
                    Columns of Cat:
-                   ID x_circle y_circle x_centroid y_centroid nb_lines
-                   x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                   ID x_circle y_circle ra_circle dec_circle
+                   x_centroid y_centroid ra_centroid, dec_centroid nb_lines
+                   x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
                    residual flux num_line
     Cat_est_line : list of array
                    Catalogue of estimated lines
@@ -1517,8 +1558,9 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     CatF : astropy.Table
            Catalogue
            Columns of CatF:
-           ID x_circle y_circle x_centroid y_centroid nb_lines
-           x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux num_line
+           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
+           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
+           pvalC pvalS pvalF T1 T2 residual flux num_line
 
     Date  : Dec,16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
@@ -1565,45 +1607,6 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return CatF
 
-
-def Add_radec_to_Cat(Cat, wcs):
-    """Function to add corresponding RA/DEC to each referent pixel
-    of each group
-
-    Parameters
-    ----------
-    Cat : astropy.Table
-          Catalogue of the detected emission lines:
-          ID x_circle y_circle x_centroid y_centroid nb_lines
-          x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux num_line
-    wcs : `mpdaf.obj.WCS`
-          Spatial coordinates
-
-    Returns
-    -------
-    Cat_radec : astropy.Table
-                Catalogue of parameters of detected emission lines:
-                ID x_circle y_circle x_centroid y_centroid nb_lines
-                x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual flux
-                num_line RA DEC
-
-    Date  : Dec,16 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    x = Cat['x_centroid']
-    y = Cat['y_centroid']
-    pixcrd = [[p, q] for p, q in zip(y, x)]
-    skycrd = wcs.pix2sky(pixcrd)
-    ra = skycrd[:, 1]
-    dec = skycrd[:, 0]
-    col_ra = Column(name='RA', data=ra)
-    col_dec = Column(name='DEC', data=dec)
-    Cat_radec = Cat.copy()
-    Cat_radec.add_columns([col_ra, col_dec])
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat_radec
 
 def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, correl, fwhm_profiles, 
@@ -1754,8 +1757,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     for i in np.unique(Cat['ID']):
         # Source = group
         E = Cat[Cat['ID'] == i]
-        ra = E['RA'][0]
-        dec = E['DEC'][0]
+        ra = E['ra_centroid'][0]
+        dec = E['dec_centroid'][0]
         x_centroid = E['x_centroid'][0]
         y_centroid = E['y_centroid'][0]
         # Lines of this group
