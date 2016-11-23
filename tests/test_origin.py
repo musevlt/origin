@@ -81,8 +81,8 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     nsources = my_origin.step10_write_sources(ncpu=1)
     assert (nsources == 2)
-    #cat = Catalog.read('tmp/sources/tmp.fits')
-    #assert (len(cat) == 2)
+    cat = Catalog.read('tmp/tmp.fits')
+    assert (len(cat) == 2)
     
     # test returned sources are valid
     src = Source.from_file('./tmp/sources/tmp-00001.fits')

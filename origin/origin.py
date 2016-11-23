@@ -27,6 +27,7 @@ import yaml
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FSF,FieldsMap, get_FSF_from_cube_keywords
+from mpdaf.sdetect import Catalog
 from .lib_origin import Spatial_Segmentation, \
     Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
     Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \
@@ -1050,16 +1051,19 @@ class ORIGIN(object):
             raise IOError("Invalid path: {0}".format(path))
             
         if path is None:
-            path2 = '%s/%s/sources'%(self.path, self.name)
+            path_src = '%s/%s/sources'%(self.path, self.name)
+            catname = '%s/%s/%s.fits'%(self.path, self.name, self.name)
         else:
             path = os.path.normpath(path)
-            path2 = path + '/' + self.name
-        if not os.path.exists(path2):
-            os.makedirs(path2)
+            path_src = '%s/%s/sources'%(path, self.name)
+            catname = '%s/%s/%s.fits'%(path, self.name, self.name)
+           
+        if not os.path.exists(path_src):
+            os.makedirs(path_src)
         else:
             if overwrite:
-                shutil.rmtree(path2)
-                os.makedirs(path2)
+                shutil.rmtree(path_src)
+                os.makedirs(path_src)
 
         # list of source objects
         self._log_stdout.info('Create the list of sources')
@@ -1070,8 +1074,14 @@ class ORIGIN(object):
         nsources = Construct_Object_Catalogue(self.Cat4, self.spectra,
                                               self.cube_correl._data,
                                               self.wave, self.FWHM_profiles,
-                                              path2, self.name, self.param,
-                                              src_vers, author,ncpu)
+                                              path_src, self.name, self.param,
+                                              src_vers, author, ncpu)
+                                              
+        # create the final catalog
+        self._log_stdout.info('Create the final catalog')
+        catF = Catalog.from_path(path_src)
+        catF.write(catname)
+                      
         self._log_file.info('10 Done')
 
         return nsources
