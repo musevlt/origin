@@ -36,7 +36,7 @@ from .lib_origin import Spatial_Segmentation, \
     Narrow_Band_Threshold, Estimation_Line, \
     Spatial_Merging_Circle, Spectral_Merging, \
     Add_radec_to_Cat, Construct_Object_Catalogue
-    
+
 __version__ ='1.0'
 
 
@@ -67,7 +67,7 @@ class ORIGIN(object):
         cube_raw           : array (Nz, Ny, Nx)
                              Raw data.
         var                : array (Nz, Ny, Nx)
-                             Variance.               
+                             Variance.
         Nx                 : integer
                              Number of columns
         Ny                 : integer
@@ -79,7 +79,7 @@ class ORIGIN(object):
         wave               : `mpdaf.obj.WaveCoord`
                              Spectral coordinates.
         NbSubcube          : integer
-                             Number of sub-cubes for the spatial segmentation 
+                             Number of sub-cubes for the spatial segmentation
         Edge_xmin          : int
                              Minimum limits along the x-axis in pixel
                              of the data cube taken to compute p-values
@@ -104,7 +104,7 @@ class ORIGIN(object):
                              MUSE PSF (one per field)
         FWHM_PSF           : float or list of float
                              Mean of the fwhm of the PSF in pixel (one per
-                             field).                
+                             field).
         intx               : array
                              Limits in pixels of the columns for each zone.
         inty               : array
@@ -146,10 +146,10 @@ class ORIGIN(object):
         Cat1               : astropy.Table
                              Catalog returned by step05_compute_NBtests
         Cat1_T1            : astropy.Table
-                             Catalog corresponding to the first test of 
+                             Catalog corresponding to the first test of
                              step06_select_NBtests.
         Cat1_T2            : astropy.Table
-                             Catalog corresponding to the second test of 
+                             Catalog corresponding to the second test of
                              step06_select_NBtests.
         Cat2               : astropy.Table
                              Catalog returned by step07_compute_spectra.
@@ -159,19 +159,21 @@ class ORIGIN(object):
                              Catalog returned by step08_spatial_merging.
         Cat4               : astropy.Table
                              Catalog returned by step09_spectral_merging.
+        sky                : Boolean enable or disable the "sky normalization"
+                             for the calculus of the pvalue for the detection
     """
-    
+
     def __init__(self, path, name, filename, NbSubcube, margins, profiles,
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep):
+                 Cat3, Cat4, param, eig_val, nbkeep,sky):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
                            fmt='%(name)s[%(levelname)s]: %(message)s',
                            stream=sys.stdout)
-                           
+
         if os.path.exists('%s/%s/%s.log'%(path, name,name)):
             setup_logfile(name='origfile', level=logging.DEBUG,
                                        logfile='%s/%s/%s.log'%(path, name, name),
@@ -179,22 +181,22 @@ class ORIGIN(object):
         else:
             setup_logfile(name='origfile', level=logging.DEBUG,
                                        logfile='%s/%s.log'%(path, name),
-                                       fmt='%(asctime)s %(message)s')                           
+                                       fmt='%(asctime)s %(message)s')
         self._log_stdout = logging.getLogger('origin')
         self._log_file = logging.getLogger('origfile')
         self._log_file.setLevel(logging.INFO)
-                                       
+
         self._log_file.info('00 - Initialization ORIGIN v%s'%__version__)
         self._log_stdout.info('Step 00 - Initialization')
         self._log_stdout.info('Read the Data Cube')
-        
+
         self.path = path
         self.name = name
         if param is None:
             self.param = {}
         else:
             self.param = param
-        
+
         # MUSE data cube
         self.param['cubename'] = filename
         cub = Cube(filename)
@@ -209,16 +211,18 @@ class ORIGIN(object):
         self.wave = cub.wave
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
-        
+
         # ORIGIN parameters
         self.param['nbsubcube'] = NbSubcube
         self.param['margin'] = margins
+        self.param['sky'] = sky
+        self.sky = sky
         self.NbSubcube = NbSubcube
         self.Edge_xmin = margins[2]
         self.Edge_xmax = self.Nx - margins[3]
         self.Edge_ymin = margins[0]
         self.Edge_ymax = self.Ny - margins[1]
-        
+
         # List of spectral profile
         self.param['profiles'] = profiles
         if profiles is None:
@@ -232,7 +236,7 @@ class ORIGIN(object):
             self.profiles.append(hdu.data)
             self.FWHM_profiles.append(hdu.header['FWHM'])
         fprof.close()
-        
+
         #FSF
         # FSF cube(s)
         self._log_stdout.info('Load FSF')
@@ -257,7 +261,7 @@ class ORIGIN(object):
                     self.PSF = []
                     self.FWHM_PSF = []
                     for i in range(1, nfields+1):
-                        # Normalization 
+                        # Normalization
                         PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
                                                              np.newaxis]
                         self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))\
@@ -300,62 +304,62 @@ class ORIGIN(object):
             # mean of the fwhm of the FSF in pixel
             self.FWHM_PSF = np.mean(FWHM_PSF)
             self.param['FWHM PSF'] = FWHM_PSF.tolist()
-        
+
         del cub
-        
-        
+
+
         # Spatial segmentation
         if intx is None or inty is None:
             self._log_stdout.info('Spatial segmentation')
             self.inty, self.intx = Spatial_Segmentation(self.Nx, self.Ny,
                                                     NbSubcube)
-        else:                
+        else:
             self.inty = inty
             self.intx = intx
         self.param['intx'] = self.intx.tolist()
         self.param['inty'] = self.inty.tolist()
-        
-        
+
+
         # step1
         self.eig_val = eig_val
         self.nbkeep = nbkeep
         self.cube_faint = cube_faint
         self.cube_cont = cube_cont
-        
+
         # step2
         self.cube_correl = cube_correl
         self.cube_profile = cube_profile
-        
+
         # step3
         self.cube_pval_correl = cube_pval_correl
         self.cube_pval_channel = cube_pval_channel
         self.cube_pval_final = cube_pval_final
-        
+
         # step4
         self.Cat0 = Cat0
-        
+
         # step5
         self.Cat1 = Cat1
-        
+
         # step6
         self.Cat1_T1 = Cat1_T1
         self.Cat1_T2 = Cat1_T2
-        
+
         # step7
         self.Cat2 = Cat2
         self.spectra = spectra
-        
+
         # step8
         self.Cat3 = Cat3
-        
+
         # step9
         self.Cat4 = Cat4
-        
+
         self._log_file.info('00 Done')
-        
+
     @classmethod
     def init(cls, cube, NbSubcube, margins, profiles=None,
-                 PSF=None, FWHM_PSF=None, name='origin'):
+                 PSF=None, FWHM_PSF=None, name='origin',sky=True):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -397,12 +401,12 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None)
-        
+                   param=None, eig_val=None, nbkeep=None,sky=sky)
+
     @classmethod
     def load(cls, folder):
         """Load a previous session of ORIGIN
-        
+
         Parameters
         ----------
         folder : string
@@ -410,7 +414,7 @@ class ORIGIN(object):
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
-        
+
         stream = file('%s/%s.yaml'%(folder, name), 'r')
         param = yaml.load(stream)
 
@@ -420,10 +424,11 @@ class ORIGIN(object):
         else:
             PSF = None
             FWHM_PSF = None
-            
+
         intx = np.asarray(param['intx'])
         inty = np.asarray(param['inty'])
         NbSubcube = param['nbsubcube']
+        sky = param['sky']
         if os.path.isfile('%s/eigval_%d_%d.txt'%(folder, NbSubcube-1,
                                                  NbSubcube-1)):
             eig_val = {}
@@ -506,7 +511,7 @@ class ORIGIN(object):
             Cat4 = Table.read('%s/Cat4.fits'%folder)
         else:
             Cat4 = None
-                
+
         return cls(path=path,  name=name, filename=param['cubename'],
                    NbSubcube=NbSubcube, margins=param['margin'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
@@ -518,11 +523,11 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep)
-                   
+                   eig_val=eig_val, nbkeep=nbkeep,sky=sky)
+
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
-        
+
         Parameters
         ----------
         path      : string
@@ -546,12 +551,15 @@ class ORIGIN(object):
             if overwrite:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
-        
+
+        # in case of 'sky' have been changed by User update de dict
+        self.param["sky"] = self.sky
+
         # parameters in .yaml
         stream = file('%s/%s.yaml'%(path2, self.name), 'w')
         yaml.dump(self.param, stream)
         stream.close()
-        
+
         # log file
         currentlog = self._log_file.handlers[0].baseFilename
         newlog = os.path.abspath('%s/%s.log'%(path2, self.name))
@@ -563,7 +571,7 @@ class ORIGIN(object):
                                            fmt='%(asctime)s %(message)s')
             self._log_file = logging.getLogger('origfile')
             self._log_file.setLevel(logging.INFO)
-        
+
         #step1
         if self.eig_val is not None:
             for i in range(self.NbSubcube):
@@ -618,7 +626,7 @@ class ORIGIN(object):
         # step9
         if self.Cat4 is not None:
             self.Cat4.write('%s/Cat4.fits'%path2, overwrite=True)
-        
+
 
     def step01_compute_PCA(self, r0=0.67):
         """ Loop on each zone of the data cube and compute the PCA,
@@ -651,7 +659,7 @@ class ORIGIN(object):
         self._log_file.info('01 - PCA computation r0=%0.2f'%r0)
         self._log_stdout.info('Step 01 - PCA computation')
         self.param['r0PCA'] = r0
-        
+
         # Weigthed data cube
         cube_std = self.cube_raw / np.sqrt(self.var)
         # Compute PCA results
@@ -682,7 +690,7 @@ class ORIGIN(object):
                                                               nx, ny, nz,
                                                               self.inty,
                                                               self.intx)
-                                                              
+
         self._log_stdout.info('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=cube_faint, wave=self.wave, wcs=self.wcs,
                           mask=np.ma.nomask)
@@ -696,7 +704,7 @@ class ORIGIN(object):
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
 
-        
+
         Returns
         -------
         self.cube_correl  : `~mpdaf.obj.Cube`
@@ -708,12 +716,12 @@ class ORIGIN(object):
         self._log_stdout.info('Step 02 - GLR test')
         if self.cube_faint is None:
             raise IOError('Run the step 01 to initialize self.cube_faint')
-            
+
         # TGLR computing (normalized correlations)
         correl, profile = Correlation_GLR_test(self.cube_faint._data, self.var,
                                                self.PSF, self.wfields,
                                                self.profiles)
-                                               
+
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
@@ -772,26 +780,32 @@ class ORIGIN(object):
         # p-values of spectral channel
         # Estimated mean for p-values distribution related
         # to the Rayleigh criterium
-        self._log_stdout.info('Compute p-values of spectral channel')
-        try:
-            mean_est = self.FWHM_PSF**2
-            self.param['meanestPvalChan'] = np.asscalar(mean_est)
-        except:
-            mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
-            self.param['meanestPvalChan'] = mean_est.tolist()
-        cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
+        cube_pval_channel = None
+        if self.sky:
+            self._log_stdout.info('Compute p-values of spectral channel')
+            try:
+                mean_est = self.FWHM_PSF**2
+                self.param['meanestPvalChan'] = np.asscalar(mean_est)
+            except:
+                mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
+                self.param['meanestPvalChan'] = mean_est.tolist()
+
+            cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
                                                       self.intx, self.inty,
                                                       self.NbSubcube,
                                                       mean_est, self.wfields)
-        self._log_stdout.info('Save the result in self.cube_pval_channel')
-        self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
-                                      wcs=self.wcs, mask=np.ma.nomask)
+            self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
+                                          wcs=self.wcs, mask=np.ma.nomask)
+            self._log_stdout.info('Save the result in self.cube_pval_channel')
+
+        else:
+            self._log_stdout.info('sky is False, dont compute p-values of spectral channel')
 
         # Final p-values
         self._log_stdout.info('Compute final p-values')
         cube_pval_final = Compute_pval_final(cube_pval_correl,
                                              cube_pval_channel,
-                                             threshold)
+                                             threshold,self.sky)
         self._log_stdout.info('Save the result in self.cube_pval_final')
         self.cube_pval_final = Cube(data=cube_pval_final, wave=self.wave,
                                     wcs=self.wcs, mask=np.ma.nomask)
@@ -817,7 +831,7 @@ class ORIGIN(object):
         """
         self._log_file.info('04 compute referent pixels neighboors=%d'%neighboors)
         self._log_stdout.info('Step 04 - referent pixels')
-        
+
         # connected voxel
         self._log_stdout.info('Compute connected voxels')
         self.param['neighboors'] = neighboors
@@ -831,7 +845,7 @@ class ORIGIN(object):
         if self.cube_pval_correl is None or self.cube_pval_channel is None \
                                          or self.cube_pval_final is None:
             raise IOError('Run the step 03 to initialize self.cube_pval_* cubes')
-            
+
         self.Cat0 = Compute_Referent_Voxel(self.cube_correl._data,
                                            self.cube_profile._data,
                                            self.cube_pval_correl._data,
@@ -1044,7 +1058,7 @@ class ORIGIN(object):
         # path
         if path is not None and not os.path.exists(path):
             raise IOError("Invalid path: {0}".format(path))
-            
+
         if path is None:
             path2 = '%s/%s/sources'%(self.path, self.name)
         else:
@@ -1056,7 +1070,7 @@ class ORIGIN(object):
             if overwrite:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
-                
+
         # write the final catalog
         CatF_radec.write('%s/%s.fits'%(path2, self.name), overwrite=True)
 
@@ -1074,10 +1088,10 @@ class ORIGIN(object):
         self._log_file.info('10 Done')
 
         return nsources
-        
+
     def plot_PCA(self, i, j, ax=None):
         """ Plot the eigenvalues and the separation point
-        
+
         Parameters
         ----------
         i: integer in [0, NbSubCube[
@@ -1089,19 +1103,19 @@ class ORIGIN(object):
         """
         if self.eig_val is None or self.nbkeep is None:
             raise IOError('Run the step 01 to initialize self.eig_val and selb.nbkeep')
-            
+
         if ax is None:
             ax = plt.gca()
-        
+
         lambdat = self.eig_val[(i, j)]
         nbt = self.nbkeep[i, j]
         ax.semilogy(lambdat)
         ax.semilogy(nbt, lambdat[nbt], 'r+')
         plt.title('zone (%d, %d)' %(i,j))
-        
+
     def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
-        
+
         i : integer
             index of the object in self.Cat1
         ax1 : matplotlib.Axes
@@ -1114,12 +1128,12 @@ class ORIGIN(object):
         """
         if self.Cat1 is None:
             raise IOError('Run the step 05 to initialize self.Cat1')
-            
+
         if ax1 is None and ax2 is None and ax3 is None:
             ax1 = plt.subplot(1,3,1)
             ax2 = plt.subplot(1,3,2)
             ax3 = plt.subplot(1,3,3)
-            
+
         # Coordinates of the source
         x0 = self.Cat1[i]['x']
         y0 = self.Cat1[i]['y']
@@ -1161,7 +1175,7 @@ class ORIGIN(object):
         # tests
         T1 = self.Cat1[i]['T1']
         T2 = self.Cat1[i]['T2']
-        
+
         if ax1 is not None:
             ax1.plot(x00, y00, 'm+')
             ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
@@ -1191,7 +1205,7 @@ class ORIGIN(object):
             ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
             ax3.get_xaxis().set_visible(False)
             ax3.get_yaxis().set_visible(False)
-    
+
 
     def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
         """Plot detected emission lines on the 2D map of maximum of the T_GLR
@@ -1221,7 +1235,7 @@ class ORIGIN(object):
             fwhm = self.FWHM_PSF
         else:
             fwhm = np.max(np.array(self.FWHM_PSF))
-            
+
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         carte_2D_correl_ = Image(data=carte_2D_correl, wcs=self.wcs)
 
@@ -1236,7 +1250,7 @@ class ORIGIN(object):
                                fill=False)
                 ax.add_artist(c)
         carte_2D_correl_.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
-        
+
     def info(self):
         """ plot information
         """
@@ -1245,4 +1259,3 @@ class ORIGIN(object):
             for line in f:
                 if line.find('Done') == -1:
                     self._log_stdout.info(line)
-        

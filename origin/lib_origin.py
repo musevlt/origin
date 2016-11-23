@@ -781,7 +781,7 @@ def Compute_pval_channel(X, n_lambda, mean_est):
     return pval_channel
 
 
-def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
+def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold,sky):
     """Function to compute the final p-values which are the thresholded
     pvalues associated to the T_GLR values divided by twice the pvalues
     associated to the number of thresholded p-values of the correlations
@@ -799,6 +799,9 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
                         cube of p-values
     threshold         : float
                         The threshold applied to the p-values cube
+    sky               : Bool
+                        enable or disable the channel pvalue to compute the
+                        final pvalue in the normalization process.
 
     Returns
     -------
@@ -807,17 +810,25 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
 
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
+    Date  : Nov,23 2016
+    Modifed: Antony Schutz
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
     # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
     ksel_correl = (cube_pval_correl==0)
-    ksel_channel = (cube_pval_channel==0)
+    if sky:
+        ksel_channel = (cube_pval_channel==0)
     # Set the pvalues equals to zero to an arbitrary very low value, but not
     # zero
     cube_pval_correl[ksel_correl] = np.spacing(1)**6
-    cube_pval_channel[ksel_channel] = np.spacing(1)**6
-    probafinale = cube_pval_correl # / cube_pval_channel
+    if sky:
+        cube_pval_channel[ksel_channel] = np.spacing(1)**6
+
+    probafinale = cube_pval_correl
+    if sky:
+        probafinale /= cube_pval_channel
+
     cube_pval_correl[ksel_correl] = 0
     cube_pval_channel[ksel_channel] = 0
     # pvalue = probability/2
