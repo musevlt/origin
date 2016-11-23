@@ -49,43 +49,43 @@ def test_origin():
     # Number of the spectral ranges skipped to compute the controle cube
     nb_ranges = 3
     # Narrow band tests
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp', newname='tmp2')
     my_origin.step05_compute_NBtests(nb_ranges)
     my_origin.write()
     
     # Thresholded narrow bands tests
     thresh_T1 = .2
     thresh_T2 = 2
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp2')
     my_origin.step06_select_NBtests(thresh_T1, thresh_T2)
     my_origin.write()
 
     # Estimation with the catalogue from the narrow band Test number 2
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp2')
     my_origin.step07_compute_spectra()
     my_origin.write()
 
     # Spatial merging
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp2')
     my_origin.step08_spatial_merging()
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     # Spectral merging
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp2')
     my_origin.step09_spectral_merging(deltaz)
     my_origin.write()
     
     # list of source objects
-    my_origin = ORIGIN.load('tmp')
+    my_origin = ORIGIN.load('tmp2')
     nsources = my_origin.step10_write_sources(ncpu=1)
     assert (nsources == 2)
-    cat = Catalog.read('tmp/tmp.fits')
+    cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 2)
     
     # test returned sources are valid
-    src = Source.from_file('./tmp/sources/tmp-00001.fits')
+    src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
     Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
     assert (len(np.unique(Nz)) == 1)
     Ny = np.array([ima.shape[0] for ima in src.images.values()])
@@ -99,3 +99,4 @@ def test_origin():
     assert(cNy == Ny)
     assert(cNx == Nx)
     shutil.rmtree('tmp')
+    shutil.rmtree('tmp2')

@@ -401,13 +401,19 @@ class ORIGIN(object):
                    param=None, eig_val=None, nbkeep=None)
         
     @classmethod
-    def load(cls, folder):
+    def load(cls, folder, newpath=None, newname=None):
         """Load a previous session of ORIGIN
         
         Parameters
         ----------
         folder : string
                  path
+        newpath : string
+                  The session is loaded from the given folder but it will be
+                  saved in a new folder under the new path.
+        newname : string
+                  The session is loaded from the given folder but it will be
+                  saved in a new folder.
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
@@ -508,6 +514,11 @@ class ORIGIN(object):
             Cat4 = Table.read('%s/Cat4.fits'%folder)
         else:
             Cat4 = None
+            
+        if newpath is not None:
+            path = newpath
+        if newname is not None:
+            name = newname
                 
         return cls(path=path,  name=name, filename=param['cubename'],
                    NbSubcube=NbSubcube, margins=param['margin'],
