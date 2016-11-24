@@ -173,7 +173,7 @@ class ORIGIN(object):
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
                  Cat3, Cat4, param, eig_val, nbkeep, sky):
-        #loggers
+        #loggers        
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
                            fmt='%(name)s[%(levelname)s]: %(message)s',
