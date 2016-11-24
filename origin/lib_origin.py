@@ -1536,15 +1536,6 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     skycrd = wcs.pix2sky(pixcrd)
     col_rac = Column(name='ra_centroid', data=skycrd[:, 1])
     col_decc = Column(name='dec_centroid', data=skycrd[:, 0])
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-=======
-
->>>>>>> Sky parameter to enable/disable the sky in pvalue computation
-=======
-
->>>>>>> 6b6b9b09483a8f81bfa6af77572aac086cd89efa
     CatF.add_columns([col_id, col_x, col_y, col_ra, col_dec, col_xc, col_yc,
                       col_rac, col_decc, col_nlines],
                      indexes=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
