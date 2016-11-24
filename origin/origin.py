@@ -37,15 +37,7 @@ from .lib_origin import Spatial_Segmentation, \
     Narrow_Band_Threshold, Estimation_Line, \
     Spatial_Merging_Circle, Spectral_Merging, \
     Construct_Object_Catalogue
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
-
->>>>>>> Sky parameter to enable/disable the sky in pvalue computation
-=======
-
->>>>>>> 6b6b9b09483a8f81bfa6af77572aac086cd89efa
 __version__ ='1.0'
 
 
