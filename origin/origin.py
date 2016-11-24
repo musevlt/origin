@@ -160,15 +160,13 @@ class ORIGIN(object):
                              Catalog returned by step08_spatial_merging.
         Cat4               : astropy.Table
                              Catalog returned by step09_spectral_merging.
-        sky                : Boolean enable or disable the "sky normalization"
-                             for the calculus of the pvalue for the detection
     """
 
     def __init__(self, path, name, filename, NbSubcube, margins, profiles,
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep, sky):
+                 Cat3, Cat4, param, eig_val, nbkeep):
 
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -216,8 +214,6 @@ class ORIGIN(object):
         # ORIGIN parameters
         self.param['nbsubcube'] = NbSubcube
         self.param['margin'] = margins
-        self.param['sky'] = sky
-        self.sky = sky
         self.NbSubcube = NbSubcube
         self.Edge_xmin = margins[2]
         self.Edge_xmax = self.Nx - margins[3]
@@ -360,7 +356,7 @@ class ORIGIN(object):
 
     @classmethod
     def init(cls, cube, NbSubcube, margins, profiles=None,
-                 PSF=None, FWHM_PSF=None, name='origin', sky=True):
+                 PSF=None, FWHM_PSF=None, name='origin'):
 
         """Create a ORIGIN object.
 
@@ -395,8 +391,6 @@ class ORIGIN(object):
                       FWHM of the PSFs in pixels.
         name        : str
                       Name of this session and basename for the sources.
-        sky         : Boolean enable or disable the "sky normalization"
-                      for the calculus of the pvalue for the detection
         """
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    margins=margins, profiles=profiles, PSF=PSF,
@@ -405,7 +399,7 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None, sky=sky)
+                   param=None, eig_val=None, nbkeep=None)
 
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -439,7 +433,6 @@ class ORIGIN(object):
         intx = np.asarray(param['intx'])
         inty = np.asarray(param['inty'])
         NbSubcube = param['nbsubcube']
-        sky = param['sky']
         if os.path.isfile('%s/eigval_%d_%d.txt'%(folder, NbSubcube-1,
                                                  NbSubcube-1)):
             eig_val = {}
@@ -539,7 +532,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep, sky=sky)
+                   eig_val=eig_val, nbkeep=nbkeep)
 
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -567,9 +560,6 @@ class ORIGIN(object):
             if overwrite:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
-
-        # in case of 'sky' have been changed by User -> update de dict
-        self.param["sky"] = self.sky
 
         # parameters in .yaml
         stream = open('%s/%s.yaml'%(path2, self.name), 'w')
@@ -746,7 +736,7 @@ class ORIGIN(object):
                        mask=np.ma.nomask, dtype=int)
         self._log_file.info('Done')
 
-    def step03_compute_pvalues(self, threshold=8):
+    def step03_compute_pvalues(self, threshold=8, sky=True):
         """Loop on each zone of self.cube_correl and compute for each zone:
 
         - the p-values associated to the T_GLR values,
@@ -761,6 +751,9 @@ class ORIGIN(object):
         ----------
         threshold : float
                     Threshold applied on pvalues.
+        sky       : Bool
+                    enable or disable the channel pvalue to compute the
+                    final pvalue in the normalization process.
 
         Returns
         -------
@@ -797,7 +790,7 @@ class ORIGIN(object):
         # Estimated mean for p-values distribution related
         # to the Rayleigh criterium
         cube_pval_channel = None
-        if self.sky:
+        if sky:
             self._log_stdout.info('Compute p-values of spectral channel')
             try:
                 mean_est = self.FWHM_PSF**2
@@ -821,7 +814,7 @@ class ORIGIN(object):
         self._log_stdout.info('Compute final p-values')
         cube_pval_final = Compute_pval_final(cube_pval_correl,
                                              cube_pval_channel,
-                                             threshold, self.sky)
+                                             threshold, sky)
 
         self._log_stdout.info('Save the result in self.cube_pval_final')
         self.cube_pval_final = Cube(data=cube_pval_final, wave=self.wave,
