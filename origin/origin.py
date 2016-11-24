@@ -38,10 +38,14 @@ from .lib_origin import Spatial_Segmentation, \
     Spatial_Merging_Circle, Spectral_Merging, \
     Construct_Object_Catalogue
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 
 >>>>>>> Sky parameter to enable/disable the sky in pvalue computation
+=======
+
+>>>>>>> 6b6b9b09483a8f81bfa6af77572aac086cd89efa
 __version__ ='1.0'
 
 
@@ -173,7 +177,7 @@ class ORIGIN(object):
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
                  Cat3, Cat4, param, eig_val, nbkeep, sky):
-        #loggers        
+
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
                            fmt='%(name)s[%(levelname)s]: %(message)s',
@@ -526,6 +530,7 @@ class ORIGIN(object):
             Cat4 = Table.read('%s/Cat4.fits'%folder)
         else:
             Cat4 = None
+
         if newpath is not None:
             path = newpath
         if newname is not None:
@@ -542,7 +547,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep sky=sky)
+                   eig_val=eig_val, nbkeep=nbkeep, sky=sky)
 
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -570,7 +575,7 @@ class ORIGIN(object):
             if overwrite:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
-                
+
         # in case of 'sky' have been changed by User -> update de dict
         self.param["sky"] = self.sky
 
@@ -799,20 +804,26 @@ class ORIGIN(object):
         # p-values of spectral channel
         # Estimated mean for p-values distribution related
         # to the Rayleigh criterium
-        self._log_stdout.info('Compute p-values of spectral channel')
-        try:
-            mean_est = self.FWHM_PSF**2
-            self.param['meanestPvalChan'] = np.asscalar(mean_est)
-        except:
-            mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
-            self.param['meanestPvalChan'] = mean_est.tolist()
-        cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
+        cube_pval_channel = None
+        if self.sky:
+            self._log_stdout.info('Compute p-values of spectral channel')
+            try:
+                mean_est = self.FWHM_PSF**2
+                self.param['meanestPvalChan'] = np.asscalar(mean_est)
+            except:
+                mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
+                self.param['meanestPvalChan'] = mean_est.tolist()
+
+            cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
                                                       self.intx, self.inty,
                                                       self.NbSubcube,
                                                       mean_est, self.wfields)
-        self._log_stdout.info('Save the result in self.cube_pval_channel')
-        self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
-                                      wcs=self.wcs, mask=np.ma.nomask)
+            self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
+                                          wcs=self.wcs, mask=np.ma.nomask)
+            self._log_stdout.info('Save the result in self.cube_pval_channel')
+
+        else:
+            self._log_stdout.info('sky is False, dont compute p-values of spectral channel')
 
         # Final p-values
         self._log_stdout.info('Compute final p-values')

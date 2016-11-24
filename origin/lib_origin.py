@@ -817,7 +817,8 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
     t0 = time.time()
     # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
     ksel_correl = (cube_pval_correl==0)
-    ksel_channel = (cube_pval_channel==0)
+    if sky:
+        ksel_channel = (cube_pval_channel==0)
     # Set the pvalues equals to zero to an arbitrary very low value, but not
     # zero
     cube_pval_correl[ksel_correl] = np.spacing(1)**6
@@ -826,9 +827,11 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
     probafinale = cube_pval_correl
     if sky:
         probafinale /= cube_pval_channel
+
     # # this is not used after
     # cube_pval_correl[ksel_correl] = 0
     # cube_pval_channel[ksel_channel] = 0
+
     # pvalue = probability/2
     cube_pval_final = probafinale / 2
     # Set the nan to 1
@@ -1534,10 +1537,14 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     col_rac = Column(name='ra_centroid', data=skycrd[:, 1])
     col_decc = Column(name='dec_centroid', data=skycrd[:, 0])
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 
 >>>>>>> Sky parameter to enable/disable the sky in pvalue computation
+=======
+
+>>>>>>> 6b6b9b09483a8f81bfa6af77572aac086cd89efa
     CatF.add_columns([col_id, col_x, col_y, col_ra, col_dec, col_xc, col_yc,
                       col_rac, col_decc, col_nlines],
                      indexes=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
