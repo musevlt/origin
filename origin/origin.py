@@ -28,6 +28,7 @@ from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FSF,FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.sdetect import Catalog
+from mpdaf.tools import write_hdulist_to
 from .lib_origin import Spatial_Segmentation, \
     Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
     Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \
@@ -624,7 +625,7 @@ class ORIGIN(object):
                 hdu = self.spectra[i].get_stat_hdu(name='STAT%d'%i)
                 if hdu is not None:
                     hdulist.append(hdu)
-            hdulist.writeto('%s/spectra.fits'%path2, clobber=True)
+            write_hdulist_to(hdulist, '%s/spectra.fits'%path2, overwrite=True)
         # step8
         if self.Cat3 is not None:
             self.Cat3.write('%s/Cat3.fits'%path2, overwrite=True)
