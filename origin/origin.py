@@ -14,11 +14,12 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 from __future__ import absolute_import, division
 
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, Column
 import astropy.units as u
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import stats
 import os.path
 import shutil
 import sys
@@ -37,7 +38,9 @@ from .lib_origin import Spatial_Segmentation, \
     Compute_Referent_Voxel, Narrow_Band_Test, \
     Narrow_Band_Threshold, Estimation_Line, \
     Spatial_Merging_Circle, Spectral_Merging, \
-    Construct_Object_Catalogue
+    Construct_Object_Catalogue, \
+    dct_residual, Compute_Standardized_data, O2test,\
+    Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
     
 __version__ ='1.0'
 
@@ -167,7 +170,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep):
+                 Cat3, Cat4, param, eig_val, nbkeep, cube_std):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -317,7 +320,8 @@ class ORIGIN(object):
         self.param['intx'] = self.intx.tolist()
         self.param['inty'] = self.inty.tolist()
         
-        
+        # step0
+        self.cube_std = cube_std
         # step1
         self.eig_val = eig_val
         self.nbkeep = nbkeep
@@ -399,7 +403,7 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None)
+                   param=None, eig_val=None, nbkeep=None, cube_std=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -446,6 +450,10 @@ class ORIGIN(object):
             reshape((NbSubcube, NbSubcube)).astype(np.int)
         else:
             nbkeep = None
+        if os.path.isfile('%s/cube_std.fits'%folder):
+            cube_std = Cube('%s/cube_std.fits'%folder)
+        else:
+            cube_std = None            
         if os.path.isfile('%s/cube_faint.fits'%folder):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
@@ -524,7 +532,7 @@ class ORIGIN(object):
         return cls(path=path,  name=name, filename=param['cubename'],
                    NbSubcube=NbSubcube, margins=param['margin'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   intx=intx, inty=inty,
+                   intx=intx, inty=inty, cube_std=cube_std,
                    cube_faint=cube_faint, cube_cont=cube_cont,
                    cube_correl=cube_correl, cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
@@ -586,6 +594,8 @@ class ORIGIN(object):
                                self.eig_val[(i,j)])
         if self.nbkeep is not None:
             np.savetxt('%s/nbkeep.txt'%path2, self.nbkeep)
+        if self.cube_std is not None:
+            self.cube_std.write('%s/cube_std.fits'%path2)            
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
         if self.cube_cont is not None:
@@ -633,7 +643,215 @@ class ORIGIN(object):
         if self.Cat4 is not None:
             self.Cat4.write('%s/Cat4.fits'%path2, overwrite=True)
         
+        
 
+    def init_calibrator(self,x=None, y=None, z=None, amp=None ,profil=None,\
+                              Cat_cal=None,random=0, save=False,\
+                              name='cat_cal.fits'):
+        
+        """ Initialise calibrators and create catalogue
+        
+        Parameters
+        ----------
+        x           :   int or list
+                        the x spatiale position of the line (pixel)
+        y           :   int or list
+                        the y spatiale position of the line (pixel)                   
+        z           :   int or list
+                        the z spectrale position of the line (pixel)                    
+                        
+        amp         :   float 
+                        if int repeated    
+                        amplitude of the line
+        
+        profil      :   int or list
+                        if int repeated
+                        the number of the profile associated to the line     
+                        
+        Cat_cal     :   Table
+                        Catalogue of Calibrators from previous use of function
+                        useful to a add specific calibrator with random ones
+                        string
+                        if catcal='add' update of catalogue
+
+        random      :   int
+                        number of random line added to the data
+                        
+        save        :   bool
+                        to save the catalogue of calibrator 
+                        
+        name        :   string
+                        name of the catalogue files
+                        default name is cat_cal.fits
+        Returns
+        -------
+        self.Cat_calibrator    :    Catalogue
+                                    Catalogue of calibrators
+        """     
+        self._log_file.info('00 - initialization of calibrators')
+        self._log_stdout.info('Step 00 - initialization of calibrators')           
+        
+        nl,ny,nx = self.cube_raw.shape
+        nprofil = len(self.profiles)
+ 
+        if Cat_cal=='add':
+            try:
+                Cat_cal = self.Cat_calibrator
+            except:
+                self._log_stdout.info('create calibrators catalogue first')
+        else:    
+            if Cat_cal is not None: 
+                self._log_stdout.info('update calibrators catalogue')            
+        if random:
+            self._log_stdout.info('add %d random calibrators'%random)
+        else:
+            self._log_stdout.info('add calibrators')        
+            
+        self.Cat_calibrator = init_calibrators(nl, ny, nx, nprofil, 
+                                               x, y, z, amp, profil, random, 
+                                               Cat_cal)                        
+            
+        if save:           
+            self.Cat_calibrator.write(name, overwrite=True)
+            self._log_stdout.info('Catalogue saved in file: %s'%name)  
+        
+ 
+    def add_calibrator(self, name=''):
+        """ Initialise calibrators and create catalogue
+        
+        Parameters
+        ----------
+        name        :   str
+                        name of the catalogue of calibrators file
+                        if empty self.Cat_calibrator is used
+        Returns
+        -------
+        self.raw    : array
+                      raw data with calibrators
+        """             
+
+        self._log_file.info('00 - adding calibrators to data')
+        self._log_stdout.info('Step 00 - adding calibrators to data')          
+        if name:
+            self.Cat_calibrator = Catalog.read(name)
+            self._log_stdout.info('Catalogue read from file: %s'%name)                      
+        else:
+            self._log_stdout.info('Catalogue from self.Cat_calibrator')            
+
+        self.cube_raw = add_calibrator(self.Cat_calibrator, 
+                                       self.cube_raw, self.PSF, self.profiles)        
+        
+    def step00_preprocessing(self, expmap, dct_order=10):
+        """ Preprocessing of data, dct, standardization and noise compensation         
+        
+        Parameters
+        ----------
+        expmap      : string 
+                      Exposure MAP filename
+                      
+        order       : integer
+                      The number of atom to keep for the dct decomposition
+
+        Returns
+        -------
+        self.var    : array
+                        new cube of variance
+                        
+        self.cube_std : `~mpdaf.obj.Cube`
+                        standardized data for PCA
+        """        
+        self.param['dct_order'] = dct_order
+        self._log_file.info('00 - Preprocessing, dct order=%d'%dct_order)
+        self._log_stdout.info('Step 00 - DCT computation')   
+        self._log_stdout.info('reweighted data')
+        expmap_data = Cube(expmap)._data
+        weighted_cube_raw = self.cube_raw * np.sqrt(expmap_data)
+        self._log_stdout.info('Compute the DCT residual')
+        faint_dct = dct_residual(weighted_cube_raw, dct_order)
+        self._log_stdout.info('Standard data')
+        
+        # compute standardized data
+        cube_std, var = Compute_Standardized_data(faint_dct)
+        
+        self._log_stdout.info('self.var is changed for the TGLR')           
+        self.var = var/expmap_data
+        
+        self._log_stdout.info('Save the std signal in self.cube_std')        
+        self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
+                         mask=np.ma.nomask)        
+
+    def step01_compute_greedy_PCA(self, test_fun=O2test, mixing=False,
+                              Noise_population=50, threshold_test=1):
+        """ Loop on each zone of the data cube and compute the greedy PCA.
+        The test (test_fun) and the threshold (threshold_test) define the part
+        of the each zone of the cube to segment in nuisance and background. 
+        A part of the background part (1/Noise_population %) is used to compute 
+        a mean background, a signature. 
+        The Nuisance part is orthogonalized to this signature in order to not 
+        loose this part during the greedy process. SVD is performed on nuisance
+        in order to modelized the nuisance part and the principal eigen vector, 
+        only one, is used to perform the projection of the whole set of data:
+        Nuisance and background. The Nuisance spectra which satisfied the test
+        are updated in the background computation and the background is so 
+        cleaned from sources signature. The iteration stop when all the spectra
+        satisfy the criteria
+
+        Parameters
+        ----------
+        test_fun            :   function
+                                the test to be performed on data
+                    
+        mixing              :   bool
+                                if True the output of PCA is mixed with its
+                                input according to the pvalue of a test based
+                                on the continuum of the faint (output PCA)
+        
+        Noise_population    :   float                
+                                the fraction of spectra estimated as background
+                                
+        threshold_test      :   float
+                                the threshold of the test (default=1)  
+
+        Returns
+        -------
+        self.eig_val    : dictionary
+                          Eigenvalues of each spatio-spectral zone
+        self.nbkeep     : array
+                          Number of eigenvalues for each zone used to compute
+                          the projection
+        self.cube_faint : `~mpdaf.obj.Cube`
+                     Projection on the eigenvectors associated to the lower
+                     eigenvalues of the data cube
+                     (representing the faint signal)
+        self.cube_cont  : `~mpdaf.obj.Cube`
+                     Projection on the eigenvectors associated to the higher
+                     eigenvalues of the data cube
+                     (representing the continuum)
+        """
+        self._log_file.info('01 - greedy PCA computation:')
+        self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
+        self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
+        self.param['Noise_population'] = Noise_population
+        self.param['threshold_test'] = threshold_test        
+        self._log_stdout.info('Compute greedy PCA on each zone')   
+        
+        faint = Compute_GreedyPCA_SubCube(self.NbSubcube,
+                                          self.cube_std.data,
+                                          self.intx, 
+                                          self.inty,
+                                          test_fun,
+                                          Noise_population,
+                                          threshold_test)
+        if mixing:
+            continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
+            pval = 1 - stats.chi2.cdf(continuum, 2) 
+            faint = pval*faint + (1-pval)*self.cube_std.data 
+
+        self._log_stdout.info('Save the faint signal in self.cube_faint')
+        self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
+                          mask=np.ma.nomask)
+        self._log_file.info('01 Done')        
+     
     def step01_compute_PCA(self, r0=0.67):
         """ Loop on each zone of the data cube and compute the PCA,
         the number of eigenvectors to keep for the projection
@@ -736,7 +954,7 @@ class ORIGIN(object):
                        mask=np.ma.nomask, dtype=int)
         self._log_file.info('Done')
 
-    def step03_compute_pvalues(self, threshold=8):
+    def step03_compute_pvalues(self, threshold=8, sky=False):
         """Loop on each zone of self.cube_correl and compute for each zone:
 
         - the p-values associated to the T_GLR values,
@@ -793,11 +1011,18 @@ class ORIGIN(object):
         except:
             mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
             self.param['meanestPvalChan'] = mean_est.tolist()
-        cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
+            
+        if not sky: 
+            cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
                                                       self.intx, self.inty,
                                                       self.NbSubcube,
                                                       mean_est, self.wfields)
-        self._log_stdout.info('Save the result in self.cube_pval_channel')
+            self._log_stdout.info('Save the result in self.cube_pval_channel')
+
+        else:
+            cube_pval_channel = np.ones(cube_pval_correl.shape)
+            self._log_stdout.info('sky is False, no estimation of p-values of spectral channel')
+            
         self.cube_pval_channel = Cube(data=cube_pval_channel, wave=self.wave,
                                       wcs=self.wcs, mask=np.ma.nomask)
 
@@ -805,7 +1030,7 @@ class ORIGIN(object):
         self._log_stdout.info('Compute final p-values')
         cube_pval_final = Compute_pval_final(cube_pval_correl,
                                              cube_pval_channel,
-                                             threshold)
+                                             threshold, sky)
         self._log_stdout.info('Save the result in self.cube_pval_final')
         self.cube_pval_final = Cube(data=cube_pval_final, wave=self.wave,
                                     wcs=self.wcs, mask=np.ma.nomask)
@@ -918,7 +1143,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T2')
         self._log_file.info('06 Done')
 
-    def step07_compute_spectra(self, T=2, grid_dxy=0, grid_dz=0):
+    def step07_compute_spectra(self, T=0, grid_dxy=0, grid_dz=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -926,7 +1151,8 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        T          : 1 or 2
+        T          : 0 or 1 or 2
+                     if T=0, self.Cat0 is used as input
                      if T=1, self.Cat1_T1 is used as input
                      if T=2, self.Cat1_T2 is used as input
         grid_dxy   : integer
@@ -949,7 +1175,13 @@ class ORIGIN(object):
         self.param['NBtest'] = 'T%d'%T
         self.param['grid_dxy'] = grid_dxy
         self.param['grid_dz'] = grid_dz
-        if T==1:
+        if T==0:
+            Cat1_T = self.Cat0
+            t = Column(np.ones(len(Cat1_T))*-1000, name='T1')
+            Cat1_T.add_column(t)
+            t = Column(np.ones(len(Cat1_T))*-1000, name='T2')
+            Cat1_T.add_column(t)
+        elif T==1:
             Cat1_T = self.Cat1_T1
         elif T==2:
             Cat1_T = self.Cat1_T2

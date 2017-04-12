@@ -43,6 +43,7 @@ from joblib import Parallel, delayed
 from scipy import signal, stats, special
 from scipy.ndimage import measurements, morphology
 from scipy.spatial import KDTree
+from scipy.sparse.linalg import svds
 from six.moves import range, zip
 
 from mpdaf.obj import Cube, Image, Spectrum
@@ -83,6 +84,409 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return inty, intx
 
+
+def DCTMAT(dct_o):
+    """Function to compute the DCT Matrix or order dct_o.  
+    
+    Parameters
+    ----------
+    dct_o   :   integer
+                order of the dct (spectral length)     
+
+    Returns
+    -------                
+    dct_m   :   array
+                DCT Matrix                
+    """
+    cc = np.arange(dct_o)
+    cc = np.repeat(cc[None,:], dct_o, axis=0)
+    dct_m = np.sqrt(2 / dct_o) \
+        * np.cos(np.pi * ((2 * cc) + 1) * cc.T / (2 * dct_o))
+    dct_m[0,:] = dct_m[0,:] / np.sqrt(2)
+    return dct_m
+
+
+def dct_residual(w_raw, order):
+    """Function to compute the residual of the DCT on raw data.  
+    
+    Parameters
+    ----------
+    RAW     :   array
+                the RAW data
+              
+    order   :   integer
+                The number of atom to keep for the dct decomposition
+
+    Returns
+    -------                
+    Faint     : array
+                residual from the dct decomposition      
+                
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)                
+    """
+    nl = w_raw.shape[0]
+    D0 = DCTMAT(nl)
+    D0 = D0[:, 0:order+1]
+    A = np.dot(D0, D0.T)
+     
+    # Faint[:,i,j] = w_raw[:,i,j] - np.dot(A, w_raw[:,i,j])           
+    Faint = w_raw - np.tensordot(A, w_raw, axes=(0,0))
+
+    return Faint
+
+
+def Compute_Standardized_data(cube_dct):
+    """Function to compute the standardized data.  
+    
+    Parameters
+    ----------
+    cube_dct:   array
+                output of dct_residual
+              
+    expmap  :   array
+                exposure map
+
+    Returns
+    -------                
+    STD     :   array
+                standardized data cube from cube dct
+                
+    VAR     :   array
+                cube of variance
+                
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)                
+    """        
+    nl,ny,nx = cube_dct.shape
+    
+    mean_lambda = np.mean(cube_dct, axis=(1,2))
+    var_lambda = np.var(cube_dct, axis=(1,2))
+    
+    VAR = var_lambda[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))
+    STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) \
+             / np.sqrt(var_lambda[:, np.newaxis, np.newaxis])
+
+    return STD, VAR
+
+
+def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
+                              Noise_population, threshold_test):
+    """Function to compute the PCA on each zone of a data cube.
+
+    Parameters
+    ----------
+    NbSubcube : integer
+                Number of subcubes for the spatial segmentation
+    cube_std  : array
+                Cube data weighted by the standard deviation
+    intx      : integer
+                limits in pixels of the columns for each zone
+    inty      : integer
+                limits in pixels of the rows for each zone
+    nuisance_test   :   function used to estimate the nuisance degree of a
+                        spectrum (default is O2_test)
+    Noise_population:   proportion of estimated noise part used to 
+                        define the background spectra
+    threshold       :   threshold of nuisance_test
+
+    Returns
+    -------
+    cube_faint : array
+                Faint greedy decomposition od STD Cube
+
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    cube_faint = np.zeros(cube_std.shape)
+    # Spatial segmentation
+    with ProgressBar(NbSubcube**2) as bar:
+        for numy in range(NbSubcube):
+            for numx in range(NbSubcube):
+                bar.update()
+                # limits of each spatial zone
+                x1 = intx[numx]
+                x2 = intx[numx + 1]
+                y2 = inty[numy]
+                y1 = inty[numy + 1]
+                # Data in this spatio-spectral zone
+                cube_temp = cube_std[:, y1:y2, x1:x2]
+                # greedy PCA on each subcube
+                cube_faint[:, y1:y2, x1:x2] = Compute_GreedyPCA( cube_temp, 
+                          test_fun, Noise_population, threshold_test)
+                
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+    return cube_faint
+
+def O2test(Cube_in):
+    """Function to compute the test on data. The test estimate the background
+    part and nuisance part of the data by mean of second order test: 
+    Testing mean and variance at same time of spectra
+
+    Parameters
+    ----------
+    Cube_in :   array 
+                  The 3D cube data to test
+
+
+    Returns
+    -------
+    test    :   array 
+                2D result of the test
+
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """    
+    return np.mean( Cube_in**2 ,axis=0)
+
+def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
+    """Function to compute greedy svd. thanks to the test (test_fun) and 
+    according to a defined threshold (threshold_test) the cube is segmented
+    in nuisance and background part. A part of the background part 
+    (1/Noise_population %) is used to compute a mean background, a signature. 
+    The Nuisance part is orthogonalized to this signature in order to not 
+    loose this part during the greedy process. SVD is performed on nuisance
+    in order to modelized the nuisance part and the principal eigen vector, 
+    only one, is used to perform the projection of the whole set of data:
+    Nuisance and background. The Nuisance spectra which satisfied the test
+    are updated in the background computation and the background is so 
+    cleaned from sources signature. The iteration stop when all the spectra
+    satisfy the criteria
+    
+
+    Parameters
+    ----------
+    Cube_in :   array 
+                The 3D cube data clean
+
+    test_fun:   function
+                the test to be performed on data
+                
+    Noise_population    :   float                
+                            the fraction of spectra estimated as background
+                            
+    threshold_test      :   float
+                            the threshold of the test (default=1)                        
+    Returns
+    -------
+    faint    :  array 
+                cleaned cube
+
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """       
+    faint = cube_in.copy()
+    nl,ny,nx = cube_in.shape
+    # greedy loop based on test
+    while True:
+        # test 
+        test = test_fun(faint)
+        # vector data
+        test_v = np.ravel(test)
+        bckv = np.reshape(faint,(nl,ny*nx))        
+        nind = np.where(test_v<=threshold_test)[0]
+        sortind = np.argsort(test_v[nind])
+        # at least one spectra is used to perform the test
+        l = 1 + int( len(nind) / Noise_population)
+        # background estimation
+        b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
+
+        # nuisance part
+        py,px = np.where(test>threshold_test)
+ 
+        if len(py)==0:
+            break    
+        # cube segmentation 
+        x_red = faint[:,py,px]
+
+        # orthogonal projection with background
+        x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) / np.sum(b**2)
+        
+        # sparse svd if nb spectrum > 1 else normal svd
+        if x_red.shape[1]==1:        
+            U,s,V = np.linalg.svd( x_red , full_matrices=False)
+        else:
+            U,s,V = svds( x_red , k=1)            
+        # orthogonal projection
+        xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
+        faint -= np.reshape(xest,(nl,ny,nx))
+        
+    return faint
+
+
+def init_calibrators(nl, ny, nx, nprofil, x, y, z, amp, profil, random, \
+                     Cat_cal): 
+    """Function to add calibrator at position z,y,x with amplitude amp
+    following the profiles profilid
+    
+
+    Parameters
+    ----------
+    nl,ny,nx    :   int 
+                    samples size of data in spectral and spatiales dimensions
+    nprofil     :   int
+                    number of spectrale profil
+                    
+    x           :   int or list
+                    the x spatiale position of the line (pixel)
+    y           :   int or list
+                    the y spatiale position of the line (pixel)                   
+    z           :   int or list
+                    the z spectrale position of the line (pixel)                    
+                    
+    amp         :   float 
+                    if x is array or list and if amp is int, amp is repeated    
+                    amplitude of the line
+    
+    profilid    :   int or list
+                    if x is array or list and if profilid is int, 
+                    profilid is repeated    
+                    the number (id) of the profile associated to the line       
+                    
+    random      :   int
+                    number of random line added to the data
+                        
+    Cat_cal     :  catalogue
+                   Catalogue with calibrators parameters      
+                   string
+                   if Cat_cal='add', update of the catalogue
+    
+    Returns
+    -------
+    Cat_cal     :  catalogue
+                   Catalogue with calibrators parameters
+
+    Date  : Mar, 30 2017
+    Author: antony schutz (antonyschutz@gmail.com)    
+    """ 
+    
+    logger = logging.getLogger('origin')  
+    
+    if random==0 and x=='' and Cat_cal=='' :
+        msg = 'no parameters given: initialize x, y, z, amp,'\
+                     +'profilid or random or give a catalogue'
+        logger.error(msg)
+    if type(Cat_cal)==Table:
+      # if input is a catalogue only  
+        _x = Cat_cal['x']
+        _y = Cat_cal['y']
+        _z = Cat_cal['z']
+        _amp = Cat_cal['amp']
+        _profil = Cat_cal['profil']
+    else:
+        _x = []
+        _y = []
+        _z = []
+        _amp = []
+        _profil = []
+            
+    # full random initialisation    
+    if random:
+        _amp += list(np.random.rand(random) * 5)               
+        _x += list(np.array(np.random.rand(random) * nx, dtype=int))
+        _y += list(np.array(np.random.rand(random) * ny, dtype=int))
+        _z += list(np.array(np.random.rand(random) * nl, dtype=int))
+        _profil += list(np.array( np.random.rand(random) * nprofil, dtype=int))
+        
+    if x is not None:
+        if type(x)==int: # x is int and Table need list
+            _x.append(x)
+            _y.append(y)    
+            _z.append(z)        
+            _amp.append(amp)
+            _profil.append(profil)
+            
+        else:
+            # if position are given but not all amplitude or all profil ID
+            if type(amp)==int:
+                amp = np.resize(amp,len(x))       
+            if type(profil)==int:
+                profil = np.resize(profil,len(x))
+            _amp += list(amp)
+            _x += list(x)
+            _y += list(y)
+            _z += list(z)
+            _profil += list(profil)
+            
+    # creation of (new) catalogue
+    Cat_ref = Table([_x, _y, _z, _amp, _profil ],
+                        names=('x', 'y', 'Z', 'amp', 'profil'))   
+        
+    return Cat_ref    
+
+
+def add_calibrator(Cat_cal, raw, PSF, profiles):
+    """Function to add calibrator to raw data
+    
+
+    Parameters
+    ----------
+    Cat_cal     :   catalogue
+                    Catalogue with calibrators parameters
+                   
+    raw         :   array 
+                    The 3D RAW data
+
+    PSF         :   array
+                    The PSF from orig.PSF
+                
+    profiles    :   array                
+                    The profiles from orig.profiles
+                  
+    
+    Returns
+    -------
+    Cube_out    :  array 
+                   raw data with calibrators
+
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """      
+    logger = logging.getLogger('origin')    
+    t0 = time.time()
+    
+    nl,ny,nx = raw.shape
+    Cube_out = raw.copy()
+          
+    x = Cat_cal['x']
+    y = Cat_cal['y']
+    z = Cat_cal['Z']    
+    amp = Cat_cal['amp']
+    profil = Cat_cal['profil']        
+    
+#    if type(x) != int :
+    for n in range(len(x)):
+        Cube_test = np.zeros((nl,ny,nx))
+        Cube_test[z[n],y[n],x[n]] = 1
+        pp = profiles[profil[n]]    
+        Cube_test[:, y[n],x[n]] = \
+        signal.fftconvolve(Cube_test[:,y[n],x[n]], pp, mode='same') 
+        fmin = np.maximum(0, z[n]-2*len(pp))
+        fmax = np.minimum(nl,z[n]+2*len(pp))            
+        for i in range(fmin,fmax):                
+            Cube_test[i, :, :] = signal.fftconvolve(Cube_test[i, :, :],
+                                PSF[i, :, :], mode='same') 
+        Cube_test = Cube_test / Cube_test.max() * amp[n]
+        Cube_out += Cube_test
+#    else: 
+#        Cube_test = np.zeros((nl,ny,nx))
+#        Cube_test[z,y,x] = 1
+#        pp = profiles[profilid]
+#        Cube_test[:, y,x] = \
+#        signal.fftconvolve(Cube_test[:,y,x], pp, mode='same') 
+#        for i in range(z-2*len(pp),z+2*len(pp)):                
+#            Cube_test[i, :, :] = signal.fftconvolve(Cube_test[i, :, :],
+#                                PSF_Moffat[i, :, :], mode='same') 
+#        Cube_test = Cube_test / Cube_test.max() * amp
+#        Cube_out += Cube_test
+      
+                
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+        
+    return Cube_out
+#%%
 
 def Compute_PCA_SubCube(NbSubcube, cube_std, intx, inty, Edge_xmin, Edge_xmax,
                         Edge_ymin, Edge_ymax):
@@ -780,7 +1184,8 @@ def Compute_pval_channel(X, n_lambda, mean_est):
     return pval_channel
 
 
-def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
+def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
+
     """Function to compute the final p-values which are the thresholded
     pvalues associated to the T_GLR values divided by twice the pvalues
     associated to the number of thresholded p-values of the correlations
@@ -798,6 +1203,9 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
                         cube of p-values
     threshold         : float
                         The threshold applied to the p-values cube
+    sky               : Bool
+                        enable or disable the channel pvalue to compute the
+                        final pvalue in the normalization process.
 
     Returns
     -------
@@ -806,19 +1214,32 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold):
 
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
+    Date  : Nov,23 2016
+    Modifed: Antony Schutz
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)    
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
     # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
     ksel_correl = (cube_pval_correl==0)
-    ksel_channel = (cube_pval_channel==0)
+    if sky:
+        ksel_channel = (cube_pval_channel==0)
     # Set the pvalues equals to zero to an arbitrary very low value, but not
     # zero
     cube_pval_correl[ksel_correl] = np.spacing(1)**6
-    cube_pval_channel[ksel_channel] = np.spacing(1)**6
-    probafinale = cube_pval_correl / cube_pval_channel
-    cube_pval_correl[ksel_correl] = 0
-    cube_pval_channel[ksel_channel] = 0
+    if sky:
+        cube_pval_channel[ksel_channel] = np.spacing(1)**6
+
+    if sky:
+        probafinale = cube_pval_correl/cube_pval_channel
+    else: 
+        probafinale = cube_pval_correl        
+
+    # # this is not used after
+    # cube_pval_correl[ksel_correl] = 0
+    # cube_pval_channel[ksel_channel] = 0
+
     # pvalue = probability/2
     cube_pval_final = probafinale / 2
     # Set the nan to 1
