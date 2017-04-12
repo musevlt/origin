@@ -1177,10 +1177,6 @@ class ORIGIN(object):
         self.param['grid_dz'] = grid_dz
         if T==0:
             Cat1_T = self.Cat0
-            t = Column(np.ones(len(Cat1_T))*-1000, name='T1')
-            Cat1_T.add_column(t)
-            t = Column(np.ones(len(Cat1_T))*-1000, name='T2')
-            Cat1_T.add_column(t)
         elif T==1:
             Cat1_T = self.Cat1_T1
         elif T==2:

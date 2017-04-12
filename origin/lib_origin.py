@@ -2089,8 +2089,12 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
         #profile_dico = Dico[profile_num]
         fl = flux[j]
-        vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
+        if T1 is not None:
+            vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
                     pvalF[j], T1[j], T2[j], profile_num]
+        else:
+            vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
+                    pvalF[j], profile_num]
         src.add_line(cols, vals, units, desc, fmt)
         src.spectra['LINE_{:s}'.format(names[j])] = sp
         sp = Spectrum(wave=cube.wave[z1:z2], data=c)
@@ -2160,12 +2164,22 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     t0 = time.time()
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
-    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PVALS',
+    
+    if 'T1' in Cat.colnames:
+        NBtests = True
+        cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PVALS',
             'PVALF', 'T1', 'T2', 'PROF']
-    units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone, unone,
+        units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone, unone,
              unone, unone]
+        fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', '.1f', '.1f', 'd']
+    else:
+        NBtests = False
+        cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PVALS',
+            'PVALF', 'PROF']
+        units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone,
+             unone, unone]
+        fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', 'd']
     desc = None
-    fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', '.1f', '.1f', 'd']
 
     step_wave = wave.get_step(unit=u.angstrom)
     filename = param['cubename']
@@ -2189,8 +2203,12 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         pvalC = E['pvalC']
         pvalS = E['pvalS']
         pvalF = E['pvalF']
-        T1 = E['T1']
-        T2 = E['T2']
+        if NBtests:
+            T1 = E['T1']
+            T2 = E['T2']
+        else:
+            T1 = None
+            T2 = None
         # Number of lines in this group
         nb_lines = E['nb_lines'][0]
         Cat_est_line_data = np.empty((nb_lines, wave.shape))
