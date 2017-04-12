@@ -2,12 +2,12 @@
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 =========================================================
 
-This software has been developped by Carole Clastres under the supervision of
-David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL).
+This software has been developped by Carole Clastres and Antony Schutz
+under the supervision of David Mary (Lagrange institute, University of Nice)
+and ported to python by Laure Piqueras (CRAL).
 
 The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). Please contact
-Carole for more info at carole.clastres@univ-lyon1.fr
+David for more info at david.mary@univ-lyon1.fr
 
 origin.py contains an oriented-object interface to run the ORIGIN software.
 
@@ -30,17 +30,15 @@ Usage
  
 2- we run the different steps
 
- > my_origin.step01_compute_PCA(r0)
+ > my_origin.step00_preprocessing('expmap.fits')
+
+ > my_origin.step01_compute_greedy_PCA()
  
  > my_origin.step02_compute_TGLR()
  
  > my_origin.step03_compute_pvalues(threshold)
  
  > my_origin.step04_compute_ref_pix(neighboors)
- 
- > my_origin.step05_compute_NBtests(nb_ranges)
- 
- > my_origin.step06_select_NBtests(thresh_T1, thresh_T2)
  
  > my_origin.step07_compute_spectra()
  
