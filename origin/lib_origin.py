@@ -98,7 +98,7 @@ def DCTMAT(dct_o):
     dct_m   :   array
                 DCT Matrix                
     """
-    cc = np.arange(0, dct_o, 1)
+    cc = np.arange(dct_o)
     cc = np.repeat(cc[None,:], dct_o, axis=0)
     dct_m = np.sqrt(2 / dct_o) \
         * np.cos(np.pi * ((2 * cc) + 1) * cc.T / (2 * dct_o))
@@ -106,7 +106,7 @@ def DCTMAT(dct_o):
     return dct_m
 
 
-def dct_residual(w_raw,order):
+def dct_residual(w_raw, order):
     """Function to compute the residual of the DCT on raw data.  
     
     Parameters
@@ -125,21 +125,14 @@ def dct_residual(w_raw,order):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)                
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    
-    nl,ny,nx = w_raw.shape
-    Faint = np.zeros((nl,ny,nx))
+    nl = w_raw.shape[0]
     D0 = DCTMAT(nl)
     D0 = D0[:, 0:order+1]
-    A = np.dot(D0,D0.T)
-    with ProgressBar(ny*nx) as bar:
-        for i in range(ny):
-            for j in range(nx):
-                bar.update()
-                Faint[:,i,j] = w_raw[:,i,j] - np.dot(A,w_raw[:,i,j])
+    A = np.dot(D0, D0.T)
+     
+    # Faint[:,i,j] = w_raw[:,i,j] - np.dot(A, w_raw[:,i,j])           
+    Faint = w_raw - np.tensordot(A, w_raw, axes=(0,0))
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Faint
 
 
@@ -167,15 +160,12 @@ def Compute_Standardized_data(cube_dct):
     """        
     nl,ny,nx = cube_dct.shape
     
-    mean_lambda = np.mean(cube_dct,axis=(1,2))
-    var_lambda = np.var(cube_dct,axis=(1,2))
+    mean_lambda = np.mean(cube_dct, axis=(1,2))
+    var_lambda = np.var(cube_dct, axis=(1,2))
     
-    VAR = np.zeros((nl,ny,nx))
-    STD = np.zeros((nl,ny,nx))
-    
-    for n in range(nl):
-        VAR[n,:,:] = var_lambda[n]
-        STD[n,:,:] = (cube_dct[n,:,:]-mean_lambda[n]) / np.sqrt(var_lambda[n])    
+    VAR = var_lambda[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))
+    STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) \
+             / np.sqrt(var_lambda[:, np.newaxis, np.newaxis])
 
     return STD, VAR
 
@@ -374,69 +364,57 @@ def init_calibrators(nl, ny, nx, nprofil, x, y, z, amp, profil, random, \
     
     logger = logging.getLogger('origin')  
     
-    if random=='' and x=='' and Cat_cal=='' :
+    if random==0 and x=='' and Cat_cal=='' :
         msg = 'no parameters given: initialize x, y, z, amp,'\
                      +'profilid or random or give a catalogue'
-        logger.error(msg)    
-    else:   
+        logger.error(msg)
+    if type(Cat_cal)==Table:
+      # if input is a catalogue only  
+        _x = Cat_cal['x']
+        _y = Cat_cal['y']
+        _z = Cat_cal['z']
+        _amp = Cat_cal['amp']
+        _profil = Cat_cal['profil']
+    else:
+        _x = []
+        _y = []
+        _z = []
+        _amp = []
+        _profil = []
             
-        # full random initialisation    
-        if random:
-            amp = np.random.rand(random) * 5               
-            x = np.array( np.random.rand(random) * nx, dtype=int)
-            y = np.array( np.random.rand(random) * ny, dtype=int)
-            z = np.array( np.random.rand(random) * nl, dtype=int)
-            profil = np.array( np.random.rand(random) * nprofil, dtype=int)
-            
-        # if position are given but not all amplitude or all profil ID
-        if type(x)!=int and type(x)!='':
-            if type(amp)==int:
-                amp = np.resize(amp,len(x))        
-            if type(profil)==int:
-                profil = np.resize(profil,len(x))        
-                
+    # full random initialisation    
+    if random:
+        _amp += list(np.random.rand(random) * 5)               
+        _x += list(np.array(np.random.rand(random) * nx, dtype=int))
+        _y += list(np.array(np.random.rand(random) * ny, dtype=int))
+        _z += list(np.array(np.random.rand(random) * nl, dtype=int))
+        _profil += list(np.array( np.random.rand(random) * nprofil, dtype=int))
+        
+    if x is not None:
         if type(x)==int: # x is int and Table need list
-            xo=x
-            x = []
-            x.append(xo)
+            _x.append(x)
+            _y.append(y)    
+            _z.append(z)        
+            _amp.append(amp)
+            _profil.append(profil)
             
-            xo=y
-            y = []
-            y.append(xo)        
+        else:
+            # if position are given but not all amplitude or all profil ID
+            if type(amp)==int:
+                amp = np.resize(amp,len(x))       
+            if type(profil)==int:
+                profil = np.resize(profil,len(x))
+            _amp += list(amp)
+            _x += list(x)
+            _y += list(y)
+            _z += list(z)
+            _profil += list(profil)
             
-            xo=z
-            z = []
-            z.append(xo)        
-            
-            xo=amp
-            amp = []
-            amp.append(xo)        
-            
-            xo=profil
-            profil = []
-            profil.append(xo)      
-    
-        # if input is a catalogue only
-        if random=='' and x=='' and type(Cat_cal)==Table:
-            x = Cat_cal['x']
-            y = Cat_cal['y']
-            z = Cat_cal['z']
-            amp = Cat_cal['amp']
-            profil = Cat_cal['profil']
-            
-        # if Catalogue of calibrators exists, update
-        if type(Cat_cal)==Table or Cat_cal=='add' :
-            x = np.hstack( (x, Cat_cal['x']) )
-            y = np.hstack( (y, Cat_cal['y']) )
-            z = np.hstack( (z, Cat_cal['z']) )
-            amp = np.hstack( (amp, Cat_cal['amp']) )        
-            profil = np.hstack( (profil, Cat_cal['profil']) )   
-            
-        # creation of (new) catalogue
-        Cat_ref = Table([x, y, z, amp, profil ],
+    # creation of (new) catalogue
+    Cat_ref = Table([_x, _y, _z, _amp, _profil ],
                         names=('x', 'y', 'Z', 'amp', 'profil'))   
         
-        return Cat_ref    
+    return Cat_ref    
 
 
 def add_calibrator(Cat_cal, raw, PSF, profiles):

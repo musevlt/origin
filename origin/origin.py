@@ -14,7 +14,7 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 from __future__ import absolute_import, division
 
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, Column
 import astropy.units as u
 import logging
 import matplotlib.pyplot as plt
@@ -453,7 +453,7 @@ class ORIGIN(object):
         if os.path.isfile('%s/cube_std.fits'%folder):
             cube_std = Cube('%s/cube_std.fits'%folder)
         else:
-            cube_faint = None            
+            cube_std = None            
         if os.path.isfile('%s/cube_faint.fits'%folder):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
@@ -595,7 +595,7 @@ class ORIGIN(object):
         if self.nbkeep is not None:
             np.savetxt('%s/nbkeep.txt'%path2, self.nbkeep)
         if self.cube_std is not None:
-            self.cube_std.write('%s/cube_faint.fits'%path2)            
+            self.cube_std.write('%s/cube_std.fits'%path2)            
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
         if self.cube_cont is not None:
@@ -645,8 +645,8 @@ class ORIGIN(object):
         
         
 
-    def step00_init_calibrator(self,x='',y='',z='',amp='',profil='',\
-                              Cat_cal='',random='',save='False',\
+    def init_calibrator(self,x=None, y=None, z=None, amp=None ,profil=None,\
+                              Cat_cal=None,random=0, save=False,\
                               name='cat_cal.fits'):
         
         """ Initialise calibrators and create catalogue
@@ -699,9 +699,9 @@ class ORIGIN(object):
                 Cat_cal = self.Cat_calibrator
             except:
                 self._log_stdout.info('create calibrators catalogue first')
-            
-        if Cat_cal: 
-            self._log_stdout.info('update calibrators catalogue')            
+        else:    
+            if Cat_cal is not None: 
+                self._log_stdout.info('update calibrators catalogue')            
         if random:
             self._log_stdout.info('add %d random calibrators'%random)
         else:
@@ -716,7 +716,7 @@ class ORIGIN(object):
             self._log_stdout.info('Catalogue saved in file: %s'%name)  
         
  
-    def step00_add_calibrator(self, name=''):
+    def add_calibrator(self, name=''):
         """ Initialise calibrators and create catalogue
         
         Parameters
@@ -746,8 +746,8 @@ class ORIGIN(object):
         
         Parameters
         ----------
-        expmap      : array 
-                      Exposure MAP 
+        expmap      : string 
+                      Exposure MAP filename
                       
         order       : integer
                       The number of atom to keep for the dct decomposition
@@ -764,16 +764,17 @@ class ORIGIN(object):
         self._log_file.info('00 - Preprocessing, dct order=%d'%dct_order)
         self._log_stdout.info('Step 00 - DCT computation')   
         self._log_stdout.info('reweighted data')
-        weighted_cube_raw = self.cube_raw * np.sqrt(expmap)
+        expmap_data = Cube(expmap)._data
+        weighted_cube_raw = self.cube_raw * np.sqrt(expmap_data)
         self._log_stdout.info('Compute the DCT residual')
-        faint_dct = dct_residual(weighted_cube_raw,dct_order)
+        faint_dct = dct_residual(weighted_cube_raw, dct_order)
         self._log_stdout.info('Standard data')
         
         # compute standardized data
         cube_std, var = Compute_Standardized_data(faint_dct)
         
         self._log_stdout.info('self.var is changed for the TGLR')           
-        self.var = var/expmap
+        self.var = var/expmap_data
         
         self._log_stdout.info('Save the std signal in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
@@ -953,7 +954,7 @@ class ORIGIN(object):
                        mask=np.ma.nomask, dtype=int)
         self._log_file.info('Done')
 
-    def step03_compute_pvalues(self, threshold=8, sky=True):
+    def step03_compute_pvalues(self, threshold=8, sky=False):
         """Loop on each zone of self.cube_correl and compute for each zone:
 
         - the p-values associated to the T_GLR values,
@@ -1142,7 +1143,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T2')
         self._log_file.info('06 Done')
 
-    def step07_compute_spectra(self, T=2, grid_dxy=0, grid_dz=0):
+    def step07_compute_spectra(self, T=0, grid_dxy=0, grid_dz=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1150,7 +1151,8 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        T          : 1 or 2
+        T          : 0 or 1 or 2
+                     if T=0, self.Cat0 is used as input
                      if T=1, self.Cat1_T1 is used as input
                      if T=2, self.Cat1_T2 is used as input
         grid_dxy   : integer
@@ -1173,7 +1175,13 @@ class ORIGIN(object):
         self.param['NBtest'] = 'T%d'%T
         self.param['grid_dxy'] = grid_dxy
         self.param['grid_dz'] = grid_dz
-        if T==1:
+        if T==0:
+            Cat1_T = self.Cat0
+            t = Column(np.ones(len(Cat1_T))*-1000, name='T1')
+            Cat1_T.add_column(t)
+            t = Column(np.ones(len(Cat1_T))*-1000, name='T2')
+            Cat1_T.add_column(t)
+        elif T==1:
             Cat1_T = self.Cat1_T1
         elif T==2:
             Cat1_T = self.Cat1_T2
