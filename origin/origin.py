@@ -42,7 +42,7 @@ from .lib_origin import Spatial_Segmentation, \
     dct_residual, Compute_Standardized_data, O2test,\
     Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
     
-__version__ ='1.0'
+__version__ ='beta2'
 
 
 class ORIGIN(object):
