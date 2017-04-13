@@ -246,8 +246,6 @@ class ORIGIN(object):
                     self.FWHM_PSF = []
                     for i in range(0, nfields):
                         # Normalization 
-                        PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
-                                                             np.newaxis]
                         self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))\
                                                     [:, np.newaxis,np.newaxis])
                         # mean of the fwhm of the FSF in pixel
@@ -256,18 +254,7 @@ class ORIGIN(object):
                     # weighted field map
                     self.wfields = fmap.compute_weights()
             else:
-                self.param['PSF'] = 'MOFFAT1'
-                FSF_model = FSF('MOFFAT1')
-                beta = 2.6
-                a = 0.97
-                b = -4.4e-5
-                PSF, fwhm_pix, fwhm_arcsec = \
-                    FSF_model.get_FSF_cube(cub, Nfsf, beta=beta, a=a, b=b)
-                # Normalization
-                self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
-                                                                 np.newaxis]
-                # mean of the fwhm of the FSF in pixel
-                self.FWHM_PSF = np.mean(fwhm_pix)
+                raise IOError('PSF are not described in the FITS header of the cube')
 
         else:
             self.param['PSF'] = PSF
@@ -815,6 +802,10 @@ class ORIGIN(object):
                      (representing the continuum)
         """
         self._log_file.info('01 - greedy PCA computation:')
+        
+        if self.cube_std is None:
+            raise IOError('Run the step 00 to initialize self.cube_std')
+        
         self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
         self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
         self.param['Noise_population'] = Noise_population
