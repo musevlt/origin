@@ -14,7 +14,7 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 from __future__ import absolute_import, division
 
 from astropy.io import fits
-from astropy.table import Table, Column
+from astropy.table import Table
 import astropy.units as u
 import logging
 import matplotlib.pyplot as plt
@@ -156,7 +156,7 @@ class ORIGIN(object):
     
     def __init__(self, path, name, filename, NbSubcube, profiles,
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
-                 cube_profile, cube_pval_correl, cube_pval_channel,
+                 maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
                  Cat3, Cat4, param, eig_val, nbkeep, cube_std):
         #loggers
@@ -314,6 +314,7 @@ class ORIGIN(object):
         # step2
         self.cube_correl = cube_correl
         self.cube_profile = cube_profile
+        self.maxmap = maxmap
         
         # step3
         self.cube_pval_correl = cube_pval_correl
@@ -376,7 +377,8 @@ class ORIGIN(object):
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
-                   cube_cont=None, cube_correl=None, cube_profile=None,
+                   cube_cont=None, cube_correl=None, maxmap=None,
+                   cube_profile=None,
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
@@ -443,6 +445,10 @@ class ORIGIN(object):
             cube_correl = Cube('%s/cube_correl.fits'%folder)
         else:
             cube_correl = None
+        if os.path.isfile('%s/maxmap.fits'%folder):
+            maxmap = Image('%s/maxmap.fits'%folder)
+        else:
+            maxmap = None
         if os.path.isfile('%s/cube_profile.fits'%folder):
             cube_profile = Cube('%s/cube_profile.fits'%folder)
         else:
@@ -511,7 +517,8 @@ class ORIGIN(object):
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    intx=intx, inty=inty, cube_std=cube_std,
                    cube_faint=cube_faint, cube_cont=cube_cont,
-                   cube_correl=cube_correl, cube_profile=cube_profile,
+                   cube_correl=cube_correl, maxmap=maxmap,
+                   cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
                    cube_pval_channel=cube_pval_channel,
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
@@ -582,6 +589,8 @@ class ORIGIN(object):
             self.cube_correl.write('%s/cube_correl.fits'%path2)
         if self.cube_profile is not None:
             self.cube_profile.write('%s/cube_profile.fits'%path2)
+        if self.maxmap is not None:
+            self.maxmap.write('%s/maxmap.fits'%path2)
         # step3
         if self.cube_pval_correl is not None:
             self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
@@ -909,6 +918,8 @@ class ORIGIN(object):
                             Cube of T_GLR values
         self.cube_profile : `~mpdaf.obj.Cube` (type int)
                              Number of the profile associated to the T_GLR
+        self.maxmap       : `~mpdaf.obj.Image`
+                             Map of maxima along the wavelength axis
         """
         self._log_file.info('02 GLR test')
         self._log_stdout.info('Step 02 - GLR test')
@@ -926,6 +937,10 @@ class ORIGIN(object):
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
+        self._log_stdout.info('Save the map of maxima in self.maxmap')              
+        carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
+        self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)               
+                       
         self._log_file.info('Done')
 
     def step03_compute_pvalues(self, threshold=8, sky=False):
@@ -1442,9 +1457,6 @@ class ORIGIN(object):
             fwhm = self.FWHM_PSF
         else:
             fwhm = np.max(np.array(self.FWHM_PSF))
-            
-        carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
-        carte_2D_correl_ = Image(data=carte_2D_correl, wcs=self.wcs)
 
         if ax is None:
             ax = plt.gca()
@@ -1455,7 +1467,7 @@ class ORIGIN(object):
                 c = plt.Circle((px, py), np.round(fwhm / 2), color='k',
                                fill=False)
                 ax.add_artist(c)
-        carte_2D_correl_.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
+        self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
         
     def info(self):
         """ plot information
