@@ -205,7 +205,6 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
     with ProgressBar(NbSubcube**2) as bar:
         for numy in range(NbSubcube):
             for numx in range(NbSubcube):
-                bar.update()
                 # limits of each spatial zone
                 x1 = intx[numx]
                 x2 = intx[numx + 1]
@@ -216,6 +215,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
                 # greedy PCA on each subcube
                 cube_faint[:, y1:y2, x1:x2] = Compute_GreedyPCA( cube_temp, 
                           test_fun, Noise_population, threshold_test)
+                bar.update()
                 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_faint
@@ -276,7 +276,8 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
 
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
-    """       
+    """   
+    logger = logging.getLogger('origin')
     faint = cube_in.copy()
     nl,ny,nx = cube_in.shape
     # greedy loop based on test
@@ -296,6 +297,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
         # nuisance part
         py,px = np.where(test>threshold_test)
  
+        logger.debug('pixels numbers:%d/%d', len(py), nx*ny)
         if len(py)==0:
             break    
         # cube segmentation 
