@@ -158,7 +158,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep, cube_std):
+                 Cat3, Cat4, param, eig_val, nbkeep, cube_std, expmap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -191,6 +191,11 @@ class ORIGIN(object):
         # MUSE data cube
         self.param['cubename'] = filename
         cub = Cube(filename)
+        # exposures map
+        self.param['expmap'] = expmap
+        self.expmap = Cube(expmap)._data
+        if not np.array_equal(cub.shape, self.expmap.shape):
+            raise ValueError('cube and expmap with a different shape')
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
         # variance - set to Inf the Nan
@@ -331,7 +336,7 @@ class ORIGIN(object):
         self._log_file.info('00 Done')
         
     @classmethod
-    def init(cls, cube, NbSubcube, profiles=None,
+    def init(cls, cube, expmap, NbSubcube, profiles=None,
                  PSF=None, FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
@@ -346,6 +351,8 @@ class ORIGIN(object):
         ----------
         cube        : string
                       Cube FITS file name
+        expmap      : string
+                      Exposures map FITS file name
         NbSubcube   : integer
                       Number of sub-cubes for the spatial segmentation
         profiles    : string
@@ -369,7 +376,8 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None, cube_std=None)
+                   param=None, eig_val=None, nbkeep=None, cube_std=None,
+                   expmap=expmap)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -511,7 +519,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep)
+                   eig_val=eig_val, nbkeep=nbkeep, expmap=param['expmap'])
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -714,13 +722,11 @@ class ORIGIN(object):
         self.cube_raw = add_calibrator(self.Cat_calibrator, 
                                        self.cube_raw, self.PSF, self.profiles)        
         
-    def step00_preprocessing(self, expmap, dct_order=10):
+    def step00_preprocessing(self, dct_order=10):
         """ Preprocessing of data, dct, standardization and noise compensation         
         
         Parameters
         ----------
-        expmap      : string 
-                      Exposure MAP filename
                       
         order       : integer
                       The number of atom to keep for the dct decomposition
@@ -737,8 +743,7 @@ class ORIGIN(object):
         self._log_file.info('00 - Preprocessing, dct order=%d'%dct_order)
         self._log_stdout.info('Step 00 - DCT computation')   
         self._log_stdout.info('reweighted data')
-        expmap_data = Cube(expmap)._data
-        weighted_cube_raw = self.cube_raw * np.sqrt(expmap_data)
+        weighted_cube_raw = self.cube_raw * np.sqrt(self.expmap)
         self._log_stdout.info('Compute the DCT residual')
         faint_dct = dct_residual(weighted_cube_raw, dct_order)
         self._log_stdout.info('Standard data')
@@ -747,7 +752,7 @@ class ORIGIN(object):
         cube_std, var = Compute_Standardized_data(faint_dct)
         
         self._log_stdout.info('self.var is changed for the TGLR')           
-        self.var = var/expmap_data
+        self.var = var/self.expmap
         
         self._log_stdout.info('Save the std signal in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
