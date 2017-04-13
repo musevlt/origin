@@ -261,7 +261,7 @@ class ORIGIN(object):
                 else: # mosaic: one FSF cube per field
                     self.PSF = []
                     self.FWHM_PSF = []
-                    for i in range(1, nfields+1):
+                    for i in range(0, nfields):
                         # Normalization 
                         PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
                                                              np.newaxis]
