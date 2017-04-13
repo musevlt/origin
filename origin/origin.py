@@ -85,18 +85,6 @@ class ORIGIN(object):
                              Spectral coordinates.
         NbSubcube          : integer
                              Number of sub-cubes for the spatial segmentation 
-        Edge_xmin          : int
-                             Minimum limits along the x-axis in pixel
-                             of the data cube taken to compute p-values
-        Edge_xmax          : int
-                             Maximum limits along the x-axis in pixel
-                             of the data cube taken to compute p-values
-        Edge_ymin          : int
-                             Minimum limits along the y-axis in pixel
-                             of the data cube taken to compute p-values
-        Edge_ymax          : int
-                             Maximum limits along the y-axis in pixel
-                             of the data cube taken to compute p-values
         profiles           : list of array
                              List of spectral profiles to test
         FWHM_profiles      : list
@@ -166,7 +154,7 @@ class ORIGIN(object):
                              Catalog returned by step09_spectral_merging.
     """
     
-    def __init__(self, path, name, filename, NbSubcube, margins, profiles,
+    def __init__(self, path, name, filename, NbSubcube, profiles,
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
@@ -217,12 +205,7 @@ class ORIGIN(object):
         
         # ORIGIN parameters
         self.param['nbsubcube'] = NbSubcube
-        self.param['margin'] = margins
         self.NbSubcube = NbSubcube
-        self.Edge_xmin = margins[2]
-        self.Edge_xmax = self.Nx - margins[3]
-        self.Edge_ymin = margins[0]
-        self.Edge_ymax = self.Ny - margins[1]
         
         # List of spectral profile
         self.param['profiles'] = profiles
@@ -360,7 +343,7 @@ class ORIGIN(object):
         self._log_file.info('00 Done')
         
     @classmethod
-    def init(cls, cube, NbSubcube, margins, profiles=None,
+    def init(cls, cube, NbSubcube, profiles=None,
                  PSF=None, FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
@@ -377,12 +360,6 @@ class ORIGIN(object):
                       Cube FITS file name
         NbSubcube   : integer
                       Number of sub-cubes for the spatial segmentation
-        margin      : (int, int, int, int)
-                      Size in pixels of the margins
-                      at the bottom, top, left and rigth  of the data cube.
-                      (ymin, Ny-ymax, xmin, Nx-xmax)
-                      Pixels in margins will not be taken
-                      into account to compute p-values.
         profiles    : string
                       FITS of spectral profiles
                       If None, a default dictionary of 20 profiles is used.
@@ -397,7 +374,7 @@ class ORIGIN(object):
                       Name of this session and basename for the sources.
         """
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
-                   margins=margins, profiles=profiles, PSF=PSF,
+                   profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
                    cube_cont=None, cube_correl=None, cube_profile=None,
                    cube_pval_correl=None, cube_pval_channel=None,
@@ -530,7 +507,7 @@ class ORIGIN(object):
             name = newname
                 
         return cls(path=path,  name=name, filename=param['cubename'],
-                   NbSubcube=NbSubcube, margins=param['margin'],
+                   NbSubcube=NbSubcube,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    intx=intx, inty=inty, cube_std=cube_std,
                    cube_faint=cube_faint, cube_cont=cube_cont,
@@ -891,10 +868,7 @@ class ORIGIN(object):
         A, V, self.eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
                                                         cube_std,
                                                         self.intx, self.inty,
-                                                        self.Edge_xmin,
-                                                        self.Edge_xmax,
-                                                        self.Edge_ymin,
-                                                        self.Edge_ymax)
+                                                        0, 0, 0, 0)
 
         # Number of eigenvectors for each zone
         # Parameter set to 1 if we want to plot the results
@@ -992,10 +966,6 @@ class ORIGIN(object):
         cube_pval_correl = Compute_pval_correl_zone(self.cube_correl._data,
                                                     self.intx, self.inty,
                                                     self.NbSubcube,
-                                                    self.Edge_xmin,
-                                                    self.Edge_xmax,
-                                                    self.Edge_ymin,
-                                                    self.Edge_ymax,
                                                     threshold)
         self._log_stdout.info('Save the result in self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, wave=self.wave,

@@ -19,7 +19,7 @@ def test_origin():
     # Number of subcubes for the spatial segmentation
     NbSubcube = 1
 
-    my_origin = ORIGIN.init(MINICUBE, NbSubcube, [2, 2, 1, 3], name='tmp')
+    my_origin = ORIGIN.init(MINICUBE, NbSubcube, name='tmp')
     my_origin.write()
 
 #    # Coefficient of determination for projection during PCA
@@ -90,9 +90,9 @@ def test_origin():
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
     nsources = my_origin.step10_write_sources(ncpu=1)
-    assert (nsources == 7) 
+    assert (nsources == 9) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 7)
+    assert (len(cat) == 9)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')

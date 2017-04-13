@@ -25,7 +25,7 @@ Usage
 
  > from origin import ORIGIN
  
- > my_origin = ORIGIN.init('cube.fits', NbSubcube, margins, name='tmp')
+ > my_origin = ORIGIN.init('cube.fits', NbSubcube, name='tmp')
  
  
 2- we run the different steps

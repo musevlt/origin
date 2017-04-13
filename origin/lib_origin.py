@@ -991,8 +991,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     return correl, profile
 
 
-def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
-                             Edge_xmax, Edge_ymin, Edge_ymax, threshold):
+def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, threshold):
     """Function to compute the p-values associated to the
     T_GLR values for each zone
 
@@ -1006,18 +1005,6 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
                 limits in pixels of the rows for each zone
     NbSubcube : int
                 Number of subcube in the spatial segementation
-    Edge_xmin : int
-                Minimum limits along the x-axis in pixel
-                of the data taken to compute p-values
-    Edge_xmax : int
-                Maximum limits along the x-axis in pixel
-                of the data taken to compute p-values
-    Edge_ymin : int
-                Minimum limits along the y-axis in pixel
-                of the data taken to compute p-values
-    Edge_ymax : int
-                Maximum limits along the y-axis in pixel
-                of the data taken to compute p-values
     threshold : float
                 The threshold applied to the p-values cube
 
@@ -1043,12 +1030,6 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, Edge_xmin,
             y2 = inty[numy]
             y1 = inty[numy + 1]
 
-            # Edges are excluded for computing parameters of the
-            # distribution of the T_GLR (mean and std)
-            x1 = max(x1, Edge_xmin + 1)
-            x2 = min(x2, Edge_xmax)
-            y1 = max(y1, Edge_ymin + 1)
-            y2 = min(y2, Edge_ymax)
             correl_temp_edge = correl[:, y1:y2, x1:x2]
 
             # Cube of pvalues for each zone
