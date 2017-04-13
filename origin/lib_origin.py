@@ -277,43 +277,53 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """   
-    logger = logging.getLogger('origin')
     faint = cube_in.copy()
     nl,ny,nx = cube_in.shape
-    # greedy loop based on test
-    while True:
-        # test 
-        test = test_fun(faint)
-        # vector data
-        test_v = np.ravel(test)
-        bckv = np.reshape(faint,(nl,ny*nx))        
-        nind = np.where(test_v<=threshold_test)[0]
-        sortind = np.argsort(test_v[nind])
-        # at least one spectra is used to perform the test
-        l = 1 + int( len(nind) / Noise_population)
-        # background estimation
-        b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
-
-        # nuisance part
-        py,px = np.where(test>threshold_test)
- 
-        logger.debug('pixels numbers:%d/%d', len(py), nx*ny)
-        if len(py)==0:
-            break    
-        # cube segmentation 
-        x_red = faint[:,py,px]
-
-        # orthogonal projection with background
-        x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) / np.sum(b**2)
-        
-        # sparse svd if nb spectrum > 1 else normal svd
-        if x_red.shape[1]==1:        
-            U,s,V = np.linalg.svd( x_red , full_matrices=False)
-        else:
-            U,s,V = svds( x_red , k=1)            
-        # orthogonal projection
-        xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
-        faint -= np.reshape(xest,(nl,ny,nx))
+    
+    test = test_fun(faint)
+    # nuisance part
+    py,px = np.where(test>threshold_test)
+    npix = len(py)
+    
+    with ProgressBar(npix) as bar:
+        # greedy loop based on test
+        while True:
+            
+            if len(py)==0:
+                break 
+            
+            # vector data
+            test_v = np.ravel(test)
+            bckv = np.reshape(faint,(nl,ny*nx))        
+            nind = np.where(test_v<=threshold_test)[0]
+            sortind = np.argsort(test_v[nind])
+            # at least one spectra is used to perform the test
+            l = 1 + int( len(nind) / Noise_population)
+            # background estimation
+            b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
+    
+               
+            # cube segmentation 
+            x_red = faint[:,py,px]
+    
+            # orthogonal projection with background
+            x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) / np.sum(b**2)
+            
+            # sparse svd if nb spectrum > 1 else normal svd
+            if x_red.shape[1]==1:        
+                U,s,V = np.linalg.svd( x_red , full_matrices=False)
+            else:
+                U,s,V = svds( x_red , k=1)            
+            # orthogonal projection
+            xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
+            faint -= np.reshape(xest,(nl,ny,nx))
+            
+            # test 
+            test = test_fun(faint)
+            
+            # nuisance part
+            py,px = np.where(test>threshold_test)
+            bar.update(npix-len(py))
         
     return faint
 
