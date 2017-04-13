@@ -559,10 +559,10 @@ def Compute_PCA_SubCube(NbSubcube, cube_std, intx, inty, Edge_xmin, Edge_xmax,
                 cube_temp = cube_std[:, y1:y2, x1:x2]
 
                 # Edges are excluded for PCA computing
-                x1 = max(x1, Edge_xmin + 1)
-                x2 = min(x2, Edge_xmax)
-                y1 = max(y1, Edge_ymin + 1)
-                y2 = min(y2, Edge_ymax)
+#                x1 = max(x1, Edge_xmin + 1)
+#                x2 = min(x2, Edge_xmax)
+#                y1 = max(y1, Edge_ymin + 1)
+#                y2 = min(y2, Edge_ymax)
                 cube_temp_edge = cube_std[:, y1:y2, x1:x2]
 
                 # Dimensions of each subcube of each spatio-spectral zone
