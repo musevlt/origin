@@ -751,8 +751,8 @@ class ORIGIN(object):
         # compute standardized data
         cube_std, var = Compute_Standardized_data(faint_dct, self.expmap)
         
-        self._log_stdout.info('self.var is changed for the TGLR')           
-        self.var = var/self.expmap
+#        self._log_stdout.info('self.var is changed for the TGLR')           
+#        self.var = var/self.expmapX
         
         self._log_stdout.info('Save the std signal in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
@@ -921,9 +921,10 @@ class ORIGIN(object):
         self._log_stdout.info('Step 02 - GLR test')
         if self.cube_faint is None:
             raise IOError('Run the step 01 to initialize self.cube_faint')
-            
+
         # TGLR computing (normalized correlations)
-        correl, profile = Correlation_GLR_test(self.cube_faint._data, self.var,
+        correl, profile = Correlation_GLR_test(self.cube_faint._data, 
+                                               self.var/self.expmap,
                                                self.PSF, self.wfields,
                                                self.profiles)
                                                
