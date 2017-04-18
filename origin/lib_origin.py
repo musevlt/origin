@@ -27,7 +27,6 @@ Carole for more info at carole.clastres@univ-lyon1.fr
 
 lib_origin.py contains the methods that compose the ORIGIN software
 """
-
 from __future__ import absolute_import, division
 
 import astropy.units as u
@@ -136,7 +135,7 @@ def dct_residual(w_raw, order):
     return Faint
 
 
-def Compute_Standardized_data(cube_dct):
+def Compute_Standardized_data(cube_dct,expmap):
     """Function to compute the standardized data.  
     
     Parameters
@@ -160,12 +159,17 @@ def Compute_Standardized_data(cube_dct):
     """        
     nl,ny,nx = cube_dct.shape
     
-    mean_lambda = np.mean(cube_dct, axis=(1,2))
-    var_lambda = np.var(cube_dct, axis=(1,2))
+    index = (expmap==0)    
+    cube_dct[index] = np.nan
+    
+    mean_lambda = np.nanmean(cube_dct, axis=(1,2))
+    var_lambda = np.nanvar(cube_dct, axis=(1,2))
     
     VAR = var_lambda[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))
+    VAR[index] = np.inf
     STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) \
              / np.sqrt(var_lambda[:, np.newaxis, np.newaxis])
+    STD[index] = 0
 
     return STD, VAR
 
@@ -324,7 +328,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             # nuisance part
             py,px = np.where(test>threshold_test)
             bar.update(npix-len(py))
-        
+
     return faint
 
 

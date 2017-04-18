@@ -749,7 +749,7 @@ class ORIGIN(object):
         self._log_stdout.info('Standard data')
         
         # compute standardized data
-        cube_std, var = Compute_Standardized_data(faint_dct)
+        cube_std, var = Compute_Standardized_data(faint_dct, self.expmap)
         
         self._log_stdout.info('self.var is changed for the TGLR')           
         self.var = var/self.expmap
@@ -928,11 +928,18 @@ class ORIGIN(object):
                                                self.profiles)
                                                
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
+        
+        correl = correl * ( self.expmap > 0 )
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
+        
+        profile = profile * ( self.expmap > 0 )        
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
+        self._log_stdout.info('Mask self.cube_profile and self.cube_correl by self.expmap > 0')                      
+        
+        
         self._log_stdout.info('Save the map of maxima in self.maxmap')              
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)               
@@ -991,7 +998,13 @@ class ORIGIN(object):
             self.param['meanestPvalChan'] = np.asscalar(mean_est)
         except:
             mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
-            self.param['meanestPvalChan'] = mean_est.tolist()
+            
+            # LAURE will make it better: 
+            if type(mean_est)==list:
+                self.param['meanestPvalChan'] = mean_est
+            else:            
+                self.param['meanestPvalChan'] = mean_est.tolist()
+            
             
         if not sky: 
             cube_pval_channel = Compute_pval_channel_Zone(cube_pval_correl,
