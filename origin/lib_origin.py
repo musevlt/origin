@@ -29,6 +29,10 @@ lib_origin.py contains the methods that compose the ORIGIN software
 """
 from __future__ import absolute_import, division
 
+#from scipy.io import savemat
+#import matplotlib.pyplot as plt
+#import os 
+
 import astropy.units as u
 import logging
 import numpy as np
@@ -289,6 +293,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
     py,px = np.where(test>threshold_test)
     npix = len(py)
     
+    nN=0
     with ProgressBar(npix) as bar:
         # greedy loop based on test
         while True:
@@ -317,7 +322,17 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             if x_red.shape[1]==1:        
                 U,s,V = np.linalg.svd( x_red , full_matrices=False)
             else:
-                U,s,V = svds( x_red , k=1)            
+                U,s,V = svds( x_red , k=1)         
+                
+#            nN+=1
+#            d = {}
+#            d['spectre_'+str(nN)]=np.ravel(U)
+#            savemat('/Users/antonyschutz/Desktop/spectre/spectre_'+str(nN)+'.mat',d)
+#            fig = plt.figure()
+#            plt.plot(U)
+#            fig.savefig(os.path.join('/Users/antonyschutz/Desktop/spectre',str(nN)+'.png'),format="png")  
+#            plt.close(fig)
+            
             # orthogonal projection
             xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
             faint -= np.reshape(xest,(nl,ny,nx))
@@ -433,7 +448,7 @@ def init_calibrators(nl, ny, nx, nprofil, x, y, z, amp, profil, random, \
     return Cat_ref    
 
 
-def add_calibrator(Cat_cal, raw, PSF, profiles):
+def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     """Function to add calibrator to raw data
     
 
@@ -464,39 +479,50 @@ def add_calibrator(Cat_cal, raw, PSF, profiles):
     t0 = time.time()
     
     nl,ny,nx = raw.shape
+    print(nl,ny,nx)
     Cube_out = raw.copy()
           
     x = Cat_cal['x']
     y = Cat_cal['y']
-    z = Cat_cal['Z']    
+    z = Cat_cal['Z'] 
+    print(z[0],y[0],x[0])    
     amp = Cat_cal['amp']
     profil = Cat_cal['profil']        
-    
-#    if type(x) != int :
-    for n in range(len(x)):
+
+
+    if type(x) != int :
+        for n in range(len(x)):
+            Cube_test = np.zeros((nl,ny,nx))
+            Cube_test[z[n],y[n],x[n]] = 1
+            pp = profiles[profil[n]]    
+            Cube_test[:, y[n],x[n]] = \
+            signal.fftconvolve(Cube_test[:,y[n],x[n]], pp, mode='same') 
+            fmin = np.maximum(0, z[n]-2*len(pp))
+            fmax = np.minimum(nl,z[n]+2*len(pp))   
+            for psf in range(len(PSF)):
+                if np.sum(weights[psf])>0:
+
+#                    plt.subplot(121)
+#                    plt.imshow(weights[psf],origin='lower')
+#                    plt.subplot(122)
+#                    plt.imshow(np.sum(Cube_test,axis=0),origin='lower',cmap='jet')
+#                    plt.pause(2)                    
+
+                    for i in range(fmin,fmax):                                                          
+                        Cube_test[i, :, :] += signal.fftconvolve(weights[psf]*Cube_test[i, :, :],PSF[psf][i, :, :], mode='same') 
+            Cube_test = Cube_test / Cube_test.max() * amp[n]
+            Cube_out += Cube_test
+    else: 
         Cube_test = np.zeros((nl,ny,nx))
-        Cube_test[z[n],y[n],x[n]] = 1
-        pp = profiles[profil[n]]    
-        Cube_test[:, y[n],x[n]] = \
-        signal.fftconvolve(Cube_test[:,y[n],x[n]], pp, mode='same') 
-        fmin = np.maximum(0, z[n]-2*len(pp))
-        fmax = np.minimum(nl,z[n]+2*len(pp))            
-        for i in range(fmin,fmax):                
+        Cube_test[z,y,x] = 1
+        pp = profiles[profil]
+        Cube_test[:, y,x] = \
+        signal.fftconvolve(Cube_test[:,y,x], pp, mode='same') 
+        for i in range(z-2*len(pp),z+2*len(pp)):                
             Cube_test[i, :, :] = signal.fftconvolve(Cube_test[i, :, :],
                                 PSF[i, :, :], mode='same') 
-        Cube_test = Cube_test / Cube_test.max() * amp[n]
+        Cube_test = Cube_test / Cube_test.max() * amp
         Cube_out += Cube_test
-#    else: 
-#        Cube_test = np.zeros((nl,ny,nx))
-#        Cube_test[z,y,x] = 1
-#        pp = profiles[profilid]
-#        Cube_test[:, y,x] = \
-#        signal.fftconvolve(Cube_test[:,y,x], pp, mode='same') 
-#        for i in range(z-2*len(pp),z+2*len(pp)):                
-#            Cube_test[i, :, :] = signal.fftconvolve(Cube_test[i, :, :],
-#                                PSF_Moffat[i, :, :], mode='same') 
-#        Cube_test = Cube_test / Cube_test.max() * amp
-#        Cube_out += Cube_test
       
                 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
@@ -1005,7 +1031,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     return correl, profile
 
 
-def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, threshold):
+def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, expmap, threshold):
     """Function to compute the p-values associated to the
     T_GLR values for each zone
 
@@ -1019,6 +1045,8 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, threshold):
                 limits in pixels of the rows for each zone
     NbSubcube : int
                 Number of subcube in the spatial segementation
+    expmap    : array
+                cube of exposure map
     threshold : float
                 The threshold applied to the p-values cube
 
@@ -1045,9 +1073,10 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, threshold):
             y1 = inty[numy + 1]
 
             correl_temp_edge = correl[:, y1:y2, x1:x2]
-
+            expmap_temp_edge = expmap[:, y1:y2, x1:x2]
             # Cube of pvalues for each zone
-            cube_pval_correl_temp = Compute_pval_correl(correl_temp_edge)
+            cube_pval_correl_temp = Compute_pval_correl(correl_temp_edge, 
+                                                        expmap_temp_edge)
             cube_pval_correl[:, y1:y2, x1:x2] = cube_pval_correl_temp
 
     # Threshold the pvalues
@@ -1058,13 +1087,14 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, threshold):
     return cube_pval_correl
 
 
-def Compute_pval_correl(correl_temp_edge):
+def Compute_pval_correl(correl_temp_edge, expmap_temp_edge):
     """Function to compute distribution of the T_GLR values with
     hypothesis : T_GLR are distributed according a normal distribution
 
     Parameters
     ----------
     correl_temp_edge : T_GLR values with edges excluded
+    expmap_temp_edge : Exposure map with edges excluded
 
     Returns
     -------
@@ -1074,8 +1104,9 @@ def Compute_pval_correl(correl_temp_edge):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    moy_est = np.mean(correl_temp_edge)
-    std_est = np.std(correl_temp_edge)
+    correl_temp_edge_red = correl_temp_edge[expmap_temp_edge>0]
+    moy_est = np.mean(correl_temp_edge_red)
+    std_est = np.std(correl_temp_edge_red)
     # hypothesis : T_GLR are distributed according a normal distribution
     rv = stats.norm(loc=moy_est, scale=std_est)
     cube_pval_correl = 1 - rv.cdf(correl_temp_edge)

@@ -720,7 +720,8 @@ class ORIGIN(object):
             self._log_stdout.info('Catalogue from self.Cat_calibrator')            
 
         self.cube_raw = add_calibrator(self.Cat_calibrator, 
-                                       self.cube_raw, self.PSF, self.profiles)        
+                                       self.cube_raw, self.PSF, self.profiles,
+                                       self.wfields, self.var)        
         
     def step00_preprocessing(self, dct_order=10):
         """ Preprocessing of data, dct, standardization and noise compensation         
@@ -984,7 +985,8 @@ class ORIGIN(object):
 
         cube_pval_correl = Compute_pval_correl_zone(self.cube_correl._data,
                                                     self.intx, self.inty,
-                                                    self.NbSubcube,
+                                                    self.NbSubcube, 
+                                                    self.expmap,
                                                     threshold)
         self._log_stdout.info('Save the result in self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, wave=self.wave,
