@@ -1031,7 +1031,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     return correl, profile
 
 
-def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, expmap, threshold):
+def Compute_pval_correl_zone(correl, mask, intx, inty, NbSubcube, threshold):
     """Function to compute the p-values associated to the
     T_GLR values for each zone
 
@@ -1039,14 +1039,14 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, expmap, threshold):
     ----------
     correl    : array
                 cube of T_GLR values (correlations)
+    mask      : array
+                boolean cube (true if pixel is masked)
     intx      : array
                 limits in pixels of the columns for each zone
     inty      : array
                 limits in pixels of the rows for each zone
     NbSubcube : int
                 Number of subcube in the spatial segementation
-    expmap    : array
-                cube of exposure map
     threshold : float
                 The threshold applied to the p-values cube
 
@@ -1073,10 +1073,10 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, expmap, threshold):
             y1 = inty[numy + 1]
 
             correl_temp_edge = correl[:, y1:y2, x1:x2]
-            expmap_temp_edge = expmap[:, y1:y2, x1:x2]
+            mask_temp_edge = mask[:, y1:y2, x1:x2]
             # Cube of pvalues for each zone
-            cube_pval_correl_temp = Compute_pval_correl(correl_temp_edge, 
-                                                        expmap_temp_edge)
+            cube_pval_correl_temp = Compute_pval_correl(correl_temp_edge,
+                                                        mask_temp_edge)
             cube_pval_correl[:, y1:y2, x1:x2] = cube_pval_correl_temp
 
     # Threshold the pvalues
@@ -1087,14 +1087,14 @@ def Compute_pval_correl_zone(correl, intx, inty, NbSubcube, expmap, threshold):
     return cube_pval_correl
 
 
-def Compute_pval_correl(correl_temp_edge, expmap_temp_edge):
+def Compute_pval_correl(correl_temp_edge, mask_temp_edge):
     """Function to compute distribution of the T_GLR values with
     hypothesis : T_GLR are distributed according a normal distribution
 
     Parameters
     ----------
     correl_temp_edge : T_GLR values with edges excluded
-    expmap_temp_edge : Exposure map with edges excluded
+    mask_temp_edge   : mask array (true if pixel is masked)
 
     Returns
     -------
@@ -1104,7 +1104,7 @@ def Compute_pval_correl(correl_temp_edge, expmap_temp_edge):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    correl_temp_edge_red = correl_temp_edge[expmap_temp_edge>0]
+    correl_temp_edge_red = correl_temp_edge[~mask_temp_edge]
     moy_est = np.mean(correl_temp_edge_red)
     std_est = np.std(correl_temp_edge_red)
     # hypothesis : T_GLR are distributed according a normal distribution

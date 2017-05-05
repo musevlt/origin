@@ -27,7 +27,7 @@ import yaml
 
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
-from mpdaf.MUSE import FSF,FieldsMap, get_FSF_from_cube_keywords
+from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.sdetect import Catalog
 from mpdaf.tools import write_hdulist_to
 from .lib_origin import Spatial_Segmentation, \
@@ -158,7 +158,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep, cube_std, expmap):
+                 Cat3, Cat4, param, eig_val, nbkeep, cube_std):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -191,13 +191,10 @@ class ORIGIN(object):
         # MUSE data cube
         self.param['cubename'] = filename
         cub = Cube(filename)
-        # exposures map
-        self.param['expmap'] = expmap
-        self.expmap = Cube(expmap)._data
-        if not np.array_equal(cub.shape, self.expmap.shape):
-            raise ValueError('cube and expmap with a different shape')
+        
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
+        self.mask = cub.mask
         # variance - set to Inf the Nan
         self.var = cub.var
         self.var[np.isnan(self.var)] = np.inf
@@ -336,7 +333,7 @@ class ORIGIN(object):
         self._log_file.info('00 Done')
         
     @classmethod
-    def init(cls, cube, expmap, NbSubcube, profiles=None,
+    def init(cls, cube, NbSubcube, profiles=None,
                  PSF=None, FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
@@ -351,8 +348,6 @@ class ORIGIN(object):
         ----------
         cube        : string
                       Cube FITS file name
-        expmap      : string
-                      Exposures map FITS file name
         NbSubcube   : integer
                       Number of sub-cubes for the spatial segmentation
         profiles    : string
@@ -376,8 +371,7 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None, cube_std=None,
-                   expmap=expmap)
+                   param=None, eig_val=None, nbkeep=None, cube_std=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -519,7 +513,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep, expmap=param['expmap'])
+                   eig_val=eig_val, nbkeep=nbkeep)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -723,12 +717,13 @@ class ORIGIN(object):
                                        self.cube_raw, self.PSF, self.profiles,
                                        self.wfields, self.var)        
         
-    def step00_preprocessing(self, dct_order=10):
+    def step00_preprocessing(self, expmap, dct_order=10):
         """ Preprocessing of data, dct, standardization and noise compensation         
         
         Parameters
         ----------
-                      
+        expmap      : string
+                      Exposures map FITS file name
         order       : integer
                       The number of atom to keep for the dct decomposition
 
@@ -742,18 +737,25 @@ class ORIGIN(object):
         """        
         self.param['dct_order'] = dct_order
         self._log_file.info('00 - Preprocessing, dct order=%d'%dct_order)
+
+        # exposures map
+        self.param['expmap'] = expmap
+        expmap = Cube(expmap)._data
+        if not np.array_equal(self.cube_raw.shape, expmap.shape):
+            raise ValueError('cube and expmap with a different shape')
+        
         self._log_stdout.info('Step 00 - DCT computation')   
         self._log_stdout.info('reweighted data')
-        weighted_cube_raw = self.cube_raw * np.sqrt(self.expmap)
+        weighted_cube_raw = self.cube_raw * np.sqrt(expmap)
         self._log_stdout.info('Compute the DCT residual')
         faint_dct = dct_residual(weighted_cube_raw, dct_order)
         self._log_stdout.info('Standard data')
         
         # compute standardized data
-        cube_std, var = Compute_Standardized_data(faint_dct, self.expmap)
+        cube_std, var = Compute_Standardized_data(faint_dct, expmap)
         
-#        self._log_stdout.info('self.var is changed for the TGLR')           
-#        self.var = var/self.expmapX
+        self._log_stdout.info('self.var is changed for the TGLR')           
+        self.var = var/expmap
         
         self._log_stdout.info('Save the std signal in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
@@ -810,7 +812,11 @@ class ORIGIN(object):
         self._log_file.info('01 - greedy PCA computation:')
         
         if self.cube_std is None:
-            raise IOError('Run the step 00 to initialize self.cube_std')
+            # Weigthed data cube
+            cube_std = self.cube_raw / np.sqrt(self.var)
+        else:
+            cube_std = self.cube_std._data
+            #raise IOError('Run the step 00 to initialize self.cube_std')
         
         self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
         self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
@@ -819,7 +825,7 @@ class ORIGIN(object):
         self._log_stdout.info('Compute greedy PCA on each zone')   
         
         faint = Compute_GreedyPCA_SubCube(self.NbSubcube,
-                                          self.cube_std.data,
+                                          cube_std,
                                           self.intx, 
                                           self.inty,
                                           test_fun,
@@ -925,22 +931,21 @@ class ORIGIN(object):
 
         # TGLR computing (normalized correlations)
         correl, profile = Correlation_GLR_test(self.cube_faint._data, 
-                                               self.var/self.expmap,
+                                               self.var,
                                                self.PSF, self.wfields,
                                                self.profiles)
                                                
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
         
-        correl = correl * ( self.expmap > 0 )
+        correl = correl * ~self.mask
+        
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         
-        profile = profile * ( self.expmap > 0 )        
+        profile = profile * ~self.mask       
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
-        self._log_stdout.info('Mask self.cube_profile and self.cube_correl by self.expmap > 0')                      
-        
         
         self._log_stdout.info('Save the map of maxima in self.maxmap')              
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
@@ -984,9 +989,9 @@ class ORIGIN(object):
             raise IOError('Run the step 02 to initialize self.cube_correl')
 
         cube_pval_correl = Compute_pval_correl_zone(self.cube_correl._data,
+                                                    self.mask,
                                                     self.intx, self.inty,
-                                                    self.NbSubcube, 
-                                                    self.expmap,
+                                                    self.NbSubcube,
                                                     threshold)
         self._log_stdout.info('Save the result in self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, wave=self.wave,

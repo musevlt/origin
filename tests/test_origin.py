@@ -19,7 +19,7 @@ def test_origin():
     # Number of subcubes for the spatial segmentation
     NbSubcube = 1
 
-    my_origin = ORIGIN.init(MINICUBE, EXPMAP, NbSubcube, name='tmp')
+    my_origin = ORIGIN.init(MINICUBE, NbSubcube, name='tmp')
     my_origin.write()
 
 #    # Coefficient of determination for projection during PCA
@@ -30,7 +30,7 @@ def test_origin():
 #    my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step00_preprocessing()
+    my_origin.step00_preprocessing(EXPMAP)
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
