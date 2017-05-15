@@ -87,6 +87,38 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return inty, intx
 
+def apodPSF(mask,PSF):    
+    lengthwin = int( (PSF.shape[0])/2 )
+    nl,ny,nx = mask.shape    
+    Apodisation = np.zeros((nl,ny,nx))    
+    for n in range(nl):
+        mm = ~mask[n,:,:]
+        top = np.repeat(mm[0,:][:,np.newaxis],6,axis=1).T
+        bottom = np.repeat(mm[-1,:][:,np.newaxis],6,axis=1).T
+        tmp = np.vstack((top,mm,bottom))
+        top = np.repeat(tmp[:,0][:,np.newaxis],6,axis=1)
+        bottom = np.repeat(tmp[:,-1][:,np.newaxis],6,axis=1)
+        tmp = np.hstack((top,tmp,bottom))
+        convo = signal.fftconvolve(tmp,PSF,mode='same') 
+        Apodisation[n,:,:] = convo[lengthwin:-lengthwin,lengthwin:-lengthwin]*~mask[n,:,:]
+        
+    Apodisation /= Apodisation.max()     
+    return Apodisation
+
+def apodwin(lengthwin,mask ): 
+    nl,ny,nx = mask.shape
+    n = np.arange(-lengthwin+1,lengthwin)
+    xv, yv = np.meshgrid(n,n)
+    r = np.sqrt(xv**2 + yv**2)
+    w = .5 + .5*np.cos(2*r*np.pi / (2*lengthwin  -2))    
+    Apodisation = np.zeros((nl,ny,nx))    
+    for n in range(nl):
+        tmp = np.ones((ny+lengthwin*2,nx+lengthwin*2))    
+        tmp[lengthwin:-lengthwin,lengthwin:-lengthwin] = ~mask[n,:,:]
+        Apodisation[n,:,:] = signal.fftconvolve(tmp,w,mode='same')[lengthwin:-lengthwin,lengthwin:-lengthwin]*~mask[n,:,:]
+        
+    Apodisation /= Apodisation.max()     
+    return Apodisation
 
 def DCTMAT(dct_o):
     """Function to compute the DCT Matrix or order dct_o.  
@@ -139,7 +171,7 @@ def dct_residual(w_raw, order):
     return Faint
 
 
-def Compute_Standardized_data(cube_dct,expmap):
+def Compute_Standardized_data(cube_dct,expmap,mask,var):
     """Function to compute the standardized data.  
     
     Parameters
@@ -163,19 +195,22 @@ def Compute_Standardized_data(cube_dct,expmap):
     """        
     nl,ny,nx = cube_dct.shape
     
-    index = (expmap==0)    
-    cube_dct[index] = np.nan
+    cube_dct[mask] = np.nan
     
-    mean_lambda = np.nanmean(cube_dct, axis=(1,2))
-    var_lambda = np.nanvar(cube_dct, axis=(1,2))
-    
-    VAR = var_lambda[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))
-    VAR[index] = np.inf
-    STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) \
-             / np.sqrt(var_lambda[:, np.newaxis, np.newaxis])
-    STD[index] = 0
+    mean_lambda = np.nanmean(cube_dct, axis=(1,2)) 
+    mean_lambda = mean_lambda[:, np.newaxis, np.newaxis]* np.ones((nl,ny,nx))
+    if expmap is None:
+        print('expmap unknown')
+        var[mask] = np.inf
+    else:
+        var = np.nanvar(cube_dct, axis=(1,2))    
+        var = var[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))       
+        var[mask] = np.inf
+        
+    STD = (cube_dct - mean_lambda) / np.sqrt(var)        
+    STD[mask] = 0
 
-    return STD, VAR
+    return STD, var
 
 
 def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
@@ -276,7 +311,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
                             the fraction of spectra estimated as background
                             
     threshold_test      :   float
-                            the threshold of the test (default=1)                        
+                            the pfa of the test (default=.05)                        
     Returns
     -------
     faint    :  array 
@@ -284,16 +319,28 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
 
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
-    """   
+    """          
+    
     faint = cube_in.copy()
     nl,ny,nx = cube_in.shape
-    
     test = test_fun(faint)
+    
+    test_v = np.ravel(test)
+    c = test_v[test_v>0]     
+    val,bi = np.histogram(c,bins='fd',normed=True)
+    ind = np.argmax(val)
+    mod = bi[ind]
+    ind2 = np.argmin(( val[ind]/2 - val[:ind] )**2)
+    fwhm = mod - bi[ind2]
+    sigma = fwhm/np.sqrt(2*np.log(2))
+    
+    threshold_test = mod - sigma*stats.norm.ppf(threshold_test)
+    
     # nuisance part
     py,px = np.where(test>threshold_test)
+    
     npix = len(py)
     
-    nN=0
     with ProgressBar(npix) as bar:
         # greedy loop based on test
         while True:
@@ -303,6 +350,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             
             # vector data
             test_v = np.ravel(test)
+            test_v = test_v[test_v>0] 
             bckv = np.reshape(faint,(nl,ny*nx))        
             nind = np.where(test_v<=threshold_test)[0]
             sortind = np.argsort(test_v[nind])
@@ -310,13 +358,24 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             l = 1 + int( len(nind) / Noise_population)
             # background estimation
             b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
-    
-               
+                  
+#            plt.clf()
+#            plt.subplot(121)
+#            plt.plot(b)
+#            plt.title('bruit')
+#            plt.subplot(122)
+#            mm = np.zeros((ny,nx))
+#            mm[py,px]=1
+#            plt.imshow(mm,origin='lower',cmap='gray_r')   
+#            plt.title('masque')
+#            plt.pause(.1)
+
             # cube segmentation 
             x_red = faint[:,py,px]
     
             # orthogonal projection with background
-            x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) / np.sum(b**2)
+            x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) 
+            x_red /= np.nansum(b**2)
             
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1]==1:        
@@ -1028,9 +1087,11 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         GLR[:, :, :, 0] = correl
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+        
     return correl, profile
 
 
+    
 def Compute_pval_correl_zone(correl, mask, intx, inty, NbSubcube, threshold):
     """Function to compute the p-values associated to the
     T_GLR values for each zone
