@@ -158,7 +158,7 @@ class ORIGIN(object):
                  PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
                  maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep, cube_std):
+                 Cat3, Cat4, param, eig_val, nbkeep, cube_std, expmap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -194,8 +194,11 @@ class ORIGIN(object):
         
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
-        
-        self.mask = cub.mask # ------------------------------------ 2 erase
+        # exposures map
+        if expmap is None:
+            self.expmap = (~cub.mask).astype(np.int)
+        else:
+            self.expmap = Cube(expmap)._data
         
         # variance - set to Inf the Nan
         self.var = cub.var
@@ -373,7 +376,8 @@ class ORIGIN(object):
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None, cube_std=None)
+                   param=None, eig_val=None, nbkeep=None, cube_std=None,
+                   expmap=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -396,6 +400,11 @@ class ORIGIN(object):
         stream = open('%s/%s.yaml'%(folder, name), 'r')
         param = yaml.load(stream)
         stream.close()
+        
+        if 'expmap' in param:
+            expmap = param['expmap']
+        else:
+            expmap = None
 
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
@@ -515,7 +524,7 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep, expmap=param['expmap'])
+                   eig_val=eig_val, nbkeep=nbkeep, expmap=expmap)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -740,39 +749,31 @@ class ORIGIN(object):
         self.param['dct_order'] = dct_order
         self._log_file.info('00 - Preprocessing, dct order=%d'%dct_order)
 
+        newvar = False
         # exposures map
-        if expmap is None:
-            self.mask = np.abs(self.cube_raw)==0
-        else:
-            expmap = Cube(expmap)._data
-            if not np.array_equal(self.cube_raw.shape, expmap.shape):
-                raise ValueError('cube and expmap with a different shape')                          
-            self.mask = expmap==0
-            
-        self.mask[self.cube_raw==np.nan]=True            
-        self.param['expmap'] = expmap
-        
-
-
-        
-        self._log_stdout.info('Step 00 - DCT computation')  
         if expmap is not None:
-            self._log_stdout.info('reweighted data')
+            _expmap = Cube(expmap)._data
+            if not np.array_equal(self.cube_raw.shape, _expmap.shape):
+                raise ValueError('cube and expmap with a different shape')
+            _expmap[self.expmap==0] = 0                         
+            self.expmap = _expmap
+            self.param['expmap'] = expmap
+            newvar = True
+        
+        self._log_stdout.info('Step 00 - DCT computation')
+        self._log_stdout.info('reweighted data')
             
-        if expmap is None:
-            weighted_cube_raw = self.cube_raw 
-        else:            
-            weighted_cube_raw = self.cube_raw * np.sqrt(expmap)
+        weighted_cube_raw = self.cube_raw * np.sqrt(self.expmap)
             
         self._log_stdout.info('Compute the DCT residual')
         faint_dct = dct_residual(weighted_cube_raw, dct_order)
         self._log_stdout.info('Standard data')
         
         # compute standardized data
-        cube_std, var = Compute_Standardized_data(faint_dct, expmap, 
-                                                  self.mask, self.var)
+        cube_std, var = Compute_Standardized_data(faint_dct, self.expmap,
+                                                  self.var, newvar)
         
-        if expmap is not None:        
+        if newvar:        
             self._log_stdout.info('self.var is computed')   
             self.var = var
         
@@ -830,17 +831,18 @@ class ORIGIN(object):
         """
         self._log_file.info('01 - greedy PCA computation:')
         
-        cube_std = self.cube_std._data
+        if self.cube_std is None:
+            raise IOError('Run the step 00 to initialize self.cube_std')
         
         self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
         self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
         self.param['Noise_population'] = Noise_population
         self.param['threshold_test'] = threshold_test        
-        self._log_stdout.info('Compute greedy PCA on each zone')   
+        self._log_stdout.info('Compute greedy PCA on each zone')  
         
         
         faint = Compute_GreedyPCA_SubCube(self.NbSubcube,
-                                          cube_std,
+                                          self.cube_std._data,
                                           self.intx, 
                                           self.inty,
                                           test_fun,
@@ -849,7 +851,7 @@ class ORIGIN(object):
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
             pval = 1 - stats.chi2.cdf(continuum, 2) 
-            faint = pval*faint + (1-pval)*self.cube_std.data 
+            faint = pval*faint + (1-pval)*self.cube_std._data 
 
         self._log_stdout.info('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
@@ -889,11 +891,13 @@ class ORIGIN(object):
         self.param['r0PCA'] = r0
         
         # Weigthed data cube
-        cube_std = self.cube_std 
+        if self.cube_std is None:
+            raise IOError('Run the step 00 to initialize self.cube_std')
+
         # Compute PCA results
         self._log_stdout.info('Compute the PCA on each zone')
         A, V, self.eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
-                                                        cube_std,
+                                                        self.cube_std,
                                                         self.intx, self.inty,
                                                         0, 0, 0, 0)
 
@@ -927,7 +931,7 @@ class ORIGIN(object):
     def step02_apodise_TGLR(self, win = 'PSF'):
         
         nl,ny,nx = self.cube_correl.shape
-#        Apodisation = apodwin(win,self.mask)                   
+#        Apodisation = apodwin(win,self.expmap ==0)                   
         
 #        T = np.array(self.PSF)
 #        a,b,c,d = T.shape
@@ -936,7 +940,7 @@ class ORIGIN(object):
 #        apodpsf = np.reshape(T[lis,freq,:,:],(c,d))
 #        apodpsf -=apodpsf.min()        
 #        apodpsf /=apodpsf.max()
-#        Apodisation = apodPSF(self.mask,apodpsf)   
+#        Apodisation = apodPSF(self.expmap==0,apodpsf)   
 
         o2 = np.mean(self.cube_raw**2,axis=0)       
         indpos = (o2>0)
@@ -975,11 +979,10 @@ class ORIGIN(object):
             raise IOError('Run the step 01 to initialize self.cube_faint')
 
         # TGLR computing (normalized correlations)           
-        if self.param['expmap'] is None :
+        if 'expmap' in self.param: 
+            var = self.var/self.expmap
+        else:
             var = self.var
-            var[self.mask] = np.inf 
-        else: 
-            var = self.var/self.param['expmap']
             
         correl, profile = Correlation_GLR_test(self.cube_faint._data, 
                                                var,
@@ -988,13 +991,15 @@ class ORIGIN(object):
         
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
         
-        correl = correl * ~self.mask
+        mask = (self.expmap == 0)        
+        
+        correl[mask] = 0
         
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         
-        profile = profile * ~self.mask       
+        profile[mask] = 0       
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
         
@@ -1040,7 +1045,7 @@ class ORIGIN(object):
             raise IOError('Run the step 02 to initialize self.cube_correl')
 
         cube_pval_correl = Compute_pval_correl_zone(self.cube_correl._data,
-                                                    self.mask,
+                                                    self.expmap==0,
                                                     self.intx, self.inty,
                                                     self.NbSubcube,
                                                     threshold)

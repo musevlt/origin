@@ -171,7 +171,7 @@ def dct_residual(w_raw, order):
     return Faint
 
 
-def Compute_Standardized_data(cube_dct,expmap,mask,var):
+def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     """Function to compute the standardized data.  
     
     Parameters
@@ -181,6 +181,12 @@ def Compute_Standardized_data(cube_dct,expmap,mask,var):
               
     expmap  :   array
                 exposure map
+                
+    var     : array
+              variance array
+             
+    newvar  : boolean
+              if true, variance is re-estimated
 
     Returns
     -------                
@@ -195,16 +201,18 @@ def Compute_Standardized_data(cube_dct,expmap,mask,var):
     """        
     nl,ny,nx = cube_dct.shape
     
+    mask = (expmap==0)
+    
     cube_dct[mask] = np.nan
     
     mean_lambda = np.nanmean(cube_dct, axis=(1,2)) 
     mean_lambda = mean_lambda[:, np.newaxis, np.newaxis]* np.ones((nl,ny,nx))
-    if expmap is None:
-        print('expmap unknown')
-        var[mask] = np.inf
-    else:
+    if newvar:
         var = np.nanvar(cube_dct, axis=(1,2))    
         var = var[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))       
+        var[mask] = np.inf
+    else:
+        print('expmap unknown')
         var[mask] = np.inf
         
     STD = (cube_dct - mean_lambda) / np.sqrt(var)        
