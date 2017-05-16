@@ -983,6 +983,7 @@ class ORIGIN(object):
             var = self.var/self.expmap
         else:
             var = self.var
+            var[self.expmap==0] = np.inf
             
         correl, profile = Correlation_GLR_test(self.cube_faint._data, 
                                                var,
