@@ -1371,10 +1371,11 @@ class ORIGIN(object):
         if self.spectra is None:
             raise IOError('Run the step 07 to initialize self.spectra')
         nsources = Construct_Object_Catalogue(self.Cat4, self.spectra,
-                                              self.cube_correl._data,
+                                              self.cube_correl,
                                               self.wave, self.FWHM_profiles,
                                               path_src, self.name, self.param,
-                                              src_vers, author, ncpu)
+                                              src_vers, author,
+                                              self.path, self.maxmap, ncpu)
                                               
         # create the final catalog
         self._log_stdout.info('Create the final catalog')

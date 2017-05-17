@@ -37,6 +37,7 @@ import astropy.units as u
 import logging
 import numpy as np
 import os.path
+import shutil
 import sys
 import time
 
@@ -2144,7 +2145,10 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     cubevers = cube.primary_header.get('CUBE_V', '')
     origin.append(cubevers)
 
-    maxmap = Image(data=maxmap, wcs=cube.wcs)
+    if type(maxmap) is str:
+        maxmap_ = Image(maxmap)
+    else:
+        maxmap_ = maxmap
 
     src = Source.from_data(i, ra, dec, origin)
     src.add_attr('x', x_centroid, desc='x position in pixel',
@@ -2154,7 +2158,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
 
     src.add_white_image(cube)
     src.add_cube(cube, 'MUSE_CUBE')
-    src.add_image(maxmap, 'MAXMAP')
+    src.add_image(maxmap_, 'MAXMAP')
     src.add_attr('SRC_V', src_vers, desc='Source version')
     
     src.add_history('Source created with Origin', author)
@@ -2166,8 +2170,12 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         while(not ((names[1:]-names[:-1]) == 0).all()):
             names[1:][(names[:-1]-names[1:]) == 0] += 1
         names = names.astype(np.str)
-        
-    correl_ = Cube(data=correl, wcs=cube.wcs, wave=cube.wave, mask=cube._mask, copy=False)
+    
+    if type(correl) is str:   
+        correl_ = Cube(correl)
+    else:
+        correl_ = correl
+        correl_.mask = cube.mask
     
     for j in range(nb_lines):
         sp_est = Spectrum(data=Cat_est_line_data[j, :], 
@@ -2176,11 +2184,9 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         z1 = ksel[0][0]
         z2 = ksel[0][-1] + 1
         # Estimated line
-        sp = sp_est[z1:z2]
-        # Wavelength in angstrom of estimated line
-        #wave_ang = wave.coord(ksel[0], unit=u.angstrom)
-        # T_GLR centered around this line
-        c = correl[z1:z2, y[j], x[j]]
+        src.spectra['LINE_{:s}'.format(names[j])] = sp_est[z1:z2]
+        # correl
+        src.spectra['CORR_{:s}'.format(names[j])] = correl_[z1:z2, y[j], x[j]]
         # FWHM in arcsec of the profile
         profile_num = num_profil[j]
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
@@ -2193,9 +2199,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
             vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
                     pvalF[j], profile_num]
         src.add_line(cols, vals, units, desc, fmt)
-        src.spectra['LINE_{:s}'.format(names[j])] = sp
-        sp = Spectrum(wave=cube.wave[z1:z2], data=c)
-        src.spectra['CORR_{:s}'.format(names[j])] = sp
+        
         src.add_narrow_band_image_lbdaobs(cube,
                                         'NB_LINE_{:s}'.format(names[j]),
                                         w[j], width=2 * profil_FWHM,
@@ -2235,7 +2239,8 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
 
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
-                               path, name, param, src_vers, author, ncpu=1):
+                               path_src, name, param, src_vers, author,
+                               path, maxmap, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -2281,8 +2286,18 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     step_wave = wave.get_step(unit=u.angstrom)
     filename = param['cubename']
     origin = ['ORIGIN', __version__, os.path.basename(filename)]
-
-    maxmap = np.amax(correl, axis=0)
+    
+    path2 = os.path.abspath(path) + '/' + name
+    if os.path.isfile('%s/maxmap.fits'%path2):
+        f_maxmap = '%s/maxmap.fits'%path2
+    else:
+        maxmap.write('%s/tmp_maxmap.fits'%path2)
+        f_maxmap = '%s/tmp_maxmap.fits'%path2
+    if os.path.isfile('%s/cube_correl.fits'%path2):        
+        f_correl = '%s/cube_correl.fits'%path2
+    else:
+        correl.write('%s/tmp_cube_correl.fits'%path2)
+        f_correl = '%s/tmp_cube_correl.fits'%path2
     
     sources_arglist = []  
 
@@ -2328,8 +2343,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
             delayed(Construct_Object)(k, len(sources_arglist), uflux, unone, cols, units, desc,
                                       fmt, step_wave, origin, filename,
-                                      maxmap, correl, fwhm_profiles, 
-                                      param, path, name, *source_arglist)
+                                      f_maxmap, f_correl, fwhm_profiles, 
+                                      param, path_src, name, *source_arglist)
             for k,source_arglist in enumerate(sources_arglist))
         # print error messages if any
         for msg in errmsg:
@@ -2340,9 +2355,14 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             msg = Construct_Object(k, len(sources_arglist), uflux, unone, cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       maxmap, correl, fwhm_profiles, 
-                                      param, path, name, *source_arglist)
+                                      param, path_src, name, *source_arglist)
             if msg is not None:
                 logger.error(msg)
+                
+    if os.path.isfile('%s/tmp_maxmap.fits'%path2):
+        os.remove('%s/tmp_maxmap.fits'%path2)
+    if os.path.isfile('%s/tmp_cube_correl.fits'%path2):
+        os.remove('%s/tmp_cube_correl.fits'%path2)
         
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return len(np.unique(Cat['ID']))
