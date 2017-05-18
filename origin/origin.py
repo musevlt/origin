@@ -32,13 +32,10 @@ from mpdaf.sdetect import Catalog
 from mpdaf.tools import write_hdulist_to
 from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Compute_pval_correl_zone, Compute_pval_channel_Zone, \
-    Compute_pval_final, Compute_Connected_Voxel, \
-    Compute_Referent_Voxel, Narrow_Band_Test, \
-    Narrow_Band_Threshold, Estimation_Line, \
-    Spatial_Merging_Circle, Spectral_Merging, \
-    Construct_Object_Catalogue, \
-    dct_residual, Compute_Standardized_data, O2test,\
-    Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
+    Compute_pval_final, Compute_Connected_Voxel, Compute_Referent_Voxel, \
+    Estimation_Line, Spatial_Merging_Circle, Spectral_Merging, \
+    Construct_Object_Catalogue, dct_residual, Compute_Standardized_data, \
+    O2test,Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
     
 __version__ ='beta2'
 
@@ -123,14 +120,6 @@ class ORIGIN(object):
                              step03_compute_pvalues.
         Cat0               : astropy.Table
                              Catalog returned by step04_compute_ref_pix
-        Cat1               : astropy.Table
-                             Catalog returned by step05_compute_NBtests
-        Cat1_T1            : astropy.Table
-                             Catalog corresponding to the first test of 
-                             step06_select_NBtests.
-        Cat1_T2            : astropy.Table
-                             Catalog corresponding to the second test of 
-                             step06_select_NBtests.
         Cat2               : astropy.Table
                              Catalog returned by step07_compute_spectra.
         spectra            : list of `~mpdaf.obj.Spectrum`
@@ -141,12 +130,11 @@ class ORIGIN(object):
                              Catalog returned by step09_spectral_merging.
     """
     
-    def __init__(self, path, name, filename, NbSubcube, profiles,
-                 PSF, FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, frecO2,
-                 thresO2, cube_correl,
-                 maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
-                 cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, cube_std, expmap):
+    def __init__(self, path, name, filename, NbSubcube, profiles, PSF,
+                 FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, frecO2,
+                 thresO2, cube_correl, maxmap, cube_profile, cube_pval_correl,
+                 cube_pval_channel, cube_pval_final, Cat0, Cat2, spectra, Cat3,
+                 Cat4, param, cube_std, expmap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -306,14 +294,7 @@ class ORIGIN(object):
         
         # step4
         self.Cat0 = Cat0
-        
-        # step5
-        self.Cat1 = Cat1
-        
-        # step6
-        self.Cat1_T1 = Cat1_T1
-        self.Cat1_T2 = Cat1_T2
-        
+
         # step7
         self.Cat2 = Cat2
         self.spectra = spectra
@@ -359,16 +340,13 @@ class ORIGIN(object):
                       Name of this session and basename for the sources.
         """
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
-                   profiles=profiles, PSF=PSF,
-                   FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
-                   mapO2=None, histO2=None, frecO2=None, thresO2=None,
-                   cube_correl=None, maxmap=None,
-                   cube_profile=None,
-                   cube_pval_correl=None, cube_pval_channel=None,
-                   cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
-                   Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, cube_std=None,
-                   expmap=None)
+                   profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, intx=None,
+                   inty=None, cube_faint=None, mapO2=None, histO2=None,
+                   frecO2=None, thresO2=None, cube_correl=None, maxmap=None,
+                   cube_profile=None, cube_pval_correl=None,
+                   cube_pval_channel=None, cube_pval_final=None, Cat0=None,
+                   Cat2=None, spectra=None, Cat3=None, Cat4=None, param=None,
+                   cube_std=None, expmap=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -479,18 +457,6 @@ class ORIGIN(object):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
         else:
             Cat0 = None
-        if os.path.isfile('%s/Cat1.fits'%folder):
-            Cat1 = Table.read('%s/Cat1.fits'%folder)
-        else:
-            Cat1 = None
-        if os.path.isfile('%s/Cat1_T1.fits'%folder):
-            Cat1_T1 = Table.read('%s/Cat1_T1.fits'%folder)
-        else:
-            Cat1_T1 = None
-        if os.path.isfile('%s/Cat1_T2.fits'%folder):
-            Cat1_T2 = Table.read('%s/Cat1_T2.fits'%folder)
-        else:
-            Cat1_T2 = None
         if os.path.isfile('%s/Cat2.fits'%folder):
             Cat2 = Table.read('%s/Cat2.fits'%folder)
         else:
@@ -523,18 +489,17 @@ class ORIGIN(object):
                    NbSubcube=NbSubcube,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    intx=intx, inty=inty, cube_std=cube_std,
-                   cube_faint=cube_faint, mapO2=mapO2, histO2=histO2, frecO2=frecO2, thresO2=thresO2,
-                   cube_correl=cube_correl, maxmap=maxmap,
-                   cube_profile=cube_profile,
+                   cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
+                   frecO2=frecO2, thresO2=thresO2, cube_correl=cube_correl,
+                   maxmap=maxmap, cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
                    cube_pval_channel=cube_pval_channel,
-                   cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
-                   Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
+                   cube_pval_final=cube_pval_final, Cat0=Cat0, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
                    expmap=expmap)
                    
     def write(self, path=None, overwrite=False):
-        # sauver les PSFs ?
+        #TODO sauver les PSFs ?
         """Save the current session in a folder
         
         Parameters
@@ -617,14 +582,6 @@ class ORIGIN(object):
         # step4
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
-        # step5
-        if self.Cat1 is not None:
-            self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
-        # step6
-        if self.Cat1_T1 is not None:
-            self.Cat1_T1.write('%s/Cat1_T1.fits'%path2, overwrite=True)
-        if self.Cat1_T2 is not None:
-            self.Cat1_T2.write('%s/Cat1_T2.fits'%path2, overwrite=True)
         # step7
         if self.Cat2 is not None:
             self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
@@ -857,14 +814,10 @@ class ORIGIN(object):
         self._log_stdout.info('Compute greedy PCA on each zone')  
         
         
-        faint, mapO2, self.histO2, self.frecO2, self.thresO2 = Compute_GreedyPCA_SubCube(
-                                          self.NbSubcube,
-                                          self.cube_std._data,
-                                          self.intx, 
-                                          self.inty,
-                                          test_fun,
-                                          Noise_population,
-                                          threshold_test)
+        faint, mapO2, self.histO2, self.frecO2, self.thresO2 = \
+        Compute_GreedyPCA_SubCube(self.NbSubcube, self.cube_std._data,
+                                  self.intx, self.inty, test_fun,
+                                  Noise_population, threshold_test)
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
             pval = 1 - stats.chi2.cdf(continuum, 2) 
@@ -873,8 +826,8 @@ class ORIGIN(object):
         self._log_stdout.info('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
                           mask=np.ma.nomask)
-        self._log_stdout.info('Save the numbers of iterations used by the',
-                              ' testO2 for each spaxel in the dictionary',
+        self._log_stdout.info('Save the numbers of iterations used by the' + \
+                              ' testO2 for each spaxel in the dictionary' + \
                               ' self.mapO2')
         self.mapO2 = {}
         for numy in range(self.NbSubcube):
@@ -911,8 +864,7 @@ class ORIGIN(object):
             var = self.var
             var[self.expmap==0] = np.inf
             
-        correl, profile = Correlation_GLR_test(self.cube_faint._data, 
-                                               var,
+        correl, profile = Correlation_GLR_test(self.cube_faint._data, var,
                                                self.PSF, self.wfields,
                                                self.profiles)                                                               
         
@@ -990,7 +942,6 @@ class ORIGIN(object):
         except:
             mean_est = [FWHM_PSF**2 for FWHM_PSF in self.FWHM_PSF]
             
-            # LAURE will make it better: 
             if type(mean_est)==list:
                 self.param['meanestPvalChan'] = mean_est
             else:            
@@ -1051,7 +1002,8 @@ class ORIGIN(object):
         # Referent pixel
         self._log_stdout.info('Compute referent pixels')
         if self.cube_correl is None or self.cube_profile is None:
-            raise IOError('Run the step 02 to initialize self.cube_correl and self.cube_profile')
+            raise IOError('Run the step 02 to initialize self.cube_correl ',
+                          'and self.cube_profile')
         if self.cube_pval_correl is None or self.cube_pval_channel is None \
                                          or self.cube_pval_final is None:
             raise IOError('Run the step 03 to initialize self.cube_pval_* cubes')
@@ -1062,74 +1014,11 @@ class ORIGIN(object):
                                            self.cube_pval_channel._data,
                                            self.cube_pval_final._data, Ngp,
                                            labeled_cube, self.wcs, self.wave)
-        self._log_stdout.info('Save a first version of the catalogue of emission lines in self.Cat0')
+        self._log_stdout.info('Save a first version of the catalogue of ' + \
+                              'emission lines in self.Cat0')
         self._log_file.info('04 Done')
 
-    def step05_compute_NBtests(self, nb_ranges=3):
-        """compute the 2 narrow band tests for each detected emission line.
-
-        Parameters
-        ----------
-        nb_ranges   : integer
-                      Number of the spectral ranges skipped to compute the
-                      controle cube
-
-        Returns
-        -------
-        self.Cat1 : astropy.Table
-               Catalogue of parameters of detected emission lines.
-               Columns: x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-        """
-        self._log_file.info('05 NB tests nb_ranges=%d'%nb_ranges)
-        self._log_stdout.info('Step 05 - NB tests')
-        self.param['NBranges'] = nb_ranges
-        if self.Cat0 is None:
-            raise IOError('Run the step 04 to initialize self.Cat0')
-        self.Cat1 = Narrow_Band_Test(self.Cat0, self.cube_raw, self.profiles,
-                                self.PSF, self.wfields, nb_ranges, self.wcs)
-        self._log_stdout.info('Save the updated catalogue in self.Cat1')
-        self._log_file.info('05 Done')
-
-    def step06_select_NBtests(self, thresh_T1=0.2, thresh_T2=2):
-        # verifier de partout et mettre en commentaires
-        """select emission lines according to the 2 narrow band tests.
-
-        Parameters
-        ----------
-        thresh_T1 : float
-                    Threshold for the test 1
-        thresh_T2 : float
-                    Threshold for the test 2
-
-        Returns
-        -------
-        self.Cat1_T1 : astropy.Table
-                       Catalogue of parameters of detected emission lines
-                       selected with the test 1
-        self.Cat1_T2 : astropy.Table
-                       Catalogue of parameters of detected emission lines
-                       selected with the test 2
-
-        Columns of the catalogues :
-        x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-        """
-        self._log_file.info('06 Selection according to NB tests thresh_T1=%.1f thresh_T2=%.1f'%(thresh_T1, thresh_T2))
-        self._log_stdout.info('Step 06 - Selection according to NB tests')
-        self.param['threshT1'] = thresh_T1
-        self.param['threshT2'] = thresh_T2
-        if self.Cat1 is None:
-            raise IOError('Run the step 05 to initialize self.Cat1')
-        # Thresholded narrow bands tests
-        self.Cat1_T1, self.Cat1_T2 = Narrow_Band_Threshold(self.Cat1,
-                                                           thresh_T1,
-                                                           thresh_T2)
-        self._log_stdout.info('%d emission lines selected with the test 1' % len(self.Cat1_T1))
-        self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T1')
-        self._log_stdout.info('%d emission lines selected with the test 2' % len(self.Cat1_T2))
-        self._log_stdout.info('Save the corresponding catalogue in self.Cat1_T2')
-        self._log_file.info('06 Done')
-
-    def step07_compute_spectra(self, T=0, grid_dxy=0, grid_dz=0):
+    def step07_compute_spectra(self, grid_dxy=0, grid_dz=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1137,10 +1026,6 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        T          : 0 or 1 or 2
-                     if T=0, self.Cat0 is used as input
-                     if T=1, self.Cat1_T1 is used as input
-                     if T=2, self.Cat1_T2 is used as input
         grid_dxy   : integer
                      Maximum spatial shift for the grid
         grid_dz    : integer
@@ -1151,35 +1036,26 @@ class ORIGIN(object):
         self.Cat2    : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns: x y z ra dec lbda T_GLR profile pvalC pvalS
-                                pvalF T1 T2
-                       residual flux num_line
+                                pvalF residual flux num_line
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._log_file.info('07 Lines estimation T=%d grid_dxy=%d grid_dz=%d'%(T, grid_dxy, grid_dz))
+        self._log_file.info('07 Lines estimation ',
+                            'grid_dxy=%d grid_dz=%d'%(grid_dxy, grid_dz))
         self._log_stdout.info('Step 07 - Lines estimation')
-        self.param['NBtest'] = 'T%d'%T
         self.param['grid_dxy'] = grid_dxy
         self.param['grid_dz'] = grid_dz
-        if T==0:
-            Cat1_T = self.Cat0
-        elif T==1:
-            Cat1_T = self.Cat1_T1
-        elif T==2:
-            Cat1_T = self.Cat1_T2
-        else:
-            raise IOError('Invalid parameter T')
         if self.cube_faint is None:
             raise IOError('Run the step 01 to initialize self.cube_faint')
         if self.cube_profile is None:
             raise IOError('Run the step 02 to initialize self.cube_profile')
-        if Cat1_T is None:
-            raise IOError('Run the step 06 to initialize self.Cat1_T* catalogs')
+        if self.Cat0 is None:
+            raise IOError('Run the step 04 to initialize self.Cat0 catalogs')
         self.Cat2, Cat_est_line_raw_T, Cat_est_line_std_T = \
-            Estimation_Line(Cat1_T, self.cube_profile._data, self.Nx, self.Ny,
-                            self.Nz, self.var, self.cube_faint._data, grid_dxy,
-                            grid_dz, self.PSF, self.wfields, self.profiles,
-                            self.wcs, self.wave)
+            Estimation_Line(self.Cat0, self.cube_profile._data, self.Nx,
+                            self.Ny, self.Nz, self.var, self.cube_faint._data,
+                            grid_dxy, grid_dz, self.PSF, self.wfields,
+                            self.profiles, self.wcs, self.wave)
         self._log_stdout.info('Save the updated catalogue in self.Cat2')
         self.spectra = []
         for data, std in zip(Cat_est_line_raw_T, Cat_est_line_std_T):
@@ -1199,8 +1075,8 @@ class ORIGIN(object):
         self.Cat3 : astropy.Table
                     Columns: ID x_circle y_circle ra_circle dec_circle
                     x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
-                    z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-                    residual flux num_line
+                    z ra dec lbda T_GLR profile pvalC pvalS pvalF residual flux
+                    num_line
         """
         self._log_file.info('08 Spatial merging')
         self._log_stdout.info('Step 08 - Spatial merging')
@@ -1229,8 +1105,8 @@ class ORIGIN(object):
                     Catalogue
                     Columns: ID x_circle y_circle ra_circle dec_circle
                     x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
-                    z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-                    residual flux num_line
+                    z ra dec lbda T_GLR profile pvalC pvalS pvalF residual flux
+                    num_line
         """
         self._log_file.info('09 spectral merging deltaz=%d'%deltaz)
         self._log_stdout.info('Step 09 - Spectral merging')
@@ -1337,98 +1213,92 @@ class ORIGIN(object):
 #        ax.semilogy(nbt, lambdat[nbt], 'r+')
 #        plt.title('zone (%d, %d)' %(i,j))
         
-#    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
-#        """Plot the narrow bands images
-#        
-#        i : integer
-#            index of the object in self.Cat1
-#        ax1 : matplotlib.Axes
-#              The Axes instance in which the NB image
-#              around the source is drawn
-#        ax2 : matplotlib.Axes
-#              The Axes instance in which a other NB image for check is drawn
-#        ax3 : matplotlib.Axes
-#              The Axes instance in which the difference is drawn
-#        """
-#        if self.Cat1 is None:
-#            raise IOError('Run the step 05 to initialize self.Cat1')
-#            
-#        if ax1 is None and ax2 is None and ax3 is None:
-#            ax1 = plt.subplot(1,3,1)
-#            ax2 = plt.subplot(1,3,2)
-#            ax3 = plt.subplot(1,3,3)
-#            
-#        # Coordinates of the source
-#        x0 = self.Cat1[i]['x']
-#        y0 = self.Cat1[i]['y']
-#        z0 = self.Cat1[i]['z']
-#        # Larger spatial ranges for the plots
-#        longxy0 = 20
-#        y01 = max(0, y0 - longxy0)
-#        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
-#        x01 = max(0, x0 - longxy0)
-#        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
-#        # Coordinates in this window
-#        y00 = y0 - y01
-#        x00 = x0 - x01
-#        # spectral profile
-#        num_prof = self.Cat1[i]['profile']
-#        profil0 = self.profiles[num_prof]
-#        # length of the spectral profile
-#        profil1 = profil0[profil0 > 1e-13]
-#        long0 = profil1.shape[0]
-#        # half-length of the spectral profile
-#        longz = long0 // 2
-#        # spectral range
-#        intz1 = max(0, z0 - longz)
-#        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
-#        # subcube for the plot
-#        cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
-#        wcs = self.wcs[y01:y02, x01:x02]
-#        # controle cube
-#        nb_ranges = self.param['NBranges']
-#        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
-#            intz1c = intz1 + nb_ranges * long0
-#            intz2c = intz2 + nb_ranges * long0
-#        else:
-#            intz1c = intz1 - nb_ranges * long0
-#            intz2c = intz2 - nb_ranges * long0
-#        cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
-#        # (1/sqrt(2)) * difference of the 2 sububes
-#        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
-#        # tests
-#        T1 = self.Cat1[i]['T1']
-#        T2 = self.Cat1[i]['T2']
-#        
-#        if ax1 is not None:
-#            ax1.plot(x00, y00, 'm+')
-#            ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
-#            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
-#                    'T1=%.3f T2=%.3f\n' % (T1,T2) + \
-#                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
-#            ima_test_plot.plot(colorbar='v', title=title, ax=ax1)
-#            ax1.get_xaxis().set_visible(False)
-#            ax1.get_yaxis().set_visible(False)
-#
-#        if ax2 is not None:
-#            ax2.plot(x00, y00, 'm+')
-#            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
-#            title = 'check - (%d,%d)\n' % (x0, y0) + \
-#                        'T1=%.3f T2=%.3f\n' % (T1, T2) + \
-#                        'int=[%d,%d[' % (intz1c, intz2c)
-#            ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
-#            ax2.get_xaxis().set_visible(False)
-#            ax2.get_yaxis().set_visible(False)
-#
-#        if ax3 is not None:
-#            ax3.plot(x00, y00, 'm+')
-#            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0), wcs=wcs)
-#            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
-#                    'T1=%.3f T2=%.3f\n' % (T1, T2) + \
-#                    'int=[%d,%d[' % (intz1c, intz2c)
-#            ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
-#            ax3.get_xaxis().set_visible(False)
-#            ax3.get_yaxis().set_visible(False)
+    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
+        """Plot the narrow bands images
+        
+        i : integer
+            index of the object in self.Cat0
+        ax1 : matplotlib.Axes
+              The Axes instance in which the NB image
+              around the source is drawn
+        ax2 : matplotlib.Axes
+              The Axes instance in which a other NB image for check is drawn
+        ax3 : matplotlib.Axes
+              The Axes instance in which the difference is drawn
+        """
+        if self.Cat0 is None:
+            raise IOError('Run the step 04 to initialize self.Cat0')
+            
+        if ax1 is None and ax2 is None and ax3 is None:
+            ax1 = plt.subplot(1,3,1)
+            ax2 = plt.subplot(1,3,2)
+            ax3 = plt.subplot(1,3,3)
+            
+        # Coordinates of the source
+        x0 = self.Cat0[i]['x']
+        y0 = self.Cat0[i]['y']
+        z0 = self.Cat0[i]['z']
+        # Larger spatial ranges for the plots
+        longxy0 = 20
+        y01 = max(0, y0 - longxy0)
+        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
+        x01 = max(0, x0 - longxy0)
+        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
+        # Coordinates in this window
+        y00 = y0 - y01
+        x00 = x0 - x01
+        # spectral profile
+        num_prof = self.Cat0[i]['profile']
+        profil0 = self.profiles[num_prof]
+        # length of the spectral profile
+        profil1 = profil0[profil0 > 1e-13]
+        long0 = profil1.shape[0]
+        # half-length of the spectral profile
+        longz = long0 // 2
+        # spectral range
+        intz1 = max(0, z0 - longz)
+        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
+        # subcube for the plot
+        cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
+        wcs = self.wcs[y01:y02, x01:x02]
+        # controle cube
+        nb_ranges = 3
+        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
+            intz1c = intz1 + nb_ranges * long0
+            intz2c = intz2 + nb_ranges * long0
+        else:
+            intz1c = intz1 - nb_ranges * long0
+            intz2c = intz2 - nb_ranges * long0
+        cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
+        # (1/sqrt(2)) * difference of the 2 sububes
+        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
+        
+        if ax1 is not None:
+            ax1.plot(x00, y00, 'm+')
+            ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
+            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
+                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
+            ima_test_plot.plot(colorbar='v', title=title, ax=ax1)
+            ax1.get_xaxis().set_visible(False)
+            ax1.get_yaxis().set_visible(False)
+
+        if ax2 is not None:
+            ax2.plot(x00, y00, 'm+')
+            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
+            title = 'check - (%d,%d)\n' % (x0, y0) + \
+                        'int=[%d,%d[' % (intz1c, intz2c)
+            ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
+            ax2.get_xaxis().set_visible(False)
+            ax2.get_yaxis().set_visible(False)
+
+        if ax3 is not None:
+            ax3.plot(x00, y00, 'm+')
+            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0), wcs=wcs)
+            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
+                    'int=[%d,%d[' % (intz1c, intz2c)
+            ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
+            ax3.get_xaxis().set_visible(False)
+            ax3.get_yaxis().set_visible(False)
     
 
     def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
