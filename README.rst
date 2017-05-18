@@ -25,12 +25,12 @@ Usage
 
  > from origin import ORIGIN
  
- > my_origin = ORIGIN.init('cube.fits', NbSubcube, name='tmp')
+ > my_origin = ORIGIN.init('cube.fits', name='tmp')
  
  
 2- we run the different steps
 
- > my_origin.step00_preprocessing('expmap.fits')
+ > my_origin.step00_preprocessing()
 
  > my_origin.step01_compute_greedy_PCA()
  
@@ -38,7 +38,7 @@ Usage
  
  > my_origin.step03_compute_pvalues(threshold)
  
- > my_origin.step04_compute_ref_pix(neighboors)
+ > my_origin.step04_compute_ref_pix()
  
  > my_origin.step07_compute_spectra()
  

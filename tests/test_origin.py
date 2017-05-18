@@ -17,9 +17,8 @@ EXPMAP = os.path.join(os.path.abspath(os.path.dirname(__file__)),
 def test_origin():
     """test ORIGIN"""
     # Number of subcubes for the spatial segmentation
-    NbSubcube = 1
 
-    my_origin = ORIGIN.init(MINICUBE, NbSubcube, name='tmp')
+    my_origin = ORIGIN.init(MINICUBE, name='tmp')
     my_origin.write()
 
     my_origin = ORIGIN.load('tmp')

@@ -187,6 +187,8 @@ class ORIGIN(object):
         self.Nz, self.Ny, self.Nx = cub.shape
         
         # ORIGIN parameters
+        if NbSubcube is None:
+            NbSubcube = max(1, max(self.Nx, self.Ny)//100)
         self.param['nbsubcube'] = NbSubcube
         self.NbSubcube = NbSubcube
         
@@ -308,7 +310,7 @@ class ORIGIN(object):
         self._log_file.info('00 Done')
         
     @classmethod
-    def init(cls, cube, NbSubcube, profiles=None, 
+    def init(cls, cube, NbSubcube=None, profiles=None, 
                  PSF=None, FWHM_PSF=None, name='origin'):
         # NbSubcube None par défaut et sous-cube de 80-100
         """Create a ORIGIN object.
