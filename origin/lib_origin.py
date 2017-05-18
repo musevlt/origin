@@ -37,7 +37,6 @@ import astropy.units as u
 import logging
 import numpy as np
 import os.path
-import shutil
 import sys
 import time
 
@@ -88,38 +87,7 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return inty, intx
 
-def apodPSF(mask,PSF):    
-    lengthwin = int( (PSF.shape[0])/2 )
-    nl,ny,nx = mask.shape    
-    Apodisation = np.zeros((nl,ny,nx))    
-    for n in range(nl):
-        mm = ~mask[n,:,:]
-        top = np.repeat(mm[0,:][:,np.newaxis],6,axis=1).T
-        bottom = np.repeat(mm[-1,:][:,np.newaxis],6,axis=1).T
-        tmp = np.vstack((top,mm,bottom))
-        top = np.repeat(tmp[:,0][:,np.newaxis],6,axis=1)
-        bottom = np.repeat(tmp[:,-1][:,np.newaxis],6,axis=1)
-        tmp = np.hstack((top,tmp,bottom))
-        convo = signal.fftconvolve(tmp,PSF,mode='same') 
-        Apodisation[n,:,:] = convo[lengthwin:-lengthwin,lengthwin:-lengthwin]*~mask[n,:,:]
-        
-    Apodisation /= Apodisation.max()     
-    return Apodisation
 
-def apodwin(lengthwin,mask ): 
-    nl,ny,nx = mask.shape
-    n = np.arange(-lengthwin+1,lengthwin)
-    xv, yv = np.meshgrid(n,n)
-    r = np.sqrt(xv**2 + yv**2)
-    w = .5 + .5*np.cos(2*r*np.pi / (2*lengthwin  -2))    
-    Apodisation = np.zeros((nl,ny,nx))    
-    for n in range(nl):
-        tmp = np.ones((ny+lengthwin*2,nx+lengthwin*2))    
-        tmp[lengthwin:-lengthwin,lengthwin:-lengthwin] = ~mask[n,:,:]
-        Apodisation[n,:,:] = signal.fftconvolve(tmp,w,mode='same')[lengthwin:-lengthwin,lengthwin:-lengthwin]*~mask[n,:,:]
-        
-    Apodisation /= Apodisation.max()     
-    return Apodisation
 
 def DCTMAT(dct_o):
     """Function to compute the DCT Matrix or order dct_o.  
@@ -253,6 +221,10 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
     logger = logging.getLogger('origin')
     t0 = time.time()
     cube_faint = np.zeros(cube_std.shape)
+    mapO2 = {} #2D
+    histO2 = {} #1D
+    frecO2 = {} #1D
+    thresO2 = np.empty((NbSubcube, NbSubcube)) #scalaire
     # Spatial segmentation
     with ProgressBar(NbSubcube**2) as bar:
         for numy in range(NbSubcube):
@@ -265,12 +237,17 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
                 # Data in this spatio-spectral zone
                 cube_temp = cube_std[:, y1:y2, x1:x2]
                 # greedy PCA on each subcube
-                cube_faint[:, y1:y2, x1:x2] = Compute_GreedyPCA( cube_temp, 
-                          test_fun, Noise_population, threshold_test)
+                cube_faint[:, y1:y2, x1:x2], mO2, hO2, fO2, tO2 = \
+                Compute_GreedyPCA( cube_temp, test_fun, Noise_population,
+                                  threshold_test)
+                mapO2[(numx, numy)] = mO2
+                histO2[(numx, numy)] = hO2
+                frecO2[(numx, numy)] = fO2
+                thresO2[numx, numy] = tO2
                 bar.update()
                 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint
+    return cube_faint, mapO2, histO2, frecO2, thresO2
 
 def O2test(Cube_in):
     """Function to compute the test on data. The test estimate the background
@@ -336,24 +313,27 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
     
     test_v = np.ravel(test)
     c = test_v[test_v>0]     
-    val,bi = np.histogram(c,bins='fd',normed=True)
-    ind = np.argmax(val)
-    mod = bi[ind]
-    ind2 = np.argmin(( val[ind]/2 - val[:ind] )**2)
-    fwhm = mod - bi[ind2]
+    histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
+    ind = np.argmax(histO2)
+    mod = frecO2[ind]
+    ind2 = np.argmin(( histO2[ind]/2 - histO2[:ind] )**2)
+    fwhm = mod - frecO2[ind2]
     sigma = fwhm/np.sqrt(2*np.log(2))
     
-    threshold_test = mod - sigma*stats.norm.ppf(threshold_test)
+    thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
     
     # nuisance part
-    py,px = np.where(test>threshold_test)
+    py,px = np.where(test>thresO2)
     
     npix = len(py)
+    
+    mapO2 = np.zeros((ny, nx))
     
     with ProgressBar(npix) as bar:
         # greedy loop based on test
         while True:
             
+            mapO2[py,px] += 1
             if len(py)==0:
                 break 
             
@@ -361,23 +341,12 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             test_v = np.ravel(test)
             test_v = test_v[test_v>0] 
             bckv = np.reshape(faint,(nl,ny*nx))        
-            nind = np.where(test_v<=threshold_test)[0]
+            nind = np.where(test_v<=thresO2)[0]
             sortind = np.argsort(test_v[nind])
             # at least one spectra is used to perform the test
             l = 1 + int( len(nind) / Noise_population)
             # background estimation
             b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
-                  
-#            plt.clf()
-#            plt.subplot(121)
-#            plt.plot(b)
-#            plt.title('bruit')
-#            plt.subplot(122)
-#            mm = np.zeros((ny,nx))
-#            mm[py,px]=1
-#            plt.imshow(mm,origin='lower',cmap='gray_r')   
-#            plt.title('masque')
-#            plt.pause(.1)
 
             # cube segmentation 
             x_red = faint[:,py,px]
@@ -391,15 +360,6 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
                 U,s,V = np.linalg.svd( x_red , full_matrices=False)
             else:
                 U,s,V = svds( x_red , k=1)         
-                
-#            nN+=1
-#            d = {}
-#            d['spectre_'+str(nN)]=np.ravel(U)
-#            savemat('/Users/antonyschutz/Desktop/spectre/spectre_'+str(nN)+'.mat',d)
-#            fig = plt.figure()
-#            plt.plot(U)
-#            fig.savefig(os.path.join('/Users/antonyschutz/Desktop/spectre',str(nN)+'.png'),format="png")  
-#            plt.close(fig)
             
             # orthogonal projection
             xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
@@ -409,10 +369,10 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             test = test_fun(faint)
             
             # nuisance part
-            py,px = np.where(test>threshold_test)
+            py,px = np.where(test>thresO2)
             bar.update(npix-len(py))
 
-    return faint
+    return faint, mapO2, histO2, frecO2, thresO2
 
 
 def init_calibrators(nl, ny, nx, nprofil, x, y, z, amp, profil, random, \
@@ -569,13 +529,6 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
             fmax = np.minimum(nl,z[n]+2*len(pp))   
             for psf in range(len(PSF)):
                 if np.sum(weights[psf])>0:
-
-#                    plt.subplot(121)
-#                    plt.imshow(weights[psf],origin='lower')
-#                    plt.subplot(122)
-#                    plt.imshow(np.sum(Cube_test,axis=0),origin='lower',cmap='jet')
-#                    plt.pause(2)                    
-
                     for i in range(fmin,fmax):                                                          
                         Cube_test[i, :, :] += signal.fftconvolve(weights[psf]*Cube_test[i, :, :],PSF[psf][i, :, :], mode='same') 
             Cube_test = Cube_test / Cube_test.max() * amp[n]
@@ -596,341 +549,9 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
         
     return Cube_out
-#%%
-
-def Compute_PCA_SubCube(NbSubcube, cube_std, intx, inty, Edge_xmin, Edge_xmax,
-                        Edge_ymin, Edge_ymax):
-    """Function to compute the PCA on each zone of a data cube.
-
-    Parameters
-    ----------
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
-    cube_std  : array
-                Cube data weighted by the standard deviation
-    intx      : integer
-                limits in pixels of the columns for each zone
-    inty      : integer
-                limits in pixels of the rows for each zone
-    Edge_xmin : int
-                Minimum limits along the x-axis in pixel
-                of the data taken to compute p-values
-    Edge_xmax : int
-                Maximum limits along the x-axis in pixel
-                of the data taken to compute p-values
-    Edge_ymin : int
-                Minimum limits along the y-axis in pixel
-                of the data taken to compute p-values
-    Edge_ymax : int
-                Maximum limits along the y-axis in pixel
-                of the data taken to compute p-values
-
-    Returns
-    -------
-    A       : dict
-              Projection of the data on the eigenvectors basis
-    V       : dict
-              Eigenvectors basis
-    eig_val : dict
-              Eigenvalues computed for each spatio-spectral zone
-    nx      : array
-              Number of columns for each spatio-spectral zone
-    ny      : array
-              Number of rows for each spatio-spectral zone
-    nz      : array
-              Number of spectral channels for each spatio-spectral zone
-
-    Date  : Dec,7 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Initialization
-    nx = np.empty((NbSubcube, NbSubcube), dtype=np.int)
-    ny = np.empty((NbSubcube, NbSubcube), dtype=np.int)
-    nz = np.empty((NbSubcube, NbSubcube), dtype=np.int)
-    eig_val = {}
-    V = {}
-    A = {}
-
-    # Spatial segmentation
-    with ProgressBar(NbSubcube**2) as bar:
-        for numy in range(NbSubcube):
-            for numx in range(NbSubcube):
-                bar.update()
-                # limits of each spatial zone
-                x1 = intx[numx]
-                x2 = intx[numx + 1]
-                y2 = inty[numy]
-                y1 = inty[numy + 1]
-                # Data in this spatio-spectral zone
-                cube_temp = cube_std[:, y1:y2, x1:x2]
-
-                # Edges are excluded for PCA computing
-#                x1 = max(x1, Edge_xmin + 1)
-#                x2 = min(x2, Edge_xmax)
-#                y1 = max(y1, Edge_ymin + 1)
-#                y2 = min(y2, Edge_ymax)
-                cube_temp_edge = cube_std[:, y1:y2, x1:x2]
-
-                # Dimensions of each subcube of each spatio-spectral zone
-                nx[numx, numy] = cube_temp.shape[2]
-                ny[numx, numy] = cube_temp.shape[1]
-                nz[numx, numy] = cube_temp.shape[0]
-
-                # PCA on each subcube
-                A_c, V_c, lambda_c = Compute_PCA_edge(cube_temp, cube_temp_edge)
-                # eigenvalues for each spatio-spectral zone
-                eig_val[(numx, numy)] = lambda_c
-                # Eigenvectors basis for each spatio-spectral zone
-                V[(numx, numy)] = V_c
-                # Projection of the data on the eigenvectors basis
-                # for each spatio-spectral zone
-                A[(numx, numy)] = A_c
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return A, V, eig_val, nx, ny, nz
-
-
-def Compute_PCA_edge(cube, cube_edge):
-    """Function to compute the PCA the spectra of a data cube by excluding
-    the undesired spectra.
-
-    Parameters
-    ----------
-    cube      : array
-                cube data weighted by the standard deviation
-    cube_edge : array
-                cube data weighted by the standard deviation without the
-                undesired spectra (ie those on the edges).
-
-    Returns
-    -------
-    A       : array
-              Projection of the data cube on the eigenvectors basis
-    eig_vec : array
-              Eigenvectors basis corrsponding to the eigenvalues
-    eig_val : array
-              Eigenvalues computed for each spatio-spectral zone
-
-    Date  : Dec,3 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    # data cube converted to dictionary of spectra
-    cube_v = cube.reshape(cube.shape[0], cube.shape[1] * cube.shape[2])
-    # data cube without undesired spectra converted to dictionary of spectra
-    cube_ve = cube_edge.reshape(cube_edge.shape[0],
-                                cube_edge.shape[1] * cube_edge.shape[2])
-    # Spectral covariance of the desired spectra
-    C = np.cov(cube_ve)
-    # Eigenvalues (ascending order) and Eigenvectors basis
-    eig_val, eig_vec = np.linalg.eigh(C)
-    # Projection of the data cube on the eigenvectors basis
-    A = eig_vec.T.dot(cube_v)
-    return A, eig_vec, eig_val
-
-
-def Compute_Number_Eigenvectors_Zone(NbSubcube, list_r0, eig_val):
-    """Function to compute the number of eigenvectors to keep for the
-    projection for each zone by calling the function
-    Compute_Number_Eigenvectors.
-
-    Parameters
-    ----------
-    NbSubcube   : float
-                  Number of subcube in the spatial segementation
-    list_r0     : array
-                  List of the determination coefficient for each zone
-    eig_val     : dict
-                  eigenvalues of each spatio-spectral zone
-    fig : figure instance
-                  if not None, plot the eigenvalues and the separation
-                  point
-
-    Returns
-    -------
-    nbkeep : array
-             number of eigenvalues for each zone used to compute the projection
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Initialization
-    nbkeep = np.empty((NbSubcube, NbSubcube), dtype=np.int)
-    zone = 0
-    for numy in range(NbSubcube):
-        for numx in range(NbSubcube):
-
-            # Eigenvalues for this zone
-            lambdat = eig_val[(numx, numy)]
-
-            # Number of eigenvalues per zone
-            nbkeep[numx, numy] = Compute_Number_Eigenvectors(lambdat,
-                                                             list_r0[zone])
-            zone = zone + 1
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return nbkeep
-
-
-def Compute_Number_Eigenvectors(eig_val, r0):
-    """Function to compute the number of eigenvectors to keep for the
-    projection with a linear regression and its associated determination
-    coefficient
-
-    Parameters
-    ----------
-    eig_val : array
-              eigenvalues of each zone
-    r0      : float
-              Determination coefficient value set by the user
-
-    Returns
-    -------
-    nbkeep : float
-             number of eigenvalues used to compute the projection
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    # Initialization
-    nl = eig_val.shape[0]
-    coeffr = np.zeros(nl - 4)
-
-    # Start with the 5 first eigenvalues for the linear regression
-    for r in range(5, nl + 1):
-        Y = np.log(eig_val[:r] + 0j)
-        # Y[np.isnan(Y)] = 0
-        X = np.array([np.ones(r), eig_val[:r]])
-        beta = np.linalg.lstsq(X.T, Y)[0]
-        Yest = np.dot(X.T, beta)
-        # Determination coefficient
-        Y = np.real(Y)
-        Yest = np.real(Yest)
-        coeffr[r - 5] = 1 - (np.sum((Y - Yest)**2) /
-                             np.sum((Y - np.mean(Y))**2))
-
-    # Find the coefficient closer of r0
-    rt = 4 + np.where(coeffr >= r0)[0]
-    if rt.shape[0] == 0:
-        return 0
-    else:
-        return rt[-1]
-
-
-def Compute_Proj_Eigenvector_Zone(nbkeep, NbSubcube, Nx, Ny, Nz, A, V,
-                                  nx, ny, nz, inty, intx):
-    """Function to compute the projection on the selected eigenvectors of the
-    data cube in the original basis by calling the function
-    Compute_Proj_Eigenvector.
-
-    Parameters
-    ----------
-    nbkeep    : array
-                number of eigenvalues for each zone used to compute the
-                projection
-    NbSubcube : int
-                Number of subcube in the spatial segementation
-    Nx        : int
-                Size of the cube along the x-axis
-    Ny        : int
-                Size of the cube along the z-axis
-    Nz        : int
-                Size of the cube along the spectral axis
-    A         : dict
-                Projection of the data on the eigenvectors basis
-    V         : dict
-                Eigenvectors basis
-    nx        : array
-                Number of columns for each spatio-spectral zone
-    ny        : array
-                Number of rows for each spatio-spectral zone
-    nz        : array
-                Number of spectral channels for each spatio-spectral zone
-    intx      : array
-                limits in pixels of the columns for each zone
-    inty      : array
-                limits in pixels of the rows for each zone
-
-    Returns
-    -------
-    cube_faint : array
-                 Projection on the eigenvectors associated to the lower
-                 eigenvalues of the data cube (reprensenting the faint signal)
-    cube_cont  : array
-                 Projection on the eigenvectors associated to the higher
-                 eigenvalues of the data cube (representing the continuum)
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # initialization
-    cube_faint = np.zeros((Nz, Ny, Nx))
-    cube_cont = np.zeros((Nz, Ny, Nx))
-
-    for numy in range(NbSubcube):
-        for numx in range(NbSubcube):
-            # limits of each spatial zone
-            x1 = intx[numx]
-            x2 = intx[numx + 1]
-            y2 = inty[numy]
-            y1 = inty[numy + 1]
-            At = A[(numx, numy)]
-            Vt = V[(numx, numy)]
-            r = nbkeep[numx, numy]
-            cube_proj_faint_v, cube_proj_cont_v = \
-                Compute_Proj_Eigenvector(At, Vt, r)
-            # Resize the subcube
-            cube_faint[:, y1:y2, x1:x2] = \
-                cube_proj_faint_v.reshape((nz[numx, numy],
-                                           ny[numx, numy],
-                                           nx[numx, numy]))
-            cube_cont[:, y1:y2, x1:x2] = \
-                cube_proj_cont_v.reshape((nz[numx, numy],
-                                          ny[numx, numy],
-                                          nx[numx, numy]))
-#             cube_faint[cube_faint==np.NaN] = 0
-#             cube_cont[cube_cont==np.NaN] = 0
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, cube_cont
-
-
-def Compute_Proj_Eigenvector(A, V, r):
-    """Function to compute the projection of the data in the original basis
-    keepping the desired number eigenvalues.
-
-    Parameters
-    ----------
-    A : array
-        Projection of the data on the eigenvectors basis
-    V : array
-        Eigenvectors basis
-    r : float
-        Number of eigenvalues to keep for the projection
-
-    Returns
-    -------
-    cube_proj_low_v  : array
-                       Projection on the eigenvectors associated to the lower
-                       eigenvalues of the spectra.
-    cube_proj_high_v : array
-                       Projection on the eigenvectors associated to the higher
-                       eigenvalues of the spectra.
-
-    Date  : Dec,7 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    # initialization
-    cube_proj_low_v = np.dot(V[:, :r + 1], A[:r + 1, :])
-    cube_proj_high_v = np.dot(V[:, r + 1:], A[r + 1:, :])
-    return cube_proj_low_v, cube_proj_high_v
-
 
 def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
+    # Antony optimiser
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
 
@@ -1333,10 +954,6 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
         probafinale = cube_pval_correl/cube_pval_channel
     else: 
         probafinale = cube_pval_correl        
-
-    # # this is not used after
-    # cube_pval_correl[ksel_correl] = 0
-    # cube_pval_channel[ksel_channel] = 0
 
     # pvalue = probability/2
     cube_pval_final = probafinale / 2

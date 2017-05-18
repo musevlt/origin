@@ -30,9 +30,7 @@ from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.sdetect import Catalog
 from mpdaf.tools import write_hdulist_to
-from .lib_origin import Spatial_Segmentation, \
-    Compute_PCA_SubCube, Compute_Number_Eigenvectors_Zone, \
-    Compute_Proj_Eigenvector_Zone, Correlation_GLR_test, \
+from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Compute_pval_correl_zone, Compute_pval_channel_Zone, \
     Compute_pval_final, Compute_Connected_Voxel, \
     Compute_Referent_Voxel, Narrow_Band_Test, \
@@ -40,7 +38,7 @@ from .lib_origin import Spatial_Segmentation, \
     Spatial_Merging_Circle, Spectral_Merging, \
     Construct_Object_Catalogue, \
     dct_residual, Compute_Standardized_data, O2test,\
-    Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator, apodwin, apodPSF
+    Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
     
 __version__ ='beta2'
 
@@ -102,21 +100,10 @@ class ORIGIN(object):
                              Limits in pixels of the columns for each zone.
         inty               : array
                              Limits in pixels of the rows for each zone.
-        eig_val            : dict
-                             Eigenvalues of each spatio-spectral zone.
-                             Result of step01_compute_PCA.
-        nbkeep             : array
-                             Number of eigenvalues for each zone used to
-                             compute the projection. Result of
-                             step01_compute_PCA.
         cube_faint         : `~mpdaf.obj.Cube`
                              Projection on the eigenvectors associated to the
                              lower eigenvalues of the data cube (representing
                              the faint signal). Result of step01_compute_PCA.
-        cube_cont          : `~mpdaf.obj.Cube`
-                             Projection on the eigenvectors associated to the
-                             higher eigenvalues of the data cube (representing
-                             the continuum). Result of step01_compute_PCA.
         cube_correl        : `~mpdaf.obj.Cube`
                              Cube of T_GLR values. Result of
                              step02_compute_TGLR.
@@ -155,10 +142,11 @@ class ORIGIN(object):
     """
     
     def __init__(self, path, name, filename, NbSubcube, profiles,
-                 PSF, FWHM_PSF, intx, inty, cube_faint, cube_cont, cube_correl,
+                 PSF, FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, frecO2,
+                 thresO2, cube_correl,
                  maxmap, cube_profile, cube_pval_correl, cube_pval_channel,
                  cube_pval_final, Cat0, Cat1, Cat1_T1, Cat1_T2, Cat2, spectra,
-                 Cat3, Cat4, param, eig_val, nbkeep, cube_std, expmap):
+                 Cat3, Cat4, param, cube_std, expmap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -300,10 +288,11 @@ class ORIGIN(object):
         # step0
         self.cube_std = cube_std
         # step1
-        self.eig_val = eig_val
-        self.nbkeep = nbkeep
         self.cube_faint = cube_faint
-        self.cube_cont = cube_cont
+        self.mapO2 = mapO2
+        self.histO2 = histO2
+        self.frecO2 = frecO2
+        self.thresO2 = thresO2
         
         # step2
         self.cube_correl = cube_correl
@@ -340,6 +329,7 @@ class ORIGIN(object):
     @classmethod
     def init(cls, cube, NbSubcube, profiles=None, 
                  PSF=None, FWHM_PSF=None, name='origin'):
+        # NbSubcube None par défaut et sous-cube de 80-100
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -371,16 +361,18 @@ class ORIGIN(object):
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, intx=None, inty=None, cube_faint=None,
-                   cube_cont=None, cube_correl=None, maxmap=None,
+                   mapO2=None, histO2=None, frecO2=None, thresO2=None,
+                   cube_correl=None, maxmap=None,
                    cube_profile=None,
                    cube_pval_correl=None, cube_pval_channel=None,
                    cube_pval_final=None, Cat0=None, Cat1=None, Cat1_T1=None,
                    Cat1_T2=None, Cat2=None, spectra=None, Cat3=None, Cat4=None,
-                   param=None, eig_val=None, nbkeep=None, cube_std=None,
+                   param=None, cube_std=None,
                    expmap=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
+        # sauver les PSFs ?
         """Load a previous session of ORIGIN
         
         Parameters
@@ -416,19 +408,6 @@ class ORIGIN(object):
         intx = np.asarray(param['intx'])
         inty = np.asarray(param['inty'])
         NbSubcube = param['nbsubcube']
-        if os.path.isfile('%s/eigval_%d_%d.txt'%(folder, NbSubcube-1,
-                                                 NbSubcube-1)):
-            eig_val = {}
-            for i in range(NbSubcube):
-                for j in range(NbSubcube):
-                    eig_val[(i,j)] = np.loadtxt('%s/eigval_%d_%d.txt'%(folder, i,j))
-        else:
-            eig_val = None
-        if os.path.isfile('%s/nbkeep.txt'%(folder)):
-            nbkeep = np.loadtxt('%s/nbkeep.txt'%(folder)).\
-            reshape((NbSubcube, NbSubcube)).astype(np.int)
-        else:
-            nbkeep = None
         if os.path.isfile('%s/cube_std.fits'%folder):
             cube_std = Cube('%s/cube_std.fits'%folder)
         else:
@@ -437,10 +416,38 @@ class ORIGIN(object):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
             cube_faint = None
-        if os.path.isfile('%s/cube_cont.fits'%folder):
-            cube_cont = Cube('%s/cube_cont.fits'%folder)
+        if os.path.isfile('%s/mapO2_%d_%d.fits'%(folder, NbSubcube-1,
+                                                 NbSubcube-1)):
+            mapO2 = {}
+            for i in range(NbSubcube):
+                for j in range(NbSubcube):
+                    mapO2[(i,j)] = Image('%s/mapO2_%d_%d.fits'%(folder,
+                                                                      i,j))
         else:
-            cube_cont = None
+            mapO2 = None
+        if os.path.isfile('%s/histO2_%d_%d.txt'%(folder, NbSubcube-1,
+                                                 NbSubcube-1)):
+            histO2 = {}
+            for i in range(NbSubcube):
+                for j in range(NbSubcube):
+                    histO2[(i,j)] = np.loadtxt('%s/histO2_%d_%d.txt'%(folder,
+                                                                      i,j))
+        else:
+            histO2 = None
+        if os.path.isfile('%s/frecO2_%d_%d.txt'%(folder, NbSubcube-1,
+                                                 NbSubcube-1)):
+            frecO2 = {}
+            for i in range(NbSubcube):
+                for j in range(NbSubcube):
+                    frecO2[(i,j)] = np.loadtxt('%s/histO2_%d_%d.txt'%(folder,
+                                                                      i,j))
+        else:
+            frecO2 = None
+        if os.path.isfile('%s/thresO2.txt'%(folder)):
+            thresO2 = np.loadtxt('%s/thresO2.txt'%(folder)).\
+            reshape((NbSubcube, NbSubcube)).astype(np.int)
+        else:
+            thresO2 = None
         if os.path.isfile('%s/cube_correl.fits'%folder):
             cube_correl = Cube('%s/cube_correl.fits'%folder)
         else:
@@ -516,7 +523,7 @@ class ORIGIN(object):
                    NbSubcube=NbSubcube,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    intx=intx, inty=inty, cube_std=cube_std,
-                   cube_faint=cube_faint, cube_cont=cube_cont,
+                   cube_faint=cube_faint, mapO2=mapO2, histO2=histO2, frecO2=frecO2, thresO2=thresO2,
                    cube_correl=cube_correl, maxmap=maxmap,
                    cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
@@ -524,9 +531,10 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat1=Cat1,
                    Cat1_T1=Cat1_T1, Cat1_T2=Cat1_T2, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
-                   eig_val=eig_val, nbkeep=nbkeep, expmap=expmap)
+                   expmap=expmap)
                    
     def write(self, path=None, overwrite=False):
+        # sauver les PSFs ?
         """Save the current session in a folder
         
         Parameters
@@ -569,21 +577,29 @@ class ORIGIN(object):
                                            fmt='%(asctime)s %(message)s')
             self._log_file = logging.getLogger('origfile')
             self._log_file.setLevel(logging.INFO)
-        
+            
+        #step0
+        if self.cube_std is not None:
+            self.cube_std.write('%s/cube_std.fits'%path2)    
         #step1
-        if self.eig_val is not None:
+        if self.histO2 is not None:
             for i in range(self.NbSubcube):
                 for j in range(self.NbSubcube):
-                    np.savetxt('%s/eigval_%d_%d.txt'%(path2, i,j),
-                               self.eig_val[(i,j)])
-        if self.nbkeep is not None:
-            np.savetxt('%s/nbkeep.txt'%path2, self.nbkeep)
-        if self.cube_std is not None:
-            self.cube_std.write('%s/cube_std.fits'%path2)            
+                    np.savetxt('%s/histO2_%d_%d.txt'%(path2, i,j),
+                               self.histO2[(i,j)])
+        if self.frecO2 is not None:
+            for i in range(self.NbSubcube):
+                for j in range(self.NbSubcube):
+                    np.savetxt('%s/frecO2_%d_%d.txt'%(path2, i,j),
+                               self.frecO2[(i,j)])
+        if self.thresO2 is not None:
+            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
+        if self.mapO2 is not None:
+            for i in range(self.NbSubcube):
+                for j in range(self.NbSubcube):
+                    self.mapO2[(i,j)].write('%s/mapO2_%d_%d.fits'%(path2, i,j))
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
-        if self.cube_cont is not None:
-            self.cube_cont.write('%s/cube_cont.fits'%path2)
         # step2
         if self.cube_correl is not None:
             self.cube_correl.write('%s/cube_correl.fits'%path2)
@@ -815,19 +831,19 @@ class ORIGIN(object):
 
         Returns
         -------
-        self.eig_val    : dictionary
-                          Eigenvalues of each spatio-spectral zone
-        self.nbkeep     : array
-                          Number of eigenvalues for each zone used to compute
-                          the projection
         self.cube_faint : `~mpdaf.obj.Cube`
                      Projection on the eigenvectors associated to the lower
                      eigenvalues of the data cube
                      (representing the faint signal)
-        self.cube_cont  : `~mpdaf.obj.Cube`
-                     Projection on the eigenvectors associated to the higher
-                     eigenvalues of the data cube
-                     (representing the continuum)
+        self.mapO2 : dict(`~mpdaf.obj.Image`)
+                     For each subcube, he numbers of iterations used by testO2
+                     for each spaxel
+        self.histO2 : dict(array)
+                      For each subcube, histogram
+        self.frecO2 : dict(array)
+                      For each subcube, frequency
+        self.thresO2 : array(NbSubcube, NbSubcube)
+                       For each subcube, Treshold value
         """
         self._log_file.info('01 - greedy PCA computation:')
         
@@ -841,7 +857,8 @@ class ORIGIN(object):
         self._log_stdout.info('Compute greedy PCA on each zone')  
         
         
-        faint = Compute_GreedyPCA_SubCube(self.NbSubcube,
+        faint, mapO2, self.histO2, self.frecO2, self.thresO2 = Compute_GreedyPCA_SubCube(
+                                          self.NbSubcube,
                                           self.cube_std._data,
                                           self.intx, 
                                           self.inty,
@@ -856,108 +873,17 @@ class ORIGIN(object):
         self._log_stdout.info('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
                           mask=np.ma.nomask)
+        self._log_stdout.info('Save the numbers of iterations used by the',
+                              ' testO2 for each spaxel in the dictionary',
+                              ' self.mapO2')
+        self.mapO2 = {}
+        for numy in range(self.NbSubcube):
+            for numx in range(self.NbSubcube):
+                self.mapO2[(numx, numy)] = Image(data=mapO2[(numx, numy)],
+                                                    wcs=self.wcs)    
         self._log_file.info('01 Done')        
      
-    def step01_compute_PCA(self, r0=0.67):
-        """ Loop on each zone of the data cube and compute the PCA,
-        the number of eigenvectors to keep for the projection
-        (with a linear regression and its associated determination
-        coefficient) and return the projection of the data
-        in the original basis keeping the desired number eigenvalues.
 
-        Parameters
-        ----------
-        r0          : float
-                      Coefficient of determination for projection during PCA
-
-        Returns
-        -------
-        self.eig_val    : dictionary
-                          Eigenvalues of each spatio-spectral zone
-        self.nbkeep     : array
-                          Number of eigenvalues for each zone used to compute
-                          the projection
-        self.cube_faint : `~mpdaf.obj.Cube`
-                     Projection on the eigenvectors associated to the lower
-                     eigenvalues of the data cube
-                     (representing the faint signal)
-        self.cube_cont  : `~mpdaf.obj.Cube`
-                     Projection on the eigenvectors associated to the higher
-                     eigenvalues of the data cube
-                     (representing the continuum)
-        """
-        self._log_file.info('01 - PCA computation r0=%0.2f'%r0)
-        self._log_stdout.info('Step 01 - PCA computation')
-        self.param['r0PCA'] = r0
-        
-        # Weigthed data cube
-        if self.cube_std is None:
-            raise IOError('Run the step 00 to initialize self.cube_std')
-
-        # Compute PCA results
-        self._log_stdout.info('Compute the PCA on each zone')
-        A, V, self.eig_val, nx, ny, nz = Compute_PCA_SubCube(self.NbSubcube,
-                                                        self.cube_std,
-                                                        self.intx, self.inty,
-                                                        0, 0, 0, 0)
-
-        # Number of eigenvectors for each zone
-        # Parameter set to 1 if we want to plot the results
-        # Parameters for projection during PCA
-        self._log_stdout.info('Compute the number of eigenvectors to keep for the projection')
-        list_r0 = np.resize(r0, self.NbSubcube**2)
-        self.nbkeep = Compute_Number_Eigenvectors_Zone(self.NbSubcube, list_r0,
-                                                  self.eig_val)
-        # Adaptive projection of the cube on the eigenvectors
-        self._log_stdout.info('Adaptive projection of the cube on the eigenvectors')
-        cube_faint, cube_cont = Compute_Proj_Eigenvector_Zone(self.nbkeep,
-                                                              self.NbSubcube,
-                                                              self.Nx,
-                                                              self.Ny,
-                                                              self.Nz,
-                                                              A, V,
-                                                              nx, ny, nz,
-                                                              self.inty,
-                                                              self.intx)
-                                                              
-        self._log_stdout.info('Save the faint signal in self.cube_faint')
-        self.cube_faint = Cube(data=cube_faint, wave=self.wave, wcs=self.wcs,
-                          mask=np.ma.nomask)
-        self._log_stdout.info('Save the continuum in self.cube_cont')
-        self.cube_cont = Cube(data=cube_cont, wave=self.wave, wcs=self.wcs,
-                         mask=np.ma.nomask)
-        self._log_file.info('01 Done')
-
-    def step02_apodise_TGLR(self, win = 'PSF'):
-        
-        nl,ny,nx = self.cube_correl.shape
-#        Apodisation = apodwin(win,self.expmap ==0)                   
-        
-#        T = np.array(self.PSF)
-#        a,b,c,d = T.shape
-#        stdT = np.std(T,axis=(2,3))
-#        lis,freq = np.where(stdT==stdT.max())
-#        apodpsf = np.reshape(T[lis,freq,:,:],(c,d))
-#        apodpsf -=apodpsf.min()        
-#        apodpsf /=apodpsf.max()
-#        Apodisation = apodPSF(self.expmap==0,apodpsf)   
-
-        o2 = np.mean(self.cube_raw**2,axis=0)       
-        indpos = (o2>0)
-        mo2 = np.mean(o2[ indpos ])
-        o2[ o2<mo2 ] = mo2 
-        o2 = o2.max() - o2
-        o2 = o2 * indpos 
-        o2 -= o2[indpos].min()
-        Apodisation = o2 / o2.max()                        
-        
-        self.Apodization = None
-        self.Apodization = Apodisation         
-        
-        correl = self.cube_correl.data * np.repeat(Apodisation[np.newaxis,:,:],nl,axis=0)                
-        self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
-                      mask=np.ma.nomask)
-                      
     def step02_compute_TGLR(self):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
@@ -1165,6 +1091,7 @@ class ORIGIN(object):
         self._log_file.info('05 Done')
 
     def step06_select_NBtests(self, thresh_T1=0.2, thresh_T2=2):
+        # verifier de partout et mettre en commentaires
         """select emission lines according to the 2 narrow band tests.
 
         Parameters
@@ -1398,110 +1325,110 @@ class ORIGIN(object):
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
         """
-        if self.eig_val is None or self.nbkeep is None:
-            raise IOError('Run the step 01 to initialize self.eig_val and selb.nbkeep')
+        if self.histO2 is None or self.frecO2 is None:
+            raise IOError('Run the step 01 to initialize self.histO2 and selb.frecO2')
             
         if ax is None:
             ax = plt.gca()
+#        
+#        lambdat = self.eig_val[(i, j)]
+#        nbt = self.nbkeep[i, j]
+#        ax.semilogy(lambdat)
+#        ax.semilogy(nbt, lambdat[nbt], 'r+')
+#        plt.title('zone (%d, %d)' %(i,j))
         
-        lambdat = self.eig_val[(i, j)]
-        nbt = self.nbkeep[i, j]
-        ax.semilogy(lambdat)
-        ax.semilogy(nbt, lambdat[nbt], 'r+')
-        plt.title('zone (%d, %d)' %(i,j))
-        
-    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
-        """Plot the narrow bands images
-        
-        i : integer
-            index of the object in self.Cat1
-        ax1 : matplotlib.Axes
-              The Axes instance in which the NB image
-              around the source is drawn
-        ax2 : matplotlib.Axes
-              The Axes instance in which a other NB image for check is drawn
-        ax3 : matplotlib.Axes
-              The Axes instance in which the difference is drawn
-        """
-        if self.Cat1 is None:
-            raise IOError('Run the step 05 to initialize self.Cat1')
-            
-        if ax1 is None and ax2 is None and ax3 is None:
-            ax1 = plt.subplot(1,3,1)
-            ax2 = plt.subplot(1,3,2)
-            ax3 = plt.subplot(1,3,3)
-            
-        # Coordinates of the source
-        x0 = self.Cat1[i]['x']
-        y0 = self.Cat1[i]['y']
-        z0 = self.Cat1[i]['z']
-        # Larger spatial ranges for the plots
-        longxy0 = 20
-        y01 = max(0, y0 - longxy0)
-        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
-        x01 = max(0, x0 - longxy0)
-        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
-        # Coordinates in this window
-        y00 = y0 - y01
-        x00 = x0 - x01
-        # spectral profile
-        num_prof = self.Cat1[i]['profile']
-        profil0 = self.profiles[num_prof]
-        # length of the spectral profile
-        profil1 = profil0[profil0 > 1e-13]
-        long0 = profil1.shape[0]
-        # half-length of the spectral profile
-        longz = long0 // 2
-        # spectral range
-        intz1 = max(0, z0 - longz)
-        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
-        # subcube for the plot
-        cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
-        wcs = self.wcs[y01:y02, x01:x02]
-        # controle cube
-        nb_ranges = self.param['NBranges']
-        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
-            intz1c = intz1 + nb_ranges * long0
-            intz2c = intz2 + nb_ranges * long0
-        else:
-            intz1c = intz1 - nb_ranges * long0
-            intz2c = intz2 - nb_ranges * long0
-        cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
-        # (1/sqrt(2)) * difference of the 2 sububes
-        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
-        # tests
-        T1 = self.Cat1[i]['T1']
-        T2 = self.Cat1[i]['T2']
-        
-        if ax1 is not None:
-            ax1.plot(x00, y00, 'm+')
-            ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
-            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
-                    'T1=%.3f T2=%.3f\n' % (T1,T2) + \
-                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
-            ima_test_plot.plot(colorbar='v', title=title, ax=ax1)
-            ax1.get_xaxis().set_visible(False)
-            ax1.get_yaxis().set_visible(False)
-
-        if ax2 is not None:
-            ax2.plot(x00, y00, 'm+')
-            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
-            title = 'check - (%d,%d)\n' % (x0, y0) + \
-                        'T1=%.3f T2=%.3f\n' % (T1, T2) + \
-                        'int=[%d,%d[' % (intz1c, intz2c)
-            ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
-            ax2.get_xaxis().set_visible(False)
-            ax2.get_yaxis().set_visible(False)
-
-        if ax3 is not None:
-            ax3.plot(x00, y00, 'm+')
-            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0), wcs=wcs)
-            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
-                    'T1=%.3f T2=%.3f\n' % (T1, T2) + \
-                    'int=[%d,%d[' % (intz1c, intz2c)
-            ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
-            ax3.get_xaxis().set_visible(False)
-            ax3.get_yaxis().set_visible(False)
+#    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
+#        """Plot the narrow bands images
+#        
+#        i : integer
+#            index of the object in self.Cat1
+#        ax1 : matplotlib.Axes
+#              The Axes instance in which the NB image
+#              around the source is drawn
+#        ax2 : matplotlib.Axes
+#              The Axes instance in which a other NB image for check is drawn
+#        ax3 : matplotlib.Axes
+#              The Axes instance in which the difference is drawn
+#        """
+#        if self.Cat1 is None:
+#            raise IOError('Run the step 05 to initialize self.Cat1')
+#            
+#        if ax1 is None and ax2 is None and ax3 is None:
+#            ax1 = plt.subplot(1,3,1)
+#            ax2 = plt.subplot(1,3,2)
+#            ax3 = plt.subplot(1,3,3)
+#            
+#        # Coordinates of the source
+#        x0 = self.Cat1[i]['x']
+#        y0 = self.Cat1[i]['y']
+#        z0 = self.Cat1[i]['z']
+#        # Larger spatial ranges for the plots
+#        longxy0 = 20
+#        y01 = max(0, y0 - longxy0)
+#        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
+#        x01 = max(0, x0 - longxy0)
+#        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
+#        # Coordinates in this window
+#        y00 = y0 - y01
+#        x00 = x0 - x01
+#        # spectral profile
+#        num_prof = self.Cat1[i]['profile']
+#        profil0 = self.profiles[num_prof]
+#        # length of the spectral profile
+#        profil1 = profil0[profil0 > 1e-13]
+#        long0 = profil1.shape[0]
+#        # half-length of the spectral profile
+#        longz = long0 // 2
+#        # spectral range
+#        intz1 = max(0, z0 - longz)
+#        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
+#        # subcube for the plot
+#        cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
+#        wcs = self.wcs[y01:y02, x01:x02]
+#        # controle cube
+#        nb_ranges = self.param['NBranges']
+#        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
+#            intz1c = intz1 + nb_ranges * long0
+#            intz2c = intz2 + nb_ranges * long0
+#        else:
+#            intz1c = intz1 - nb_ranges * long0
+#            intz2c = intz2 - nb_ranges * long0
+#        cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
+#        # (1/sqrt(2)) * difference of the 2 sububes
+#        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
+#        # tests
+#        T1 = self.Cat1[i]['T1']
+#        T2 = self.Cat1[i]['T2']
+#        
+#        if ax1 is not None:
+#            ax1.plot(x00, y00, 'm+')
+#            ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
+#            title = 'cube test - (%d,%d)\n' % (x0, y0) + \
+#                    'T1=%.3f T2=%.3f\n' % (T1,T2) + \
+#                    'lambda=%d int=[%d,%d[' % (z0, intz1, intz2)
+#            ima_test_plot.plot(colorbar='v', title=title, ax=ax1)
+#            ax1.get_xaxis().set_visible(False)
+#            ax1.get_yaxis().set_visible(False)
+#
+#        if ax2 is not None:
+#            ax2.plot(x00, y00, 'm+')
+#            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
+#            title = 'check - (%d,%d)\n' % (x0, y0) + \
+#                        'T1=%.3f T2=%.3f\n' % (T1, T2) + \
+#                        'int=[%d,%d[' % (intz1c, intz2c)
+#            ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
+#            ax2.get_xaxis().set_visible(False)
+#            ax2.get_yaxis().set_visible(False)
+#
+#        if ax3 is not None:
+#            ax3.plot(x00, y00, 'm+')
+#            ima_diff_plot = Image(data=diff_cube_plot.sum(axis=0), wcs=wcs)
+#            title = 'Difference narrow band - (%d,%d)\n' % (x0, y0) + \
+#                    'T1=%.3f T2=%.3f\n' % (T1, T2) + \
+#                    'int=[%d,%d[' % (intz1c, intz2c)
+#            ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
+#            ax3.get_xaxis().set_visible(False)
+#            ax3.get_yaxis().set_visible(False)
     
 
     def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
