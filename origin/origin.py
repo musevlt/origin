@@ -131,7 +131,7 @@ class ORIGIN(object):
     """
     
     def __init__(self, path, name, filename, NbSubcube, profiles, PSF,
-                 FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, frecO2,
+                 FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, freqO2,
                  thresO2, cube_correl, maxmap, cube_profile, cube_pval_correl,
                  cube_pval_channel, cube_pval_final, Cat0, Cat2, spectra, Cat3,
                  Cat4, param, cube_std, expmap):
@@ -281,7 +281,7 @@ class ORIGIN(object):
         self.cube_faint = cube_faint
         self.mapO2 = mapO2
         self.histO2 = histO2
-        self.frecO2 = frecO2
+        self.freqO2 = freqO2
         self.thresO2 = thresO2
         
         # step2
@@ -344,7 +344,7 @@ class ORIGIN(object):
         return cls(path='.',  name=name, filename=cube, NbSubcube=NbSubcube,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, intx=None,
                    inty=None, cube_faint=None, mapO2=None, histO2=None,
-                   frecO2=None, thresO2=None, cube_correl=None, maxmap=None,
+                   freqO2=None, thresO2=None, cube_correl=None, maxmap=None,
                    cube_profile=None, cube_pval_correl=None,
                    cube_pval_channel=None, cube_pval_final=None, Cat0=None,
                    Cat2=None, spectra=None, Cat3=None, Cat4=None, param=None,
@@ -414,15 +414,15 @@ class ORIGIN(object):
                                                                       i,j))
         else:
             histO2 = None
-        if os.path.isfile('%s/frecO2_%d_%d.txt'%(folder, NbSubcube-1,
+        if os.path.isfile('%s/freqO2_%d_%d.txt'%(folder, NbSubcube-1,
                                                  NbSubcube-1)):
-            frecO2 = {}
+            freqO2 = {}
             for i in range(NbSubcube):
                 for j in range(NbSubcube):
-                    frecO2[(i,j)] = np.loadtxt('%s/histO2_%d_%d.txt'%(folder,
+                    freqO2[(i,j)] = np.loadtxt('%s/histO2_%d_%d.txt'%(folder,
                                                                       i,j))
         else:
-            frecO2 = None
+            freqO2 = None
         if os.path.isfile('%s/thresO2.txt'%(folder)):
             thresO2 = np.loadtxt('%s/thresO2.txt'%(folder)).\
             reshape((NbSubcube, NbSubcube)).astype(np.int)
@@ -492,7 +492,7 @@ class ORIGIN(object):
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    intx=intx, inty=inty, cube_std=cube_std,
                    cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
-                   frecO2=frecO2, thresO2=thresO2, cube_correl=cube_correl,
+                   freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
                    maxmap=maxmap, cube_profile=cube_profile,
                    cube_pval_correl=cube_pval_correl,
                    cube_pval_channel=cube_pval_channel,
@@ -548,17 +548,20 @@ class ORIGIN(object):
         #step0
         if self.cube_std is not None:
             self.cube_std.write('%s/cube_std.fits'%path2)    
+        if self.var is not None:
+            Cube(data=self.var, wave=self.wave, wcs=self.wcs,
+                      mask=np.ma.nomask).write('%s/cube_var.fits'%path2)         
         #step1
         if self.histO2 is not None:
             for i in range(self.NbSubcube):
                 for j in range(self.NbSubcube):
                     np.savetxt('%s/histO2_%d_%d.txt'%(path2, i,j),
                                self.histO2[(i,j)])
-        if self.frecO2 is not None:
+        if self.freqO2 is not None:
             for i in range(self.NbSubcube):
                 for j in range(self.NbSubcube):
-                    np.savetxt('%s/frecO2_%d_%d.txt'%(path2, i,j),
-                               self.frecO2[(i,j)])
+                    np.savetxt('%s/freqO2_%d_%d.txt'%(path2, i,j),
+                               self.freqO2[(i,j)])
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
         if self.mapO2 is not None:
@@ -580,7 +583,7 @@ class ORIGIN(object):
         if self.cube_pval_channel is not None:
             self.cube_pval_channel.write('%s/cube_pval_channel.fits'%path2)
         if self.cube_pval_final is not None:
-            self.cube_pval_final.write('%s/cube_pval_final.fits'%path2)
+            self.cube_pval_final.write('%s/cube_pval_final.fits'%path2)                                    
         # step4
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
@@ -799,7 +802,7 @@ class ORIGIN(object):
                      for each spaxel
         self.histO2 : dict(array)
                       For each subcube, histogram
-        self.frecO2 : dict(array)
+        self.freqO2 : dict(array)
                       For each subcube, frequency
         self.thresO2 : array(NbSubcube, NbSubcube)
                        For each subcube, Treshold value
@@ -816,7 +819,7 @@ class ORIGIN(object):
         self._log_stdout.info('Compute greedy PCA on each zone')  
         
         
-        faint, mapO2, self.histO2, self.frecO2, self.thresO2 = \
+        faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_SubCube(self.NbSubcube, self.cube_std._data,
                                   self.intx, self.inty, test_fun,
                                   Noise_population, threshold_test)
@@ -1191,8 +1194,8 @@ class ORIGIN(object):
 
         return nsources
         
-    def plot_PCA(self, i, j, ax=None):
-        """ Plot the eigenvalues and the separation point
+    def plot_PCA(self, i, j, ax=None, log10=True):
+        """ Plot the histogram and the threshold for the starting point of the PCA
         
         Parameters
         ----------
@@ -1202,18 +1205,58 @@ class ORIGIN(object):
            y-coordinate of the zone
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
+        log10 : To draw histogram in logarithmic scale or not
         """
-        if self.histO2 is None or self.frecO2 is None:
-            raise IOError('Run the step 01 to initialize self.histO2 and selb.frecO2')
+        if self.histO2 is None or self.freqO2 is None:
+            raise IOError('Run the step 01 to initialize self.histO2 and selb.freqO2')
             
         if ax is None:
             ax = plt.gca()
-#        
-#        lambdat = self.eig_val[(i, j)]
-#        nbt = self.nbkeep[i, j]
-#        ax.semilogy(lambdat)
-#        ax.semilogy(nbt, lambdat[nbt], 'r+')
-#        plt.title('zone (%d, %d)' %(i,j))
+    
+        bins = self.freqO2[(i, j)]
+        hist = self.histO2[(i, j)]
+        thre = self.thresO2[(i, j)]
+        if log10:
+            hist = np.log10(hist)
+        
+        center = (bins[:-1] + bins[1:]) / 2
+        ax.plot(center, hist,'-k')
+        ax.plot(center, hist,'.r')    
+        ym,yM = ax.get_ylim()
+        plt.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+        plt.grid()
+        plt.xlim((center.min(),center.max()))
+        plt.show()
+        plt.title('zone (%d, %d) - threshold %f' %(i,j,thre))
+        
+    def plot_mapPCA(self, i, j, ax=None, iteration=None):
+        """ Plot the histogram and the threshold for the starting point of the PCA
+        
+        Parameters
+        ----------
+        i: integer in [0, NbSubCube[
+           x-coordinate of the zone
+        j: integer in [0, NbSubCube[
+           y-coordinate of the zone
+        ax : matplotlib.Axes
+                the Axes instance in which the image is drawn
+        iteration : Display the nuisance/bacground pixels at itartion k
+        """
+        if self.mapO2 is None:
+            raise IOError('Run the step 01 to initialize self.mapO2')
+            
+        if ax is None:
+            ax = plt.gca()
+    
+        if iteration is None:
+            mapO2 = self.mapO2[(i, j)].data
+        else:
+            mapO2 = self.mapO2[(i, j)].data>iteration
+            
+        plt.imshow(mapO2,origin='lower',cmap='jet')
+        plt.colorbar()
+        plt.show()
+        plt.title('zone (%d, %d)' %(i,j))
         
     def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
