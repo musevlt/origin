@@ -134,7 +134,7 @@ class ORIGIN(object):
                  FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, freqO2,
                  thresO2, cube_correl, maxmap, cube_profile, cube_pval_correl,
                  cube_pval_channel, cube_pval_final, Cat0, Cat2, spectra, Cat3,
-                 Cat4, param, cube_std, expmap):
+                 Cat4, param, cube_std, var, expmap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -177,8 +177,11 @@ class ORIGIN(object):
             self.expmap = Cube(expmap)._data
         
         # variance - set to Inf the Nan
-        self.var = cub.var
-        self.var[np.isnan(self.var)] = np.inf
+        if var is None:
+            self.var = cub._var
+            self.var[np.isnan(self.var)] = np.inf
+        else:
+            self.var = var
         # RA-DEC coordinates
         self.wcs = cub.wcs
         # spectral coordinates
@@ -348,7 +351,7 @@ class ORIGIN(object):
                    cube_profile=None, cube_pval_correl=None,
                    cube_pval_channel=None, cube_pval_final=None, Cat0=None,
                    Cat2=None, spectra=None, Cat3=None, Cat4=None, param=None,
-                   cube_std=None, expmap=None)
+                   cube_std=None, var=None, expmap=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -390,8 +393,11 @@ class ORIGIN(object):
         NbSubcube = param['nbsubcube']
         if os.path.isfile('%s/cube_std.fits'%folder):
             cube_std = Cube('%s/cube_std.fits'%folder)
+            var = cube_std._var
+            cube_std._var = None
         else:
-            cube_std = None            
+            cube_std = None
+            var = None
         if os.path.isfile('%s/cube_faint.fits'%folder):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
@@ -490,7 +496,7 @@ class ORIGIN(object):
         return cls(path=path,  name=name, filename=param['cubename'],
                    NbSubcube=NbSubcube,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   intx=intx, inty=inty, cube_std=cube_std,
+                   intx=intx, inty=inty, cube_std=cube_std, var=var,
                    cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
                    freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
                    maxmap=maxmap, cube_profile=cube_profile,
@@ -547,10 +553,9 @@ class ORIGIN(object):
             
         #step0
         if self.cube_std is not None:
-            self.cube_std.write('%s/cube_std.fits'%path2)    
-        if self.var is not None:
-            Cube(data=self.var, wave=self.wave, wcs=self.wcs,
-                      mask=np.ma.nomask).write('%s/cube_var.fits'%path2)         
+            if self.var is not None:
+                self.cube_std._var = self.var
+            self.cube_std.write('%s/cube_std.fits'%path2)
         #step1
         if self.histO2 is not None:
             for i in range(self.NbSubcube):

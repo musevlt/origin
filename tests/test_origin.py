@@ -69,14 +69,14 @@ def test_origin():
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
     nsources = my_origin.step10_write_sources(ncpu=1)
-    assert (nsources == 8) 
+    assert (nsources == 7) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 8)
+    assert (len(cat) == 7)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
     Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
-    assert (len(np.unique(Nz)) == 1)
+    assert (len(np.unique(Nz)) == 2)
     Ny = np.array([ima.shape[0] for ima in src.images.values()])
     assert(len(np.unique(Ny)) == 1)
     Nx = np.array([ima.shape[1] for ima in src.images.values()])
