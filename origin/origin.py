@@ -16,6 +16,7 @@ from __future__ import absolute_import, division
 from astropy.io import fits
 from astropy.table import Table
 import astropy.units as u
+import glob
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -232,7 +233,7 @@ class ORIGIN(object):
                 else: # mosaic: one FSF cube per field
                     self.PSF = []
                     self.FWHM_PSF = []
-                    for i in range(0, nfields):
+                    for i in range(nfields):
                         # Normalization 
                         self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))\
                                                     [:, np.newaxis,np.newaxis])
@@ -246,20 +247,29 @@ class ORIGIN(object):
 
         else:
             self.param['PSF'] = PSF
-            cubePSF = Cube(PSF)
-            if cubePSF.shape[1] != cubePSF.shape[2]:
-                raise IOError('PSF must be a square image.')
-            if not cubePSF.shape[1]%2:
-                raise IOError('The spatial size of the PSF must be odd.')
-            if cubePSF.shape[0] != self.Nz:
-                raise IOError('PSF and data cube have not the same dimensions',
-                              ' along the spectral axis.')
-            if not np.isclose(cubePSF.wcs.get_step(unit=u.arcsec)[0],
-                              step_arcsec):
-                raise IOError('PSF and data cube have not the same pixel ',
-                              'sizes.')
-
-            self.PSF = cubePSF._data
+            if type(PSF) is str:
+                cubePSF = Cube(PSF)
+                if cubePSF.shape[1] != cubePSF.shape[2]:
+                    raise IOError('PSF must be a square image.')
+                if not cubePSF.shape[1]%2:
+                    raise IOError('The spatial size of the PSF must be odd.')
+                if cubePSF.shape[0] != self.Nz:
+                    raise IOError('PSF and data cube have not the same dimensions',
+                                  ' along the spectral axis.')
+                if not np.isclose(cubePSF.wcs.get_step(unit=u.arcsec)[0],
+                                  step_arcsec):
+                    raise IOError('PSF and data cube have not the same pixel ',
+                                  'sizes.')
+    
+                self.PSF = cubePSF._data
+            else:
+                nfields = len(PSF)
+                self.PSF = []
+                for n in range(nfields):
+                    self.PSF.append(Cube(PSF[i]))
+                fmap = FieldsMap(filename, extname='FIELDMAP')
+                # weighted field map
+                self.wfields = fmap.compute_weights()
             # mean of the fwhm of the FSF in pixel
             self.FWHM_PSF = np.mean(FWHM_PSF)
             self.param['FWHM PSF'] = FWHM_PSF.tolist()
@@ -380,14 +390,23 @@ class ORIGIN(object):
             expmap = param['expmap']
         else:
             expmap = None
+            
+        if 'FWHM PSF' in param:
+            FWHM_PSF = np.asarray(param['FWHM PSF'])
+        else:
+            FWHM_PSF = None
 
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
-            FWHM_PSF = np.asarray(param['FWHM PSF'])
         else:
-            PSF = None
-            FWHM_PSF = None
-            
+            PSF_files = glob.glob('%s/cube_psf_*.fits'%folder)
+            if len(PSF_files) == 0:
+                PSF = None
+            if len(PSF_files) == 1:
+                PSF = PSF_files[0]
+            else:
+                PSF = sorted(PSF_files)
+
         intx = np.asarray(param['intx'])
         inty = np.asarray(param['inty'])
         NbSubcube = param['nbsubcube']
@@ -507,7 +526,6 @@ class ORIGIN(object):
                    expmap=expmap)
                    
     def write(self, path=None, overwrite=False):
-        #TODO sauver les PSFs ?
         """Save the current session in a folder
         
         Parameters
@@ -550,6 +568,15 @@ class ORIGIN(object):
                                            fmt='%(asctime)s %(message)s')
             self._log_file = logging.getLogger('origfile')
             self._log_file.setLevel(logging.INFO)
+            
+        # PSF
+        if type(self.PSF) is list:
+            for i, psf in enumerate(self.PSF):
+                Cube(data=psf, wcs=self.wcs, wave=self.wave,
+                     mask=np.ma.nomask).write('%s/cube_psf_%02d.fits'%(path2,i))
+        else:
+            Cube(data=self.PSF, wcs=self.wcs, wave=self.wave,
+                     mask=np.ma.nomask).write('%s/cube_psf.fits'%path2)
             
         #step0
         if self.cube_std is not None:
