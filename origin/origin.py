@@ -38,7 +38,7 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Construct_Object_Catalogue, dct_residual, Compute_Standardized_data, \
     O2test,Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator
     
-__version__ ='beta2'
+__version__ ='beta2.2'
 
 
 class ORIGIN(object):
