@@ -572,11 +572,9 @@ class ORIGIN(object):
         # PSF
         if type(self.PSF) is list:
             for i, psf in enumerate(self.PSF):
-                Cube(data=psf, wcs=self.wcs, wave=self.wave,
-                     mask=np.ma.nomask).write('%s/cube_psf_%02d.fits'%(path2,i))
+                Cube(data=psf, mask=np.ma.nomask).write('%s/cube_psf_%02d.fits'%(path2,i))
         else:
-            Cube(data=self.PSF, wcs=self.wcs, wave=self.wave,
-                     mask=np.ma.nomask).write('%s/cube_psf.fits'%path2)
+            Cube(data=self.PSF, mask=np.ma.nomask).write('%s/cube_psf.fits'%path2)
             
         #step0
         if self.cube_std is not None:
