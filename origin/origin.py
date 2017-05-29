@@ -1181,7 +1181,7 @@ class ORIGIN(object):
         self._log_stdout.info('Step 10 - Sources creation')
         self._log_stdout.info('Add RA-DEC to the catalogue')
         if self.Cat4 is None:
-            raise IOError('Run the step 10 to initialize self.Cat4')
+            raise IOError('Run the step 09 to initialize self.Cat4')
 
         # path
         if path is not None and not os.path.exists(path):

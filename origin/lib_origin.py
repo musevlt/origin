@@ -30,7 +30,7 @@ lib_origin.py contains the methods that compose the ORIGIN software
 from __future__ import absolute_import, division
 
 #from scipy.io import savemat
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 #import os 
 
 import astropy.units as u
@@ -170,7 +170,7 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     """        
     nl,ny,nx = cube_dct.shape
     
-    mask = (expmap==0)
+    mask = expmap==0
     
     cube_dct[mask] = np.nan
     
@@ -1426,6 +1426,9 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
                        PSF_Moffat, longxy, Dico, xmin, ymin):
+    plt.imshow(np.sum(cube_faint_t,axis=0))    
+    plt.pause(1)
+    
     """Function to compute the estimated emission line for each coordinate
     with the deconvolution model :
     subcube = FSF*line -> line_est = subcube*fsf/(fsf^2)
