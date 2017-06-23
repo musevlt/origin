@@ -44,9 +44,11 @@ from astropy.table import Table, Column, join
 from astropy.utils.console import ProgressBar
 from joblib import Parallel, delayed
 from scipy import signal, stats, special
-from scipy.ndimage import measurements, morphology
+from scipy.ndimage import measurements, morphology, filters
+from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import KDTree
 from scipy.sparse.linalg import svds
+from skimage import measure
 from six.moves import range, zip
 
 from mpdaf.obj import Cube, Image, Spectrum
@@ -135,11 +137,39 @@ def dct_residual(w_raw, order):
     A = np.dot(D0, D0.T)
      
     # Faint[:,i,j] = w_raw[:,i,j] - np.dot(A, w_raw[:,i,j])           
-    Faint = w_raw - np.tensordot(A, w_raw, axes=(0,0))
+    cont = np.tensordot(A, w_raw, axes=(0,0))
+    Faint = w_raw - cont
 
-    return Faint
+    return Faint, cont
 
+def var_from_raw( cube_raw, mask ): 
+    """Function to compute the variance from raw data directly.  
+    
+    Parameters
+    ----------
+    cube_raw:   array
+                Raw cube
+              
+    mask    :   array
+                mask of zeros of NEXPMAP
 
+    Returns
+    -------                
+                
+    VAR     :   array
+                cube of variance
+                
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)                
+    """      
+    
+    cube_raw[mask] = np.nan
+    VAR = np.nanvar(cube_raw, axis=(1,2))
+    VAR = VAR[:, np.newaxis, np.newaxis] * np.ones(cube_raw.shape)       
+    VAR[mask] = np.inf   
+    return VAR
+    
+    
 def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     """Function to compute the standardized data.  
     
@@ -354,15 +384,22 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
             # orthogonal projection with background
             x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red ) 
             x_red /= np.nansum(b**2)
+
+            # remove spectral mean from residual data
+            mean_in_pca = np.mean( x_red , axis = 1)
+            x_red_nomean = x_red.copy()
+            x_red_nomean -= np.repeat(mean_in_pca[:,np.newaxis], \
+                                      x_red.shape[1], axis=1)
             
-            # sparse svd if nb spectrum > 1 else normal svd
+            # sparse svd if nb spectrum > 1 else normal svd            
             if x_red.shape[1]==1:        
-                U,s,V = np.linalg.svd( x_red , full_matrices=False)
+                U,s,V = np.linalg.svd( x_red_nomean , full_matrices=False)
             else:
-                U,s,V = svds( x_red , k=1)         
+                U,s,V = svds( x_red_nomean , k=1)         
             
             # orthogonal projection
-            xest = np.dot( np.dot(U,np.transpose(U)), np.reshape(faint,(nl,ny*nx)))
+            xest = np.dot( np.dot(U,np.transpose(U)), \
+                          np.reshape(faint,(nl,ny*nx)))
             faint -= np.reshape(xest,(nl,ny,nx))
             
             # test 
@@ -709,7 +746,9 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
         # maximum over the fourth dimension
         PROFILE_MAX = np.argmax(GLR, axis=3)
+        
         correl = np.amax(GLR, axis=3)
+        correl_min = np.amin(GLR, axis=3)        
         # Number of corresponding real profile
         profile[PROFILE_MAX == 1] = k
         # Set the first cube of correlation values correspond
@@ -718,10 +757,165 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
         
-    return correl, profile
+    return correl, profile, correl_min
 
+
+def Compute_pval_local_max_zone(correl, mask, intx, inty, NbSubcube, \
+                                threshold, neighboors):
+    """Function to compute the p-values associated to the
+    local max of T_GLR values for each zone
+
+    Parameters
+    ----------
+    correl    : array
+                cube of T_GLR values (correlations)
+    mask      : array
+                boolean cube (true if pixel is masked)
+    intx      : array
+                limits in pixels of the columns for each zone
+    inty      : array
+                limits in pixels of the rows for each zone
+    NbSubcube : int
+                Number of subcube in the spatial segementation
+    threshold : float
+                The threshold applied to the p-values cube
+    neighboors: int
+                Number of connected components                
+
+    Returns
+    -------
+    cube_pval_correl : array
+                       cube of thresholded p-values associated
+                       to the local max of T_GLR values
+
+    Date  : June, 19 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    # initialization
+    cube_pval_lm_correl = np.ones(correl.shape)
+    cube_Local_max = np.zeros(correl.shape)
+    for numy in range(NbSubcube):
+        for numx in range(NbSubcube):
+            # limits of each spatial zone
+            x1 = intx[numx]
+            x2 = intx[numx + 1]
+            y2 = inty[numy]
+            y1 = inty[numy + 1]
+
+            correl_temp_edge = correl[:, y1:y2, x1:x2]
+            mask_temp_edge = mask[:, y1:y2, x1:x2]
+            # Cube of pvalues for each zone
+            cube_pval_lm_correl_temp, cube_Local_max_temp = \
+              Compute_pval_localmax(correl_temp_edge,mask_temp_edge,neighboors)
+            
+            cube_pval_lm_correl[:, y1:y2, x1:x2] = cube_pval_lm_correl_temp
+            cube_Local_max[:, y1:y2, x1:x2] = cube_Local_max_temp
+
+    # Threshold the pvalues
+    threshold_log = 10**(-threshold)
+    eps = np.finfo(float).eps
+    cube_pval_lm_correl = (eps + cube_pval_lm_correl) * \
+                            (cube_pval_lm_correl < threshold_log)
+    
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+    return cube_pval_lm_correl , cube_Local_max
+
+def Compute_pval_localmax(correl_temp_edge, mask_temp_edge, neighboors):
+    """Function to compute the local maxima distribution of the T_GLR values 
+    with hypothesis : local maxima of T_GLR are distributed according a normal 
+    distribution
+
+    Parameters
+    ----------
+    correl_temp_edge :  array
+                        T_GLR values with edges excluded
+    mask_temp_edge   :  array 
+                        mask array (true if pixel is masked)
+    neighboors       :  int
+                        Number of connected components
+    Returns
+    -------
+    cube_pval_correl : array
+                       p-values asssociated to the local maxima of T_GLR values
+
+    Date  : June, 19 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    # connected components
+    conn = (neighboors + 1)**(1 / 3.) 
+    # local maxima
+    Max_filter = filters.maximum_filter(correl_temp_edge,size=(conn,conn,conn))
+    Local_max_mask= (correl_temp_edge == Max_filter)
+    Local_max_mask[mask_temp_edge]=0
+    Local_max=correl_temp_edge*Local_max_mask
+    
+    Local_max_red = Local_max[~mask_temp_edge]
+    Local_max_red = Local_max[Local_max>0]
+    moy_est = np.mean(Local_max_red)
+    std_est = np.std(Local_max_red)
+    # hypothesis : T_GLR are distributed according a normal distribution
+    cube_pval_lm_correl = 1-stats.norm.cdf(Local_max,loc=moy_est,scale=std_est)
+
+    return cube_pval_lm_correl , Local_max
+    
+def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
+    """Function to compute refrerent voxel of each group of connected voxels
+    using the voxel with the higher T_GLR value.
+
+    Parameters
+    ----------
+    correl            : array
+                        cube of T_GLR values
+    profile           : array
+                        Number of the profile associated to the T_GLR
+    cube_pval_lm_correl  : array
+                        cube of thresholded p-values associated
+                        to the local max of the T_GLR values
+    wcs               : `mpdaf.obj.WCS`
+                         RA-DEC coordinates.
+    wave              : `mpdaf.obj.WaveCoord`
+                         Spectral coordinates.
+
+    Returns
+    -------
+    Cat_ref : astropy.Table
+              Catalogue of the referent voxels coordinates for each group
+              Columns of Cat_ref : x y z ra dec lba,
+                                   T_GLR profile pvalC pvalS pvalF
+
+    Date  : June, 19 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
 
     
+    zpixRef,ypixRef,xpixRef = np.where(cube_pval_lm_correl>0)
+    correl_max = correl[zpixRef,ypixRef,xpixRef]
+    profile_max = profile[zpixRef, ypixRef, xpixRef]
+    pvalC = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
+    pvalS = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
+    pvalF = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
+    
+    # add real coordinates
+    pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
+    skycrd = wcs.pix2sky(pixcrd)
+    ra = skycrd[:, 1]
+    dec = skycrd[:, 0]
+    lbda = wave.coord(zpixRef)
+    # Catalogue of referent pixels
+    Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
+                     profile_max, pvalC, pvalS, pvalF],
+                    names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
+                           'profile', 'pvalC', 'pvalS', 'pvalF'))
+    # Catalogue sorted along the Z axis
+    Cat_ref.sort('z')
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+    return Cat_ref
+
+
 def Compute_pval_correl_zone(correl, mask, intx, inty, NbSubcube, threshold):
     """Function to compute the p-values associated to the
     T_GLR values for each zone
@@ -967,7 +1161,6 @@ def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
     cube_pval_final[cube_pval_final == 0] = 1
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_pval_final
-
 
 def Compute_Connected_Voxel(cube_pval_final, neighboors):
     """Function to compute the groups of connected voxels with a
@@ -1237,7 +1430,528 @@ def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat1_T1, Cat1_T2
 
+#%%
+def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
+    
+    """Function to extract data from an estimated source in catalog.
 
+    Parameters
+    ----------
+    raw_in     : array
+                 RAW data
+    var_in     : array
+                 MUSE covariance
+    psf_in     : array
+                 MUSE PSF
+    weights_in : array
+                 PSF weights                 
+    y          : integer
+                 y position in pixek estimated in previous catalog
+    x          : integer
+                 x position in pixek estimated in previous catalog                 
+    size_grid  : integer
+                 Maximum spatial shift for the grid
+
+    Returns
+    -------
+
+    red_dat : cube of raw_in centered in y,x of size PSF+Max spatial shift
+    red_var : cube of var_in centered in y,x of size PSF+Max spatial shift
+    red_wgt : cube of weights_in centered in y,x of size PSF+Max spatial shift
+    red_psf : cube of psf_in centered in y,x of size PSF+Max spatial shift    
+
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """   
+    
+    # size data
+    nl,ny,nx = raw_in.shape
+    
+    # size psf
+    if weights_in is None:
+        sizpsf = psf_in.shape[1]        
+    else:
+        sizpsf = psf_in[0].shape[1] 
+    
+    # size minicube
+    sizemc = 2*size_grid + sizpsf
+    
+    # half size psf    
+    longxy = int(sizemc // 2)    
+    
+    # bound of image    
+    psx1 = np.maximum(0 ,x-longxy)
+    psy1 = np.maximum(0 ,y-longxy)        
+    psx2 = np.minimum(nx,x+longxy+1)
+    psy2 = np.minimum(ny,y+longxy+1)      
+    
+    # take into account bordure of cube
+    psx12 = np.maximum(0,longxy-x+psx1)
+    psy12 = np.maximum(0,longxy-y+psy1)        
+    psx22 = np.minimum(sizemc,longxy-x+psx2)
+    psy22 = np.minimum(sizemc,longxy-y+psy2)      
+    
+    # create weight, data with bordure
+    red_dat = np.zeros((nl,sizemc,sizemc))    
+    red_dat[:,psy12:psy22,psx12:psx22] = raw_in[:,psy1:psy2,psx1:psx2]    
+
+    red_var = np.ones((nl,sizemc,sizemc)) * np.inf
+    red_var[:,psy12:psy22,psx12:psx22] = var_in[:,psy1:psy2,psx1:psx2]       
+    
+    if weights_in is None:
+        red_wgt = None
+        red_psf = psf_in       
+    else:
+        red_wgt = []
+        red_psf = []
+        for n,w in enumerate(weights_in):
+            if np.sum(w[psy1:psy2,psx1:psx2])>0: 
+                w_tmp = np.zeros((sizemc,sizemc))
+                w_tmp[psy12:psy22,psx12:psx22] = w[psy1:psy2,psx1:psx2] 
+                red_wgt.append(w_tmp)
+                red_psf.append(psf_in[n])
+
+    return red_dat, red_var, red_wgt, red_psf 
+
+def LS_deconv_wgt(data_in,var_in,psf_in):
+    """Function to compute the Least Square estimation of a ponctual source.
+
+    Parameters
+    ----------
+    data_in    : array
+                 input data
+    var_in     : array
+                 input variance
+    psf_in     : array
+                 weighted MUSE PSF
+
+    Returns
+    -------
+    deconv_out : LS Deconvolved spectrum
+
+    varest_out : estimated theoretic variance
+
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """    
+    # deconvolution
+    nl,sizpsf,tmp = psf_in.shape    
+    v = np.reshape(var_in,(nl,sizpsf*sizpsf))
+    p = np.reshape(psf_in,(nl,sizpsf*sizpsf))
+    s = np.reshape(data_in,(nl,sizpsf*sizpsf))
+    varest_out = 1 / np.sum( p*p/v,axis=1)    
+    deconv_out = np.sum(p*s/np.sqrt(v),axis=1) * varest_out 
+
+    return deconv_out, varest_out 
+
+def conv_wgt(deconv_met, psf_in):
+    """Function to compute the convolution of a spectrum. output is a cube of
+    the good size for rest of algorithm
+
+    Parameters
+    ----------
+    deconv_met : LS Deconvolved spectrum
+                 input data
+
+    psf_in     : array
+                 weighted MUSE PSF
+
+    Returns
+    -------
+    cube_conv  : Cube, convolution from deconv_met
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """       
+    nl,sizpsf,tmp = psf_in.shape
+    # half size psf    
+    longxy = int(sizpsf // 2)      
+    cube_tmp = np.zeros((nl,sizpsf,sizpsf))
+    minicube = np.zeros((nl,sizpsf,sizpsf))
+    minicube[:,longxy,longxy] = deconv_met    
+    for n in range(nl):                                                          
+        cube_tmp[n,:,:] = signal.fftconvolve(minicube[n, :,:],\
+                psf_in[n, :, :], mode='same')
+    cube_conv = cube_tmp*(np.abs(psf_in)>0)
+    return cube_conv
+
+def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
+    """Function to Perform PCA LS or Denoised PCA LS.
+    algorithm: 
+        - principal eigen vector is computed, RAW data are orthogonalized
+          this is the first estimation to modelize the continuum
+        - on residual, the line is estimated by least square estimation
+        - the estimated line is convolved by the psf and removed from RAW data
+        - principal eigen vector is computed.
+        
+        - - PCA LS: RAW data are orthogonalized, this is the second estimation 
+                    to modelize the continuum        
+                    
+        - - Denoised PCA LS: The eigen vector is denoised by a DCT, with the
+                             new eigen vector RAW data are orthogonalized, 
+                             this is the second estimation to modelize the 
+                             continuum                            
+        - on residual, the line is estimated by least square estimation
+        
+    Parameters
+    ----------
+    data_in    : array
+                 RAW data
+    var_in     : array
+                 MUSE covariance
+    psf_in     : array
+                 MUSE PSF
+    order_dct  : integer
+                 order of the DCT for the Denoised PCA LS
+                 if None the PCA LS is performed
+
+    Returns
+    -------
+
+    estimated_line : estimated line
+    estimated_var  : estimated variance  
+
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """   
+    
+    nl,sizpsf,tmp = psf_in.shape        
+    
+    # STD 
+    data_std = data_in / np.sqrt(var_in)    
+    data_st_pca = np.reshape(data_std,(nl,sizpsf*sizpsf))
+    
+    # PCA    
+    data_in_pca = data_st_pca.copy()
+    mean_in_pca = np.mean( data_in_pca , axis = 1)
+    data_in_pca-= np.repeat(mean_in_pca[:,np.newaxis],sizpsf*sizpsf,axis=1)
+
+    U,s,V = svds( data_in_pca , k=1)                  
+        
+    # orthogonal projection
+    xest = np.dot( np.dot(U,np.transpose(U)), data_in_pca )
+    residual = data_std - np.reshape(xest,(nl,sizpsf,sizpsf))    
+    
+    # LS deconv 
+    deconv_out, varest_out = LS_deconv_wgt(residual, var_in, psf_in) 
+
+    # PSF convolution
+    conv_out = conv_wgt(deconv_out, psf_in)     
+    
+    # cleaning the data    
+    data_clean = (data_in - conv_out) / np.sqrt(var_in)
+    
+    # 2nd PCA
+    data_in_pca = np.reshape(data_clean,(nl,sizpsf*sizpsf))
+    mean_in_pca = np.mean( data_in_pca , axis = 1)
+    data_in_pca-= np.repeat(mean_in_pca[:,np.newaxis],sizpsf*sizpsf,axis=1)    
+
+    U,s,V = svds( data_in_pca , k=1)      
+       
+    if order_dct is not None: 
+        # denoise eigen vector with DCT
+        D0 = DCTMAT(nl)
+        D0 = D0[:, 0:order_dct+1]
+        A = np.dot(D0, D0.T)
+        U = np.dot(A,U)        
+        
+    # orthogonal projection
+    xest = np.dot( np.dot(U,np.transpose(U)), data_st_pca )
+    residual = data_std - np.reshape(xest,(nl,sizpsf,sizpsf))   
+        
+    # LS deconv 
+    estimated_line, estimated_var = LS_deconv_wgt(residual, var_in, psf_in)    
+    
+    return estimated_line, estimated_var 
+
+
+def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
+               size_grid, y0, x0, z0, NY, NX, horiz_psf,
+               criteria, order_dct):
+    """Function to compute the estimated emission line and the optimal
+    coordinates for each detected lines in a spatio-spectral grid.
+
+    Parameters
+    ----------
+    data_in    : array
+                 RAW data minicube
+    var_in     : array
+                 MUSE covariance minicube
+    psf        : array
+                 MUSE PSF minicube
+    weight_in  : array
+                 PSF weights minicube
+    horiz      : integer
+                 Maximum spectral shift to compute the criteria for gridding
+    size_grid  : integer
+                 Maximum spatial shift for the grid
+    y0         : integer
+                 y position in pixel from catalog
+    x0         : integer
+                 x position in pixel from catalog
+    z0         : integer
+                 z position in pixel from catalog                 
+    NY         : integer
+                 Number of y-pixels from Full data Cube
+    NX         : integer
+                 Number of x-pixels from Full data Cube                 
+    y0         : integer
+                 y position in pixel from catalog                 
+    horiz_psf  : integer
+                 Maximum spatial shift in size of PSF to compute the MSE                      
+    criteria   : string
+                 criteria used to choose the candidate in the grid: flux or mse
+    order_dct  : integer
+                 order of the DCT Used in the Denoised PCA LS, set to None the
+                 method become PCA LS only                 
+
+    Returns
+    -------
+    flux_est_5          :   float
+                            Estimated flux +/- 5 
+    flux_est_10         :   float
+                            Estimated flux +/- 10
+    MSE_5               :   float
+                            Mean square error +/- 5              
+    MSE_10              :   float
+                            Mean square error +/- 10                                          
+    estimated_line      :   array
+                            Estimated lines in data space
+    estimated_variance  :   array
+                            Estimated variance in data space                     
+    y                   :   integer
+                            re-estimated x position in pixel of the source 
+                            in the grid
+    x                   :   integer
+                            re-estimated x position in pixel of the source 
+                            in the grid
+    z                   :   integer
+                            re-estimated x position in pixel of the source 
+                            in the grid              
+
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+    
+    zest = np.zeros((1+2*size_grid,1+2*size_grid))
+    fest_00 = np.zeros((1+2*size_grid,1+2*size_grid))    
+    fest_05 = np.zeros((1+2*size_grid,1+2*size_grid))
+    fest_10 = np.zeros((1+2*size_grid,1+2*size_grid))    
+    mse = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
+    mse_5 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf    
+    mse_10 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
+    
+    ind_max = slice(z0-5,z0+5)
+    
+    if weight_in is None:
+        nl,sizpsf,tmp = psf.shape        
+    else:
+        nl,sizpsf,tmp = psf[0].shape                
+
+    lin_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))
+    var_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))   
+    # half size psf    
+    longxy = int(sizpsf // 2)          
+    inds = slice(longxy-horiz_psf,longxy+1+horiz_psf)    
+    for dx in range(0,1+2*size_grid):
+        if (x0-size_grid+dx>=0) and (x0-size_grid+dx<NX):
+            for dy in range(0,1+2*size_grid):
+                if (y0-size_grid+dy>=0) and (y0-size_grid+dy<NY):                
+
+                    # extract data
+                    r1 = data_in[:,dy:sizpsf+dy,dx:sizpsf+dx]
+                    var = var_in[:,dy:sizpsf+dy,dx:sizpsf+dx]
+                    if weight_in is not None: 
+                        wgt = np.array(weight_in)[:,dy:sizpsf+dy,dx:sizpsf+dx]
+                        psf = np.sum(np.repeat(wgt[:,np.newaxis,:,:], nl, \
+                                               axis=1)*psf, axis=0)
+
+                    # estimate Full Line and theoretic variance
+                    deconv_met,varest_met = method_PCA_wgt(r1, var, psf, \
+                                                           order_dct)   
+                    
+                    maxz = z0  - 5 + np.argmax(deconv_met[ind_max])
+                    zest[dy,dx] = maxz
+                    ind_z5 = np.arange(maxz-5,maxz+5)
+                    ind_z10 = np.arange(maxz-10,maxz+10)                    
+                    ind_hrz = slice(maxz-horiz,maxz+horiz)
+                    
+                    lin_est[:,dy,dx] = deconv_met
+                    var_est[:,dy,dx] = varest_met            
+                    
+                    # compute MSE                    
+                    LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz,:,:])  
+                    LCred = LC[:,inds,inds]
+                    r1red = r1[ind_hrz,inds,inds]
+                    mse[dy,dx] = np.sum((r1red - LCred)**2)/ np.sum(r1red**2)
+                    
+                    LC = conv_wgt(deconv_met[ind_z5], psf[ind_z5,:,:])  
+                    LCred = LC[:,inds,inds]
+                    r1red = r1[ind_z5,inds,inds]
+                    mse_5[dy,dx] = np.sum((r1red - LCred)**2)/ np.sum(r1red**2)
+
+                    LC = conv_wgt(deconv_met[ind_z10], psf[ind_z10,:,:])  
+                    LCred = LC[:,inds,inds]
+                    r1red = r1[ind_z10,inds,inds]
+                    mse_10[dy,dx] = np.sum((r1red - LCred)**2)/np.sum(r1red**2)                    
+                    
+                    # compute flux    
+                    fest_00[dy,dx] = np.sum(deconv_met[ind_hrz])                     
+                    fest_05[dy,dx] = np.sum(deconv_met[ind_z5])                     
+                    fest_10[dy,dx] = np.sum(deconv_met[ind_z10])                                         
+                    
+    if criteria == 'flux':
+        wy,wx = np.where(fest_00==fest_00.max())                
+    elif criteria == 'mse':
+        wy,wx = np.where(mse==mse.min())        
+    else:    
+        raise IOError('Bad criteria: (flux) or (mse)')
+    y = y0 - size_grid + wy
+    x = x0 - size_grid + wx
+    z = zest[wy,wx]
+    
+    flux_est_5 = fest_05[wy,wx]    
+    flux_est_10 = fest_10[wy,wx]        
+    MSE_5 = mse_5[wy,wx]
+    MSE_10 = mse_10[wy,wx]    
+    estimated_line = lin_est[:,wy,wx]
+    estimated_variance = var_est[:,wy,wx]    
+    
+    return flux_est_5, flux_est_10, MSE_5, MSE_10, estimated_line, \
+            estimated_variance, int(y), int(x), int(z)
+
+def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
+                    criteria = 'flux', order_dct = 30, horiz_psf = 1, \
+                    horiz = 5):
+    """Function to compute the estimated emission line and the optimal
+    coordinates for each detected lines in a spatio-spectral grid.
+
+    Parameters
+    ----------
+    Cat1_T     : astropy.Table
+                 Catalogue of parameters of detected emission lines selected
+                 with a narrow band test.
+                 Columns of the Catalogue Cat1_T:
+                 x y z T_GLR profile pvalC pvalS pvalF T1 T2
+    DATA       : array
+                 RAW data
+    VAR        : array
+                 MUSE covariance
+    PSF        : array
+                 MUSE PSF
+    WGT        : array
+                 PSF weights                 
+    size_grid  : integer
+                 Maximum spatial shift for the grid
+    criteria   : string
+                 criteria used to choose the candidate in the grid: flux or mse
+    order_dct  : integer
+                 order of the DCT Used in the Denoised PCA LS, set to None the
+                 method become PCA LS only                 
+    horiz_psf  : integer
+                 Maximum spatial shift in size of PSF to compute the MSE     
+    horiz      : integer
+                 Maximum spectral shift to compute the criteria                               
+    wcs        : `mpdaf.obj.WCS`
+                  RA-DEC coordinates.
+    wave       : `mpdaf.obj.WaveCoord`
+                 Spectral coordinates.
+
+    Returns
+    -------
+    Cat2             : astropy.Table
+                       Catalogue of parameters of detected emission lines.
+                       Columns of the Catalogue Cat2:
+                       x y z ra dec lbda, T_GLR profile pvalC pvalS pvalF
+                       T1 T2 residual flux num_line
+    Cat_est_line_raw : list of arrays
+                       Estimated lines in data space
+    Cat_est_line_std : list of arrays
+                       Estimated lines in SNR space
+
+    Date  : June, 21 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+    
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    # Initialization
+    
+    NL,NY,NX = RAW.shape
+    Cat2_x_grid = []
+    Cat2_y_grid = []
+    Cat2_z_grid = []    
+    Cat2_x = []
+    Cat2_y = []
+    Cat2_z = []
+    Cat2_res_min5 = []
+    Cat2_res_min10 = []    
+    Cat2_flux5 = []
+    Cat2_flux10 = []    
+    Cat_est_line_raw = []
+    Cat_est_line_var = []
+            
+    for src in Cat1_T:
+        y0 = src['y']
+        x0 = src['x']
+        z0 = src['z']
+        
+        red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
+                                                          y0, x0, size_grid)
+        
+        f5, f10, m5, m10, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
+                      red_var, red_psf, red_wgt, horiz,  \
+                      size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,\
+                      order_dct)
+
+        Cat2_x_grid.append(x)
+        Cat2_y_grid.append(y)
+        Cat2_z_grid.append(z)
+        Cat2_x.append(x0)
+        Cat2_y.append(y0)
+        Cat2_z.append(z0)
+        Cat2_res_min5.append(m5)
+        Cat2_res_min10.append(m10)        
+        Cat2_flux5.append(f5)
+        Cat2_flux10.append(f10)        
+        Cat_est_line_raw.append(lin_est.ravel())
+        Cat_est_line_var.append(var_est.ravel())
+        
+    Cat2 = Cat1_T.copy()
+
+    Cat2['x'] = Cat2_x
+    Cat2['y'] = Cat2_y
+    Cat2['z'] = Cat2_z
+    # add real coordinates
+    pixcrd = [[p, q] for p, q in zip(Cat2_y, Cat2_x)]
+    skycrd = wcs.pix2sky(pixcrd)
+    ra = skycrd[:, 1]
+    dec = skycrd[:, 0]
+    lbda = wave.coord(Cat2_z)
+    Cat2['ra'] = ra
+    Cat2['dec'] = dec
+    Cat2['lbda'] = lbda
+    #
+    col_res = Column(name='residual', data=Cat2_res_min5)    
+    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
+    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
+    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
+    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
+    col_num = Column(name='num_line', data=np.arange(len(Cat2)))
+    col_flux = Column(name='flux', data=Cat2_flux5)
+ 
+    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
+    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
+    col_zgd = Column(name='z_grid', data=Cat2_z_grid)
+    
+    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
+                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
+
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))    
+    
+    return Cat2, Cat_est_line_raw, Cat_est_line_var
+
+
+#%%
 def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
                     grid_dxy, grid_dz, PSF_Moffat, weights, Dico, wcs, wave):
     """Function to compute the estimated emission line and the optimal
@@ -1423,11 +2137,16 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
     return Cat2, Cat_est_line_raw, Cat_est_line_std
 
 
+
+
+
+
+
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
                        PSF_Moffat, longxy, Dico, xmin, ymin):
-    plt.imshow(np.sum(cube_faint_t,axis=0))    
-    plt.pause(1)
+#    plt.imshow(np.sum(cube_faint_t,axis=0))    
+#    plt.pause(1)
     
     """Function to compute the estimated emission line for each coordinate
     with the deconvolution model :
@@ -1487,6 +2206,7 @@ def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
     # spectral profile
+    
     num_prof = profile[z0, y0, x0]
     profil0 = Dico[num_prof]
     profil1 = profil0[profil0 > 1e-20]
@@ -1745,6 +2465,198 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     CatF.remove_columns(['z2'])
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return CatF
+
+def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa): 
+    """Merge the detected emission lines distants to less than deltaz
+    spectral channel in a source area
+
+    Parameters
+    ---------
+    Cat          : astropy.Table
+                   Catalogue of detected emission lines
+                   Columns of Cat:
+                   ID x_circle y_circle ra_circle dec_circle
+                   x_centroid y_centroid ra_centroid, dec_centroid nb_lines
+                   x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
+                   residual flux num_line
+                   
+    cor_in       : Array
+                   Correlation Cube 
+    cnt_in       : Array
+                   continu part of DCT from preprocessing step - Cube 
+    var_in       : Array
+                   Variance Cube given or computed in preprocessing step
+                   
+    deltaz       : integer
+                   Distance maximum between 2 different lines
+                   
+    pfa          : Pvalue for the test which performs segmentation                   
+
+    Returns
+    -------
+    CatF : astropy.Table
+           Catalogue
+           Columns of CatF:
+           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
+           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
+           pvalC pvalS pvalF T1 T2 residual flux num_line
+
+    Date  : June, 23 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+
+    nl,ny,nx = cor_in.shape
+
+    # STD Cube
+    STD_in = cnt_in / np.sqrt( var_in )    
+    
+    # Standardized STD Cube
+    mask = (cnt_in==0)
+    VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
+    VAR[mask] = np.inf    
+    x = STD_in/np.sqrt(VAR)
+    
+    # test 
+    test = np.mean(x**2, axis=0) - 1 
+    gamma =  stats.chi2.ppf(1-pfa, 1) 
+    
+    # threshold - erosion and dilation to clean ponctual "source"
+    sources = test>gamma
+    sources = binary_erosion(sources,border_value=1,iterations=1)
+    sources = binary_dilation(sources,iterations=1)    
+    
+    # Label
+    map_in = measure.label(sources)
+    
+    # Map Position
+    x_list = []
+    y_list = []
+    
+    for src in range(map_in.max()):
+        y,x = np.where(map_in==(1+src))
+        x_list.append(x)
+        y_list.append(y)       
+    
+    # dictionanny and list
+    dico = {}
+    area_name=[]    
+    
+    # MAX Spectra for sources with same ID 
+    for ind_id_src, id_src in enumerate( np.unique(cat_in['ID']) ):   
+        
+        len_id = len(cat_in[cat_in['ID']==id_src] )
+        # Take spectrum of source or max spectrum of sources
+        if len_id > 1:        
+            
+            max_spectre = np.zeros((nl,len_id))
+            mean_x = np.zeros(len_id)
+            mean_y = np.zeros(len_id)                
+            
+            for ind_src,src in enumerate( cat_in[cat_in['ID']==id_src] ):
+                y = src['y']
+                x = src['x']
+                max_spectre[:,ind_src] = cor_in[:,y,x]
+                mean_y[ind_src] = y
+                mean_x[ind_src] = x            
+    
+            mean_y = int( np.mean( mean_y ))
+            mean_x = int( np.mean( mean_x ))        
+            max_spectre = np.amax( max_spectre , axis = 1 )
+            
+        else:
+            src = cat_in[cat_in['ID']==id_src]
+            mean_y = src['y']
+            mean_x = src['x']
+            max_spectre = cor_in[:,mean_y,mean_x].data
+            
+            
+        # search for sources area ID 
+        area = 0    
+        for ind_area in range(len(x_list)): 
+            
+            x_area = x_list[ind_area]
+            y_area = y_list[ind_area]        
+            if mean_x in x_area and mean_y in y_area:
+                tmp = np.zeros((ny,nx))
+                tmp[y_area,x_area] = 1 
+                
+                area = ind_area
+                area_name.append(area)
+            dico[ind_id_src]= {} 
+            dico[ind_id_src]['area'] = area
+            dico[ind_id_src]['ID'] = id_src
+            dico[ind_id_src]['specmax'] = np.argmax(max_spectre)    
+    
+    # sadly I failed the creation of dictionnary so I put everything in 
+    # dictionnary per area, at same time I reduce amount of data to analyse
+    # we skip background and when a single source is detected in an area
+    dico_per_area = {}
+    for a_n in np.unique(area_name):
+        if a_n > 0:  
+            spec = []
+            ID = []    
+            for ind in dico:
+                small_dico = dico[ind]
+                area = small_dico['area']
+        
+                if area == a_n: 
+                    spec.append(small_dico['specmax'])
+                    ID.append(small_dico['ID'])
+            if len(ID)>1:
+                dico_per_area[a_n] = {}
+                dico_per_area[a_n]['ID'] = list
+                dico_per_area[a_n]['specmax'] = list                  
+                dico_per_area[a_n]['specmax'] = spec
+                dico_per_area[a_n]['ID'] = ID        
+    
+    # processing of second dictionnary
+    # for each area with several sources
+    # make comparison and give unique ID     
+
+    
+    id_cal = []
+    for area in dico_per_area:
+        content_area = dico_per_area[area]
+        ID = content_area['ID']
+        
+        listcopy = content_area['specmax']
+        id_cp  = np.array(ID)
+        while len(listcopy)>0:
+            
+            loc = listcopy[0]
+            idloc = id_cp[0]
+            oth = listcopy[1:]
+            idoth = id_cp[1:]        
+            
+            arg = np.where( np.abs( loc - oth ) < deltaz )[0]
+            
+            id_cal.append( (idloc,idloc) )
+            
+            if arg.sum()>0:  # MATCH LOOP on found
+                for n in arg:
+                    id_cal.append( (idoth[n],idloc) )
+                listcopy = np.delete(listcopy,1+arg)
+                id_cp = np.delete(id_cp,1+arg)
+                
+            listcopy = np.delete(listcopy,0)
+            id_cp = np.delete(id_cp,0)    
+    
+    #% Process the catalog 
+    cat_out = cat_in.copy() 
+    ID_tmp = cat_out['ID']
+    
+    ID_arr = np.array(id_cal)
+    col_old_id = Column(name='ID_old', data=cat_in['ID'])
+    for n in ID_arr:
+        for m in range(len(ID_tmp)):
+            if ID_tmp[m] == n[0]:
+                ID_tmp[m] = n[1]
+                
+    
+    cat_out['ID'] = ID_tmp
+    cat_out.add_columns([col_old_id])    
+    
+    return cat_out     
 
 
 def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
