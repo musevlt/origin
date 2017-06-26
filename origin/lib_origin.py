@@ -29,10 +29,6 @@ lib_origin.py contains the methods that compose the ORIGIN software
 """
 from __future__ import absolute_import, division
 
-#from scipy.io import savemat
-import matplotlib.pyplot as plt
-#import os 
-
 import astropy.units as u
 import logging
 import numpy as np
@@ -40,11 +36,11 @@ import os.path
 import sys
 import time
 
-from astropy.table import Table, Column, join
+from astropy.table import Table, Column
 from astropy.utils.console import ProgressBar
 from joblib import Parallel, delayed
-from scipy import signal, stats, special
-from scipy.ndimage import measurements, morphology, filters
+from scipy import signal, stats
+from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import KDTree
 from scipy.sparse.linalg import svds
@@ -53,7 +49,7 @@ from six.moves import range, zip
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
 
-__version__ = 'ORIGIN_18122015_02'
+__version__ = 'beta3'
 
 def Spatial_Segmentation(Nx, Ny, NbSubcube):
     """Function to compute the limits in pixels for each zone.
@@ -135,40 +131,11 @@ def dct_residual(w_raw, order):
     D0 = D0[:, 0:order+1]
     A = np.dot(D0, D0.T)
      
-    # Faint[:,i,j] = w_raw[:,i,j] - np.dot(A, w_raw[:,i,j])           
     cont = np.tensordot(A, w_raw, axes=(0,0))
     Faint = w_raw - cont
 
     return Faint, cont
 
-def var_from_raw( cube_raw, mask ): 
-    """Function to compute the variance from raw data directly.  
-    
-    Parameters
-    ----------
-    cube_raw:   array
-                Raw cube
-              
-    mask    :   array
-                mask of zeros of NEXPMAP
-
-    Returns
-    -------                
-                
-    VAR     :   array
-                cube of variance
-                
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)                
-    """      
-    
-    cube_raw[mask] = np.nan
-    VAR = np.nanvar(cube_raw, axis=(1,2))
-    VAR = VAR[:, np.newaxis, np.newaxis] * np.ones(cube_raw.shape)       
-    VAR[mask] = np.inf   
-    return VAR
-    
-    
 def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     """Function to compute the standardized data.  
     
@@ -882,7 +849,7 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
               Columns of Cat_ref : x y z ra dec lba,
-                                   T_GLR profile pvalC pvalS pvalF
+                                   T_GLR profile pvalC
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -895,8 +862,6 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     correl_max = correl[zpixRef,ypixRef,xpixRef]
     profile_max = profile[zpixRef, ypixRef, xpixRef]
     pvalC = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
-    pvalS = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
-    pvalF = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
     
     # add real coordinates
     pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
@@ -906,530 +871,14 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
     Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
-                     profile_max, pvalC, pvalS, pvalF],
+                     profile_max, pvalC],
                     names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
-                           'profile', 'pvalC', 'pvalS', 'pvalF'))
+                           'profile', 'pvalC'))
     # Catalogue sorted along the Z axis
     Cat_ref.sort('z')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat_ref
 
-
-def Compute_pval_correl_zone(correl, mask, intx, inty, NbSubcube, threshold):
-    """Function to compute the p-values associated to the
-    T_GLR values for each zone
-
-    Parameters
-    ----------
-    correl    : array
-                cube of T_GLR values (correlations)
-    mask      : array
-                boolean cube (true if pixel is masked)
-    intx      : array
-                limits in pixels of the columns for each zone
-    inty      : array
-                limits in pixels of the rows for each zone
-    NbSubcube : int
-                Number of subcube in the spatial segementation
-    threshold : float
-                The threshold applied to the p-values cube
-
-    Returns
-    -------
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the T_GLR values
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # initialization
-    cube_pval_correl = np.ones(correl.shape)
-
-    for numy in range(NbSubcube):
-        for numx in range(NbSubcube):
-            # limits of each spatial zone
-            x1 = intx[numx]
-            x2 = intx[numx + 1]
-            y2 = inty[numy]
-            y1 = inty[numy + 1]
-
-            correl_temp_edge = correl[:, y1:y2, x1:x2]
-            mask_temp_edge = mask[:, y1:y2, x1:x2]
-            # Cube of pvalues for each zone
-            cube_pval_correl_temp = Compute_pval_correl(correl_temp_edge,
-                                                        mask_temp_edge)
-            cube_pval_correl[:, y1:y2, x1:x2] = cube_pval_correl_temp
-
-    # Threshold the pvalues
-    threshold_log = 10**(-threshold)
-    cube_pval_correl[cube_pval_correl >= threshold_log] = 1
-    
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_pval_correl
-
-
-def Compute_pval_correl(correl_temp_edge, mask_temp_edge):
-    """Function to compute distribution of the T_GLR values with
-    hypothesis : T_GLR are distributed according a normal distribution
-
-    Parameters
-    ----------
-    correl_temp_edge : T_GLR values with edges excluded
-    mask_temp_edge   : mask array (true if pixel is masked)
-
-    Returns
-    -------
-    cube_pval_correl : array
-                       p-values asssociated to the T_GLR values
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    correl_temp_edge_red = correl_temp_edge[~mask_temp_edge]
-    moy_est = np.mean(correl_temp_edge_red)
-    std_est = np.std(correl_temp_edge_red)
-    # hypothesis : T_GLR are distributed according a normal distribution
-    rv = stats.norm(loc=moy_est, scale=std_est)
-    cube_pval_correl = 1 - rv.cdf(correl_temp_edge)
-
-    return cube_pval_correl
-
-
-def Compute_pval_channel_Zone(cube_pval_correl, intx, inty, NbSubcube,
-                              mean_est, weights):
-    """Function to compute the p-values associated to the number of
-    thresholded p-values of the correlations per spectral channel for
-    each zone by calling the function Compute_pval_channel
-
-    Parameters
-    ----------
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the T_GLR values
-    intx             : array
-                       limits in pixels of the columns for each zone
-    inty             : array
-                       limits in pixels of the rows for each zone
-    NbSubcube        : int
-                       Number of subcube in the spatial segmentation
-    mean_est         : float
-                       Estimated mean of the distribution
-
-    Returns
-    -------
-    cube_pval_channel : array
-                        cube of p-values associated to the number of
-                        thresholded p-values of the correlations per spectral
-                        channel for each zone
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # initialization
-    cube_pval_channel = np.zeros(cube_pval_correl.shape)
-    cube_pval_correl_threshold = cube_pval_correl.copy()
-
-    for numy in range(NbSubcube):
-        for numx in range(NbSubcube):
-            # limits of each spatial zone
-            x1 = intx[numx]
-            x2 = intx[numx + 1]
-            y2 = inty[numy]
-            y1 = inty[numy + 1]
-            
-            if weights is None:
-                m = mean_est
-            else:
-                w = np.array([np.sum(weights[n][y1:y2, x1:x2]) for n in range(len(weights))])
-                w /= np.sum(w)
-                m = np.sum(w*np.array(mean_est))
-
-            X = cube_pval_correl_threshold[:, y1:y2, x1:x2]
-
-            # How many thresholded pvalues in each spectral channel
-            n_lambda = np.sum(np.array(X != 1, dtype=np.int), axis=(1, 2))
-            # pvalues computed for each spectral channel
-            pval_channel_temp = Compute_pval_channel(X, n_lambda, m)
-            # cube of p-values
-            cube_pval_channel[:, y1:y2, x1:x2] = pval_channel_temp[:, np.newaxis,
-                                                                   np.newaxis]
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_pval_channel
-
-
-def Compute_pval_channel(X, n_lambda, mean_est):
-    """Function to compute the p-values associated to the
-    number of thresholded p-values of the correlations per spectral channel
-
-    Parameters
-    ----------
-    X        : array
-               number of thresholded p-values associated to the T_GLR values
-               per spectral channel
-    n_lambda : int
-               How many thresholded pvalues in each spectral channel
-    mean_est : float
-               Estimated mean of the distribution given by the FWHM of the FSF.
-
-    Returns
-    -------
-    cube_pval_channel : array
-                        cube of p-values for each spectral channel
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    # initialization
-    N = np.sum(np.array(X != 1, dtype=np.int))
-    # Estimation of p parameter with the mean of the distribution set by the
-    # FSF size
-    p_est = mean_est / N
-    # Hypothesis : Binomial distribution for each channel
-    pval_channel = special.bdtr(N - 1, N, p_est) - \
-        special.bdtr(n_lambda, N, p_est)
-    pval_channel[pval_channel <= 0] = 0
-    return pval_channel
-
-
-def Compute_pval_final(cube_pval_correl, cube_pval_channel, threshold, sky):
-
-    """Function to compute the final p-values which are the thresholded
-    pvalues associated to the T_GLR values divided by twice the pvalues
-    associated to the number of thresholded p-values of the correlations
-    per spectral channel for each zone
-
-    The pvalues equals to zero correspond to the values flag to zero because
-    they are higher than the threshold
-
-    Parameters
-    ----------
-    cube_pval_correl  : array
-                        cube of thresholded p-values associated
-                        to the T_GLR values
-    cube_pval_channel : array
-                        cube of p-values
-    threshold         : float
-                        The threshold applied to the p-values cube
-    sky               : Bool
-                        enable or disable the channel pvalue to compute the
-                        final pvalue in the normalization process.
-
-    Returns
-    -------
-    cube_pval_final : array
-                      cube of final thresholded p-values
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    Date  : Nov,23 2016
-    Modifed: Antony Schutz
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)    
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # probability : Pr(line|not nuisance) = Pr(line)/Pr(not nuisance)
-    ksel_correl = (cube_pval_correl==0)
-    if sky:
-        ksel_channel = (cube_pval_channel==0)
-    # Set the pvalues equals to zero to an arbitrary very low value, but not
-    # zero
-    cube_pval_correl[ksel_correl] = np.spacing(1)**6
-    if sky:
-        cube_pval_channel[ksel_channel] = np.spacing(1)**6
-
-    if sky:
-        probafinale = cube_pval_correl/cube_pval_channel
-    else: 
-        probafinale = cube_pval_correl        
-
-    # pvalue = probability/2
-    cube_pval_final = probafinale / 2
-    # Set the nan to 1
-    cube_pval_final[np.isnan(cube_pval_final)] = 1
-    # Threshold the p-values
-    threshold_log = 10**(-threshold)
-    cube_pval_final = cube_pval_final * (cube_pval_final < threshold_log)
-    # The pvalues equals to zero correspond to the values flag to zero because
-    # they are higher than the threshold so actually they have to be set to 1
-    cube_pval_final[cube_pval_final == 0] = 1
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_pval_final
-
-def Compute_Connected_Voxel(cube_pval_final, neighboors):
-    """Function to compute the groups of connected voxels with a
-    flood-fill algorithm.
-
-    Parameters
-    ----------
-    cube_pval_final : array
-                      cube of final thresholded p-values
-    neighboors      : int
-                      Number of connected components
-
-    Returns
-    -------
-    labeled_cube : array
-                   An integer array where each unique feature in
-                   cube_pval_final has a unique label.
-    Ngp          : integer
-                   Number of groups
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-#     threshold_log = 10**(-threshold)
-#     # The p-values higher than the thresholded are previously set to 1, here we
-#     # set them to 0 because we want to merge in group pvalues thresholded.
-#     cube_pval_final = cube_pval_final*(cube_pval_final<threshold_log)
-    cube_pval_final[cube_pval_final == 1] = 0
-
-    # connected components
-    conn = (neighboors + 1)**(1 / 3.)
-    s = morphology.generate_binary_structure(3, conn)
-    labeled_cube, Ngp = measurements.label(cube_pval_final, structure=s)
-    # Maximum number of voxels in one group
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return labeled_cube, Ngp
-
-
-def Compute_Referent_Voxel(correl, profile, cube_pval_correl,
-                           cube_pval_channel, cube_pval_final, Ngp,
-                           labeled_cube, wcs, wave):
-    """Function to compute refrerent voxel of each group of connected voxels
-    using the voxel with the higher T_GLR value.
-
-    Parameters
-    ----------
-    correl            : array
-                        cube of T_GLR values
-    profile           : array
-                        Number of the profile associated to the T_GLR
-    cube_pval_correl  : array
-                        cube of thresholded p-values associated
-                        to the T_GLR values
-    cube_pval_channel : array
-                        cube of p-values
-    cube_pval_final   : array
-                        cube of final thresholded p-values
-    Ngp               : int
-                        Number of groups
-    labeled_cube      : array
-                        An integer array where each unique feature in
-                        cube_pval_final has a unique label.
-    wcs               : `mpdaf.obj.WCS`
-                         RA-DEC coordinates.
-    wave              : `mpdaf.obj.WaveCoord`
-                         Spectral coordinates.
-
-    Returns
-    -------
-    Cat_ref : astropy.Table
-              Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : x y z ra dec lba,
-                                   T_GLR profile pvalC pvalS pvalF
-
-    Date  : Dec,16 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    grp = measurements.find_objects(labeled_cube)
-    argmax = [np.argmax(correl[grp[i]]) for i in range(Ngp)]
-    correl_max = np.array([np.ravel(correl[grp[i]])[argmax[i]]
-                           for i in range(Ngp)])
-    z, y, x = np.meshgrid(list(range(correl.shape[0])),
-                          list(range(correl.shape[1])),
-                          list(range(correl.shape[2])), indexing='ij')
-    zpixRef = np.array([np.ravel(z[grp[i]])[argmax[i]] for i in range(Ngp)])
-    ypixRef = np.array([np.ravel(y[grp[i]])[argmax[i]] for i in range(Ngp)])
-    xpixRef = np.array([np.ravel(x[grp[i]])[argmax[i]] for i in range(Ngp)])
-    profile_max = profile[zpixRef, ypixRef, xpixRef]
-    pvalC = cube_pval_correl[zpixRef, ypixRef, xpixRef]
-    pvalS = cube_pval_channel[zpixRef, ypixRef, xpixRef]
-    pvalF = cube_pval_final[zpixRef, ypixRef, xpixRef]
-    # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
-    skycrd = wcs.pix2sky(pixcrd)
-    ra = skycrd[:, 1]
-    dec = skycrd[:, 0]
-    lbda = wave.coord(zpixRef)
-    # Catalogue of referent pixels
-    Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
-                     profile_max, pvalC, pvalS, pvalF],
-                    names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
-                           'profile', 'pvalC', 'pvalS', 'pvalF'))
-    # Catalogue sorted along the Z axis
-    Cat_ref.sort('z')
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat_ref
-
-
-def Narrow_Band_Test(Cat0, cube_raw, Dico, PSF_Moffat, weights,
-                     nb_ranges, wcs):
-    """Function to compute the 2 narrow band tests for each detected
-    emission line
-
-    Parameters
-    ----------
-    Cat0        : astropy.Table
-                  Catalogue of parameters of detected emission lines:
-                  Columns of the Catalogue Cat0 :
-                  x y z T_GLR profile pvalC pvalS pvalF
-    cube_raw    : array
-                  Raw data cube
-    Dico        : array
-                  Dictionary of spectral profiles to test
-    PSF_Moffat  : array or list of arrays
-                  FSF for this data cube
-    nb_ranges   : integer
-                  Number of skipped intervals for computing control cube
-    wcs         : `mpdaf.obj.WCS`
-                  Spatial coordinates
-
-    Returns
-    -------
-    Cat1 : astropy.Table
-           Catalogue of parameters of detected emission lines:
-           Columns of the Catalogue Cat1 :
-           x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-
-    Date : Dec,16 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Initialization
-    T1 = []
-    T2 = []
-    
-    for i in range(len(Cat0)):
-        # Coordinates of the voxel
-        x0 = Cat0[i]['x']
-        y0 = Cat0[i]['y']
-        z0 = Cat0[i]['z']
-        # FSF
-        if weights is None:
-            FSF = PSF_Moffat
-        else:
-            FSF = np.sum(np.array([weights[n][y0,x0]*PSF_Moffat[n] for n in range(len(weights))]), axis=0)
-        
-        # spectral profile
-        num_prof = Cat0[i]['profile']
-        profil0 = Dico[num_prof]
-        # length of the spectral profile
-        profil1 = profil0[profil0 > 1e-13]
-        long0 = profil1.shape[0]
-        # half-length of the spectral profile
-        longz = long0 // 2
-        # spectral range
-        intz1 = max(0, z0 - longz)
-        intz2 = min(cube_raw.shape[0], z0 + longz + 1)
-        # Subcube on test
-        longxy = FSF.shape[1] // 2
-        inty1 = max(0, y0 - longxy)
-        inty2 = min(cube_raw.shape[1], y0 + longxy + 1)
-        intx1 = max(0, x0 - longxy)
-        intx2 = min(cube_raw.shape[2], x0 + longxy + 1)
-        cube_test = cube_raw[intz1:intz2, inty1:inty2, intx1:intx2]
-
-        # controle cube
-        if (z0 + longz + nb_ranges * long0) < cube_raw.shape[0]:
-            intz1c = intz1 + nb_ranges * long0
-            intz2c = intz2 + nb_ranges * long0
-        else:
-            intz1c = intz1 - nb_ranges * long0
-            intz2c = intz2 - nb_ranges * long0
-        cube_controle = cube_raw[intz1c:intz2c, inty1:inty2, intx1:intx2]
-
-        # (1/sqrt(2)) * difference of the 2 sububes
-        diff_cube = (1. / np.sqrt(2)) * (cube_test - cube_controle)
-
-        # Test 1
-        s1 = np.ones_like(cube_test)
-        s1 = s1 / np.sqrt(np.sum(s1**2))
-        T1.append(np.inner(diff_cube.flatten(), s1.flatten()))
-
-        # Test 2
-        atom = np.zeros((long0, FSF.shape[1], FSF.shape[2]))
-
-        # Construction of the 3D atom corresponding to the spectral profile
-        z1 = max(0, z0 - longz)
-        z2 = min(cube_raw.shape[0], long0 + z0 - longz)
-        atom[z1 - z0 + longz:z2 - z0 + longz, :, :] = profil1[z1 - z0 + longz:z2 - z0 + longz,
-                                                              np.newaxis, np.newaxis] \
-            * FSF[z1:z2, :, :]
-
-        # Normalization
-        atom = atom / np.sqrt(np.sum(atom**2))
-        # Edges
-        # The minimal coordinates corresponding to the spatio-spectral range
-        # of the data cube
-        x1 = np.abs(min(0, x0 - longxy))
-        y1 = np.abs(min(0, y0 - longxy))
-        z1 = np.abs(min(0, z0 - longz))
-
-        # Part of the atom corresponding to the spatio-spectral range of the
-        # data cube
-        s2 = atom[z1:z1 + intz2 - intz1, y1:y1 + inty2 - inty1, x1:x1 + intx2 - intx1]
-
-        # Test 2
-        T2.append(np.inner(diff_cube.flatten(), s2.flatten()))
-
-    col_t1 = Column(name='T1', data=T1)
-    col_t2 = Column(name='T2', data=T2)
-    Cat1 = Cat0.copy()
-    Cat1.add_columns([col_t1, col_t2])
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat1
-
-
-def Narrow_Band_Threshold(Cat1, thresh_T1, thresh_T2):
-    """Function to compute the 2 narrow band tests for each detected
-    emission line
-
-    Parameters
-    ----------
-    Cat1      : astropy.Table
-                Catalogue of parameters of detected emission lines:
-    thresh_T1 : float
-                Threshold for the test 1
-    thresh_T2 : float
-                Threshold for the test 2
-
-    Returns
-    -------
-    Cat1_T1 : astropy.Table
-              Catalogue of parameters of detected emission lines selected with
-              the test 1
-    Cat1_T2 : astropy.Table
-              Catalogue of parameters of detected emission lines selected with
-              the test 2
-
-    Columns of the Catalogues :
-        [col line; row line; spectral channel line; ra; dec; T_GLR line ;
-        spectral profile ; pval T_GLR;  pval channel;  final pval ; T1 ; T2]
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Catalogue with the rows corresponding to the lines with test values
-    # greater than the given threshold
-    Cat1_T1 = Cat1[Cat1['T1'] > thresh_T1]
-    Cat1_T2 = Cat1[Cat1['T2'] > thresh_T2]
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat1_T1, Cat1_T2
-
-#%%
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
     
     """Function to extract data from an estimated source in catalog.
@@ -1560,17 +1009,9 @@ def conv_wgt(deconv_met, psf_in):
     cube_conv  : Cube, convolution from deconv_met
     Date  : June, 21 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
-    """       
-    nl,sizpsf,tmp = psf_in.shape
-    # half size psf    
-    longxy = int(sizpsf // 2)      
-    cube_tmp = np.zeros((nl,sizpsf,sizpsf))
-    minicube = np.zeros((nl,sizpsf,sizpsf))
-    minicube[:,longxy,longxy] = deconv_met    
-    for n in range(nl):                                                          
-        cube_tmp[n,:,:] = signal.fftconvolve(minicube[n, :,:],\
-                psf_in[n, :, :], mode='same')
-    cube_conv = cube_tmp*(np.abs(psf_in)>0)
+    """
+    cube_conv = psf_in * deconv_met[:, np.newaxis, np.newaxis]
+    cube_conv = cube_conv*(np.abs(psf_in)>0)
     return cube_conv
 
 def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
@@ -1620,11 +1061,11 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     data_st_pca = np.reshape(data_std,(nl,sizpsf*sizpsf))
     
     # PCA    
-    data_in_pca = data_st_pca.copy()
-    mean_in_pca = np.mean( data_in_pca , axis = 1)
-    data_in_pca-= np.repeat(mean_in_pca[:,np.newaxis],sizpsf*sizpsf,axis=1)
+    mean_in_pca = np.mean(data_st_pca, axis = 1)
+    data_in_pca = data_st_pca - np.repeat(mean_in_pca[:,np.newaxis],
+                                          sizpsf*sizpsf,axis=1)
 
-    U,s,V = svds( data_in_pca , k=1)                  
+    U,s,V = svds(data_in_pca , k=1)                  
         
     # orthogonal projection
     xest = np.dot( np.dot(U,np.transpose(U)), data_in_pca )
@@ -1734,10 +1175,10 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     zest = np.zeros((1+2*size_grid,1+2*size_grid))
     fest_00 = np.zeros((1+2*size_grid,1+2*size_grid))    
     fest_05 = np.zeros((1+2*size_grid,1+2*size_grid))
-    fest_10 = np.zeros((1+2*size_grid,1+2*size_grid))    
+    #fest_10 = np.zeros((1+2*size_grid,1+2*size_grid))    
     mse = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
     mse_5 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf    
-    mse_10 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
+    #mse_10 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
     
     ind_max = slice(z0-5,z0+5)
     
@@ -1771,7 +1212,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     maxz = z0  - 5 + np.argmax(deconv_met[ind_max])
                     zest[dy,dx] = maxz
                     ind_z5 = np.arange(maxz-5,maxz+5)
-                    ind_z10 = np.arange(maxz-10,maxz+10)                    
+                    #ind_z10 = np.arange(maxz-10,maxz+10)                    
                     ind_hrz = slice(maxz-horiz,maxz+horiz)
                     
                     lin_est[:,dy,dx] = deconv_met
@@ -1788,15 +1229,15 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     r1red = r1[ind_z5,inds,inds]
                     mse_5[dy,dx] = np.sum((r1red - LCred)**2)/ np.sum(r1red**2)
 
-                    LC = conv_wgt(deconv_met[ind_z10], psf[ind_z10,:,:])  
-                    LCred = LC[:,inds,inds]
-                    r1red = r1[ind_z10,inds,inds]
-                    mse_10[dy,dx] = np.sum((r1red - LCred)**2)/np.sum(r1red**2)                    
+                    #LC = conv_wgt(deconv_met[ind_z10], psf[ind_z10,:,:])  
+                    #LCred = LC[:,inds,inds]
+                    #r1red = r1[ind_z10,inds,inds]
+                    #mse_10[dy,dx] = np.sum((r1red - LCred)**2)/np.sum(r1red**2)                    
                     
                     # compute flux    
                     fest_00[dy,dx] = np.sum(deconv_met[ind_hrz])                     
                     fest_05[dy,dx] = np.sum(deconv_met[ind_z5])                     
-                    fest_10[dy,dx] = np.sum(deconv_met[ind_z10])                                         
+                    #fest_10[dy,dx] = np.sum(deconv_met[ind_z10])                                         
                     
     if criteria == 'flux':
         wy,wx = np.where(fest_00==fest_00.max())                
@@ -1809,16 +1250,16 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     z = zest[wy,wx]
     
     flux_est_5 = float( fest_05[wy,wx] )    
-    flux_est_10 = float( fest_10[wy,wx] )       
+    #flux_est_10 = float( fest_10[wy,wx] )       
     MSE_5 = float( mse_5[wy,wx] )
-    MSE_10 = float( mse_10[wy,wx] )    
+    #MSE_10 = float( mse_10[wy,wx] )    
     estimated_line = lin_est[:,wy,wx]
     estimated_variance = var_est[:,wy,wx]    
     
-    return flux_est_5, flux_est_10, MSE_5, MSE_10, estimated_line, \
+    return flux_est_5, MSE_5, estimated_line, \
             estimated_variance, int(y), int(x), int(z)
 
-def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
+def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                     criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                     horiz = 5):
     """Function to compute the estimated emission line and the optimal
@@ -1830,7 +1271,7 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
                  Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile pvalC pvalS pvalF T1 T2
+                 x y z T_GLR profile pvalC
     DATA       : array
                  RAW data
     VAR        : array
@@ -1860,8 +1301,7 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2             : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
-                       x y z ra dec lbda, T_GLR profile pvalC pvalS pvalF
-                       T1 T2 residual flux num_line
+                       x y z ra dec lbda, T_GLR profile pvalC residual flux num_line
     Cat_est_line_raw : list of arrays
                        Estimated lines in data space
     Cat_est_line_std : list of arrays
@@ -1878,14 +1318,9 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     NL,NY,NX = RAW.shape
     Cat2_x_grid = []
     Cat2_y_grid = []
-    Cat2_z_grid = []    
-    Cat2_x = []
-    Cat2_y = []
-    Cat2_z = []
-    Cat2_res_min5 = []
-    Cat2_res_min10 = []    
-    Cat2_flux5 = []
-    Cat2_flux10 = []    
+    Cat2_z_grid = []   
+    Cat2_res_min5 = [] 
+    Cat2_flux5 = []  
     Cat_est_line_raw = []
     Cat_est_line_var = []
             
@@ -1897,7 +1332,7 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
                                                           y0, x0, size_grid)
         
-        f5, f10, m5, m10, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
+        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
                       red_var, red_psf, red_wgt, horiz,  \
                       size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,\
                       order_dct)
@@ -1905,238 +1340,35 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         Cat2_x_grid.append(x)
         Cat2_y_grid.append(y)
         Cat2_z_grid.append(z)
-        Cat2_x.append(x0)
-        Cat2_y.append(y0)
-        Cat2_z.append(z0)
-        Cat2_res_min5.append(m5)
-        Cat2_res_min10.append(m10)        
-        Cat2_flux5.append(f5)
-        Cat2_flux10.append(f10)        
+        Cat2_res_min5.append(m5)      
+        Cat2_flux5.append(f5)    
         Cat_est_line_raw.append(lin_est.ravel())
         Cat_est_line_var.append(var_est.ravel())
         
     Cat2 = Cat1_T.copy()
 
-    Cat2['x'] = Cat2_x
-    Cat2['y'] = Cat2_y
-    Cat2['z'] = Cat2_z
+    Cat2['x'] = Cat2_x_grid
+    Cat2['y'] = Cat2_y_grid
+    Cat2['z'] = Cat2_z_grid
     # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(Cat2_y, Cat2_x)]
+    pixcrd = [[p, q] for p, q in zip(Cat2_y_grid, Cat2_x_grid)]
     skycrd = wcs.pix2sky(pixcrd)
     ra = skycrd[:, 1]
     dec = skycrd[:, 0]
-    lbda = wave.coord(Cat2_z)
+    lbda = wave.coord(Cat2_z_grid)
     Cat2['ra'] = ra
     Cat2['dec'] = dec
     Cat2['lbda'] = lbda
     #
     col_flux = Column(name='flux', data=Cat2_flux5)    
-    col_res = Column(name='residual', data=Cat2_res_min5)    
-    
-    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
-    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
-    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
-    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
-    
+    col_res = Column(name='residual', data=Cat2_res_min5) 
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
 
- 
-    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
-    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
-    col_zgd = Column(name='z_grid', data=Cat2_z_grid)    
-    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
-                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
-#    Cat2.add_columns([col_res, col_flux, col_num])    
+    Cat2.add_columns([col_res, col_flux, col_num])    
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))        
     
     return Cat2, Cat_est_line_raw, Cat_est_line_var
-
-
-#%%
-def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
-                    grid_dxy, grid_dz, PSF_Moffat, weights, Dico, wcs, wave):
-    """Function to compute the estimated emission line and the optimal
-    coordinates for each detected lines in a spatio-spectral grid.
-
-    Parameters
-    ----------
-    Cat1_T     : astropy.Table
-                 Catalogue of parameters of detected emission lines selected
-                 with a narrow band test.
-                 Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile pvalC pvalS pvalF T1 T2
-    profile    : array
-                 Number of the profile associated to the T_GLR
-    Nx         : int
-                 Size of the cube along the x-axis
-    Ny         : int
-                 Size of the cube along the z-axis
-    Nz         : int
-                 Size of the cube along the spectral axis
-    sigma      : array
-                 MUSE covariance
-    cube_faint : array
-                 Projection on the eigenvectors associated to the lower
-                 eigenvalues
-    grid_dxy   : integer
-                 Maximum spatial shift for the grid
-    grid_dz    : integer
-                 Maximum spectral shift for the grid
-    PSF_Moffat : array
-                 FSF for this data cube
-    Dico       : array
-                 Dictionary of spectral profiles to test
-    wcs        : `mpdaf.obj.WCS`
-                  RA-DEC coordinates.
-    wave       : `mpdaf.obj.WaveCoord`
-                 Spectral coordinates.
-
-    Returns
-    -------
-    Cat2             : astropy.Table
-                       Catalogue of parameters of detected emission lines.
-                       Columns of the Catalogue Cat2:
-                       x y z ra dec lbda, T_GLR profile pvalC pvalS pvalF
-                       T1 T2 residual flux num_line
-    Cat_est_line_raw : list of arrays
-                       Estimated lines in data space
-    Cat_est_line_std : list of arrays
-                       Estimated lines in SNR space
-
-    Date  : Dec, 16 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Initialization
-    Cat2_x = []
-    Cat2_y = []
-    Cat2_z = []
-    Cat2_res_min = []
-    Cat2_flux = []
-    Cat_est_line_raw = []
-    Cat_est_line_std = []
-    if weights is None:
-        longxy = PSF_Moffat.shape[1] // 2
-    else:
-        longxy = PSF_Moffat[0].shape[1] // 2
-
-    # Spatio-spectral grid
-    grid_x1 = np.maximum(0, Cat1_T['x'] - grid_dxy)
-    grid_x2 = np.minimum(Nx, Cat1_T['x'] + grid_dxy + 1)
-    grid_y1 = np.maximum(0, Cat1_T['y'] - grid_dxy)
-    grid_y2 = np.minimum(Ny, Cat1_T['y'] + grid_dxy + 1)
-    grid_z1 = np.maximum(0, Cat1_T['z'] - grid_dz)
-    grid_z2 = np.minimum(Nz, Cat1_T['z'] + grid_dz + 1)
-
-    ngrid = (grid_x2 - grid_x1) * (grid_y2 - grid_y1) * (grid_z2 - grid_z1)
-
-    # Pad subcube in case of the 3D atom is out of the cube data
-    cube_faint_pad = np.zeros((cube_faint.shape[0],
-                               cube_faint.shape[1] + 2 * grid_dxy + 2 * longxy,
-                               cube_faint.shape[2] + 2 * grid_dxy + 2 * longxy))
-    cube_faint_pad[0: cube_faint.shape[0],
-                   grid_dxy + longxy: cube_faint.shape[1] + grid_dxy + longxy,
-                   grid_dxy + longxy: cube_faint.shape[2] + grid_dxy + longxy] \
-        = cube_faint
-
-    # Loop on emission lines detected
-    nit = len(Cat1_T)
-    col_del = []
-    for it in ProgressBar(range(nit)):
-        # initialization
-        line_est_raw = np.zeros((ngrid[it], Nz))
-        line_est_std = np.zeros((ngrid[it], Nz))
-        residual = np.zeros(ngrid[it])
-        flux = np.zeros(ngrid[it])
-
-        # Estimation of a line on each voxel of the grid
-        z_f, y_f, x_f = np.meshgrid(list(range(grid_z1[it], grid_z2[it])),
-                                    list(range(grid_y1[it], grid_y2[it])),
-                                    list(range(grid_x1[it], grid_x2[it])),
-                                    indexing='ij')
-        z_f = z_f.ravel()
-        y_f = y_f.ravel()
-        x_f = x_f.ravel()
-
-        # size of the 3D atom along the spatial axes
-        inty1 = np.maximum(0, y_f - longxy)
-        inty2 = np.minimum(Ny, y_f + longxy + 1)
-        intx1 = np.maximum(0, x_f - longxy)
-        intx2 = np.minimum(Nx, x_f + longxy + 1)
-
-        x1 = x_f + grid_dxy
-        x2 = x_f + 2 * longxy + grid_dxy + 1
-        y1 = y_f + grid_dxy
-        y2 = y_f + 2 * longxy + grid_dxy + 1
-
-        xmin = np.abs(np.minimum(0, x_f - longxy))
-        ymin = np.abs(np.minimum(0, y_f - longxy))
-
-        for n in range(x_f.shape[0]):
-            s = (slice(None, None, 1),
-                 slice(inty1[n], inty2[n], 1),
-                 slice(intx1[n], intx2[n], 1))
-            spad = (slice(None, None, 1),
-                    slice(y1[n], y2[n], 1),
-                    slice(x1[n], x2[n], 1))
-            
-            #FSF
-            if weights is None:
-                FSF = PSF_Moffat
-            else:
-                FSF = np.sum(np.array([weights[k][y_f[n], x_f[n]]*PSF_Moffat[k] for k in range(len(weights))]), axis=0)
-            
-            f, res, lraw, lstd = Compute_Estim_Grid(x_f[n], y_f[n], z_f[n],
-                                                    grid_dxy, profile, Nx, Ny,
-                                                    Nz, sigma[:, y_f[n], x_f[n]],
-                                                    sigma[s], cube_faint[s],
-                                                    cube_faint_pad[spad],
-                                                    FSF, longxy, Dico,
-                                                    xmin[n], ymin[n])
-            
-            flux[n] = f
-            residual[n] = res
-            line_est_raw[n, :] = lraw
-            line_est_std[n, :] = lstd
-
-        # Take the estimated line with the minimum absolute value of the residual
-        ind_n = np.argmin(np.abs(residual))
-        if not np.isnan(flux[ind_n]) and not np.ma.isMaskedArray(flux[ind_n]):
-            Cat2_x.append(x_f[ind_n])
-            Cat2_y.append(y_f[ind_n])
-            Cat2_z.append(z_f[ind_n])
-            Cat2_res_min.append(np.abs(residual[ind_n]))
-            Cat2_flux.append(flux[ind_n])
-            Cat_est_line_raw.append(line_est_raw[ind_n, :])
-            Cat_est_line_std.append(line_est_std[ind_n, :])
-        else:
-            col_del.append(it)
-    sys.stdout.write("\n")
-
-    Cat2 = Cat1_T.copy()
-    Cat2.remove_rows(col_del)
-    Cat2['x'] = Cat2_x
-    Cat2['y'] = Cat2_y
-    Cat2['z'] = Cat2_z
-    # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(Cat2_y, Cat2_x)]
-    skycrd = wcs.pix2sky(pixcrd)
-    ra = skycrd[:, 1]
-    dec = skycrd[:, 0]
-    lbda = wave.coord(Cat2_z)
-    Cat2['ra'] = ra
-    Cat2['dec'] = dec
-    Cat2['lbda'] = lbda
-    #
-    col_res = Column(name='residual', data=Cat2_res_min)
-    col_flux = Column(name='flux', data=Cat2_flux)
-    col_num = Column(name='num_line', data=np.arange(len(Cat2)))
-    Cat2.add_columns([col_res, col_flux, col_num])
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat2, Cat_est_line_raw, Cat_est_line_std
 
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
@@ -2266,7 +1498,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     Cat0     : astropy.Table
                catalogue
                Columns of Cat0:
-               x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
+               x y z ra dec lbda T_GLR profile pvalC
                residual flux num_line
     fwhm_fsf : float
                The mean over the wavelengths of the FWHM of the FSF
@@ -2279,7 +1511,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
            Columns of CatF:
            ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
            ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           pvalC pvalS pvalF T1 T2 residual flux num_line
+           pvalC residual flux num_line
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
@@ -2389,79 +1621,6 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
 
     return CatF
 
-
-def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
-    """Merge the detected emission lines distants to less than deltaz
-    spectral channel in each group
-
-    Parameters
-    ---------
-    Cat          : astropy.Table
-                   Catalogue of detected emission lines
-                   Columns of Cat:
-                   ID x_circle y_circle ra_circle dec_circle
-                   x_centroid y_centroid ra_centroid, dec_centroid nb_lines
-                   x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
-                   residual flux num_line
-    Cat_est_line : list of array
-                   Catalogue of estimated lines
-    deltaz       : integer
-                   Distance maximum between 2 different lines
-
-    Returns
-    -------
-    CatF : astropy.Table
-           Catalogue
-           Columns of CatF:
-           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
-           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           pvalC pvalS pvalF T1 T2 residual flux num_line
-
-    Date  : Dec,16 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Initialization
-    CatF = Table()
-
-    # Loop on the group
-    for i in ProgressBar(np.unique(Cat['ID'])):
-        # Catalogue of the lines in this group
-        E = Cat[Cat['ID'] == i]
-        # Sort along the maximum of the estimated lines
-        z = [np.argmax(Cat_est_line_raw[k]) for k in E['num_line']]
-        # Add the spectral channel of the maximum
-        # Sort along the spectral channel of the maximum
-        col_zp = Column(name='z2', data=z)
-        Ez = E.copy()
-        Ez.add_column(col_zp)
-        Ez.sort('z2')
-
-        ksel = np.where(Ez[1:]['z2'] - Ez[:-1]['z2'] > deltaz)
-        indF = []
-        for ind in np.split(np.arange(len(Ez)), ksel[0] + 1):
-            if len(ind) == 1:
-                # if the 2 lines are not close and not in the catlaogue yet
-                indF.append(ind[0])
-            else:
-                # Keep the estimated line with the highest flux
-                indF.append(np.where(Ez['flux'] == max(Ez[ind]['flux']))[0][0])
-
-        CatF_temp = Table(Ez[indF])
-        nb_line = len(CatF_temp)
-
-        # Set the new number of lines for each group
-        CatF_temp['nb_lines'] = np.resize(int(nb_line), len(CatF_temp))
-        if len(CatF) == 0:
-            CatF = CatF_temp
-        else:
-            CatF = join(CatF, CatF_temp, join_type='outer')
-
-    CatF.remove_columns(['z2'])
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return CatF
-
 def Segmentation(cnt_in, var_in,pfa):
     """Generate from a 3D Cube a 2D map where sources and background are 
     separated
@@ -2519,7 +1678,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
                    Columns of Cat:
                    ID x_circle y_circle ra_circle dec_circle
                    x_centroid y_centroid ra_centroid, dec_centroid nb_lines
-                   x y z ra dec lbda T_GLR profile pvalC pvalS pvalF T1 T2
+                   x y z ra dec lbda T_GLR profile pvalC
                    residual flux num_line
                    
     cor_in       : Array
@@ -2541,7 +1700,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
            Columns of CatF:
            ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
            ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           pvalC pvalS pvalF T1 T2 residual flux num_line
+           pvalC residual flux num_line
 
     Date  : June, 23 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
@@ -2568,31 +1727,36 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     # MAX Spectra for sources with same ID 
     for ind_id_src, id_src in enumerate( np.unique(cat_in['ID']) ):   
         
-        len_id = len(cat_in[cat_in['ID']==id_src] )
+        cat_src = cat_in[cat_in['ID']==id_src]
+        mean_x = int(np.mean(cat_src['x']))
+        mean_y = int(np.mean(cat_src['y']))
+        max_spectre = np.amax(cor_in[:,cat_src['y'], cat_src['x']], axis=1)
+        
+        #len_id = len(cat_in[cat_in['ID']==id_src] )
         # Take spectrum of source or max spectrum of sources
-        if len_id > 1:        
-            
-            max_spectre = np.zeros((nl,len_id))
-            mean_x = np.zeros(len_id)
-            mean_y = np.zeros(len_id)                
-            
-            for ind_src,src in enumerate( cat_in[cat_in['ID']==id_src] ):
-                y = src['y']
-                x = src['x']
-                max_spectre[:,ind_src] = cor_in[:,y,x]
-                mean_y[ind_src] = y
-                mean_x[ind_src] = x            
-    
-            mean_y = int( np.mean( mean_y ))
-            mean_x = int( np.mean( mean_x ))        
-            max_spectre = np.amax( max_spectre , axis = 1 )
-            
-        else:
-            src = cat_in[cat_in['ID']==id_src]
-            mean_y = src['y']
-            mean_x = src['x']
-            max_spectre = cor_in[:,mean_y,mean_x].data
-            
+#        if len_id > 1:
+#            
+#            max_spectre = np.zeros((nl,len_id))
+#            mean_x = np.zeros(len_id)
+#            mean_y = np.zeros(len_id)                
+#            
+#            for ind_src,src in enumerate( cat_in[cat_in['ID']==id_src] ):
+#                y = src['y']
+#                x = src['x']
+#                max_spectre[:,ind_src] = cor_in[:,y,x]
+#                mean_y[ind_src] = y
+#                mean_x[ind_src] = x            
+#    
+#            mean_y = int( np.mean( mean_y ))
+#            mean_x = int( np.mean( mean_x ))        
+#            max_spectre = np.amax( max_spectre , axis = 1 )
+#            
+#        else:
+#            src = cat_in[cat_in['ID']==id_src]
+#            mean_y = src['y']
+#            mean_x = src['x']
+#            max_spectre = cor_in[:,mean_y,mean_x].data
+#            
             
         # search for sources area ID 
         area = 0    
@@ -2601,8 +1765,8 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
             x_area = x_list[ind_area]
             y_area = y_list[ind_area]        
             if mean_x in x_area and mean_y in y_area:
-                tmp = np.zeros((ny,nx))
-                tmp[y_area,x_area] = 1 
+#                tmp = np.zeros((ny,nx))
+#                tmp[y_area,x_area] = 1 
                 
                 area = ind_area
                 area_name.append(area)
@@ -2688,11 +1852,11 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     return cat_out, map_in     
 
 
-def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
+def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, correl, fwhm_profiles, 
                      param, path, name, i, ra, dec, x_centroid,
-                     y_centroid, wave_pix, GLR, num_profil, pvalC, pvalS,
-                     pvalF, T1, T2, nb_lines, Cat_est_line_data,
+                     y_centroid, wave_pix, GLR, num_profil, pvalC,
+                     nb_lines, Cat_est_line_data,
                      Cat_est_line_var, y, x, flux, src_vers, author):
     """Function to create the final source
 
@@ -2705,18 +1869,18 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     cube = Cube(filename)
     cubevers = cube.primary_header.get('CUBE_V', '')
     origin.append(cubevers)
-
+    
     if type(maxmap) is str:
         maxmap_ = Image(maxmap)
     else:
         maxmap_ = maxmap
-
+   
     src = Source.from_data(i, ra, dec, origin)
     src.add_attr('x', x_centroid, desc='x position in pixel',
                  unit=u.pix, fmt='d')
     src.add_attr('y', y_centroid, desc='y position in pixel',
                  unit=u.pix, fmt='d')
-
+    
     src.add_white_image(cube)
     src.add_cube(cube, 'MUSE_CUBE')
     src.add_image(maxmap_, 'MAXMAP')
@@ -2728,7 +1892,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
     names = np.array(['%04d'%w[j] for j in range(nb_lines)])
     if np.unique(names).shape != names.shape:
         names = names.astype(np.int)
-        while(not ((names[1:]-names[:-1]) == 0).all()):
+        while ((names[1:]-names[:-1]) == 0).any():
             names[1:][(names[:-1]-names[1:]) == 0] += 1
         names = names.astype(np.str)
     
@@ -2753,12 +1917,7 @@ def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
         #profile_dico = Dico[profile_num]
         fl = flux[j]
-        if T1 is not None:
-            vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
-                    pvalF[j], T1[j], T2[j], profile_num]
-        else:
-            vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], pvalS[j],
-                    pvalF[j], profile_num]
+        vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], profile_num]
         src.add_line(cols, vals, units, desc, fmt)
         
         src.add_narrow_band_image_lbdaobs(cube,
@@ -2808,7 +1967,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     ----------
     Cat              : Catalogue of parameters of detected emission lines:
                        ID x_circle y_circle x_centroid y_centroid nb_lines
-                       x y z T_GLR profile pvalC pvalS pvalF T1 T2 residual
+                       x y z T_GLR profile pvalCresidual
                        flux num_line RA DEC
     Cat_est_line     : list of spectra
                        Catalogue of estimated lines
@@ -2828,20 +1987,9 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
     
-    if 'T1' in Cat.colnames:
-        NBtests = True
-        cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PVALS',
-            'PVALF', 'T1', 'T2', 'PROF']
-        units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone, unone,
-             unone, unone]
-        fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', '.1f', '.1f', 'd']
-    else:
-        NBtests = False
-        cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PVALS',
-            'PVALF', 'PROF']
-        units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone,
-             unone, unone]
-        fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', '.1e', '.1e', 'd']
+    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PROF']
+    units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone]
+    fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', 'd']
     desc = None
 
     step_wave = wave.get_step(unit=u.angstrom)
@@ -2874,14 +2022,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         GLR = E['T_GLR']
         num_profil = E['profile']
         pvalC = E['pvalC']
-        pvalS = E['pvalS']
-        pvalF = E['pvalF']
-        if NBtests:
-            T1 = E['T1']
-            T2 = E['T2']
-        else:
-            T1 = None
-            T2 = None
         # Number of lines in this group
         nb_lines = E['nb_lines'][0]
         Cat_est_line_data = np.empty((nb_lines, wave.shape))
@@ -2894,15 +2034,14 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         flux = E['flux']
         
         source_arglist = (i, ra, dec, x_centroid,
-                     y_centroid, wave_pix, GLR, num_profil, pvalC, pvalS,
-                     pvalF, T1, T2, nb_lines, Cat_est_line_data,
+                     y_centroid, wave_pix, GLR, num_profil, pvalC, nb_lines, Cat_est_line_data,
                      Cat_est_line_var, y, x, flux, src_vers, author)
         sources_arglist.append(source_arglist)
         
     if ncpu > 1:
         # run in parallel
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
-            delayed(Construct_Object)(k, len(sources_arglist), uflux, unone, cols, units, desc,
+            delayed(Construct_Object)(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       f_maxmap, f_correl, fwhm_profiles, 
                                       param, path_src, name, *source_arglist)
@@ -2913,10 +2052,11 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             logger.error(msg)
     else:
         for k,source_arglist in enumerate(sources_arglist):
-            msg = Construct_Object(k, len(sources_arglist), uflux, unone, cols, units, desc,
+            msg = Construct_Object(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       maxmap, correl, fwhm_profiles, 
                                       param, path_src, name, *source_arglist)
+            
             if msg is not None:
                 logger.error(msg)
                 
