@@ -1809,10 +1809,10 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     x = x0 - size_grid + wx
     z = zest[wy,wx]
     
-    flux_est_5 = fest_05[wy,wx]    
-    flux_est_10 = fest_10[wy,wx]        
-    MSE_5 = mse_5[wy,wx]
-    MSE_10 = mse_10[wy,wx]    
+    flux_est_5 = float( fest_05[wy,wx] )    
+    flux_est_10 = float( fest_10[wy,wx] )       
+    MSE_5 = float( mse_5[wy,wx] )
+    MSE_10 = float( mse_10[wy,wx] )    
     estimated_line = lin_est[:,wy,wx]
     estimated_variance = var_est[:,wy,wx]    
     
@@ -1932,21 +1932,21 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2['lbda'] = lbda
     #
     col_res = Column(name='residual', data=Cat2_res_min5)    
-    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
-    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
-    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
-    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
+#    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
+#    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
+#    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
+#    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
     col_flux = Column(name='flux', data=Cat2_flux5)
  
-    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
-    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
-    col_zgd = Column(name='z_grid', data=Cat2_z_grid)
+#    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
+#    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
+#    col_zgd = Column(name='z_grid', data=Cat2_z_grid)    
+#    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
+#                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
+    Cat2.add_columns([col_res, col_flux, col_num])    
     
-    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
-                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))    
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))        
     
     return Cat2, Cat_est_line_raw, Cat_est_line_var
 
@@ -2656,7 +2656,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     cat_out['ID'] = ID_tmp
     cat_out.add_columns([col_old_id])    
     
-    return cat_out     
+    return cat_out, sources     
 
 
 def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,

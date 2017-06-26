@@ -145,7 +145,7 @@ class ORIGIN(object):
                  thresO2, cube_correl, maxmap, cube_profile, cube_pval_correl,
                  cube_pval_channel, cube_pval_final, Cat0, Cat2, spectra, Cat3,
                  Cat4, param, cube_std, var, expmap, cube_pval_lm_correl,
-                 cube_Local_max):
+                 cube_Local_max, cont_dct, segmentation_map):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -300,6 +300,7 @@ class ORIGIN(object):
         
         # step0
         self.cube_std = cube_std
+        self.cont_dct = cont_dct        
         # step1
         self.cube_faint = cube_faint
         self.mapO2 = mapO2
@@ -329,6 +330,7 @@ class ORIGIN(object):
         self.Cat3 = Cat3
         
         # step9
+        self.segmentation_map = segmentation_map
         self.Cat4 = Cat4
         
         self._log_file.info('00 Done')
@@ -373,7 +375,8 @@ class ORIGIN(object):
                    cube_pval_channel=None, cube_pval_final=None, Cat0=None,
                    Cat2=None, spectra=None, Cat3=None, Cat4=None, param=None,
                    cube_std=None, var=None, expmap=None,
-                   cube_pval_lm_correl=None,cube_Local_max=None)
+                   cube_pval_lm_correl=None,cube_Local_max=None,cont_dct=None,
+                   segmentation_map=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -429,6 +432,10 @@ class ORIGIN(object):
         else:
             cube_std = None
             var = None
+        if os.path.isfile('%s/cont_dct.fits'%folder):
+            cont_dct = Cube('%s/cont_dct.fits'%folder)
+        else:
+            cont_dct = None            
         if os.path.isfile('%s/cube_faint.fits'%folder):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
@@ -527,6 +534,10 @@ class ORIGIN(object):
             Cat4 = Table.read('%s/Cat4.fits'%folder)
         else:
             Cat4 = None
+        if os.path.isfile('%s/segmentation_map.fits'%folder):
+            segmentation_map = Cube('%s/segmentation_map.fits'%folder)
+        else:
+            segmentation_map = None
             
         if newpath is not None:
             path = newpath
@@ -545,7 +556,8 @@ class ORIGIN(object):
                    cube_pval_final=cube_pval_final, Cat0=Cat0, Cat2=Cat2,
                    spectra=spectra, Cat3=Cat3, Cat4=Cat4, param=param,
                    expmap=expmap, cube_pval_lm_correl=cube_pval_lm_correl,
-                   cube_Local_max=cube_Local_max)
+                   cube_Local_max=cube_Local_max, cont_dct=cont_dct,
+                   segmentation_map=segmentation_map)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -603,6 +615,8 @@ class ORIGIN(object):
             if self.var is not None:
                 self.cube_std._var = self.var
             self.cube_std.write('%s/cube_std.fits'%path2)
+        if self.cont_dct is not None:
+            self.cont_dct.write('%s/cont_dct.fits'%path2)
         #step1
         if self.histO2 is not None:
             for i in range(self.NbSubcube):
@@ -664,7 +678,8 @@ class ORIGIN(object):
         # step9
         if self.Cat4 is not None:
             self.Cat4.write('%s/Cat4.fits'%path2, overwrite=True)
-        
+        if self.segmentation_map is not None:
+            self.segmentation_map.write('%s/segmentation_map.fits'%path2)        
         
 
     def init_calibrator(self,x=None, y=None, z=None, amp=None ,profil=None,\
@@ -1193,17 +1208,7 @@ class ORIGIN(object):
                             self.profiles, self.wcs, self.wave)
             
         self._log_stdout.info('Save the updated catalogue in self.Cat2')
-        self.spectra = []
-        print('')        
-        print('')
-        print( 'Cat_est_line_raw_T.shape' )
-        print( type(Cat_est_line_raw_T) )
-        print( len(Cat_est_line_raw_T) )
-        print( 'Cat_est_line_std_T.shape' )
-        print( type(Cat_est_line_std_T) )
-        print( len(Cat_est_line_std_T) )   
-        print('')
-        print('')         
+        self.spectra = []     
         for data, std in zip(Cat_est_line_raw_T, Cat_est_line_std_T):
             spe = Spectrum(data=data, var=std**2, wave=self.wave,
                            mask=np.ma.nomask)
@@ -1233,8 +1238,7 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._log_file.info('07 Lines estimation ',
-                            'grid_dxy=%d' %(grid_dxy))
+        self._log_file.info('07 Lines estimation grid_dxy=%d' %(grid_dxy))
         self._log_stdout.info('Step 07 - Lines estimation')
         self.param['grid_dxy'] = grid_dxy
 
@@ -1252,20 +1256,8 @@ class ORIGIN(object):
                      horiz = 5)
             
         self._log_stdout.info('Save the updated catalogue in self.Cat2')
-        self.spectra = []
-        print('')        
-        print('')
-        print( 'Cat_est_line_raw_T.shape' )
-        print( type(Cat_est_line_raw_T) )
-        print( len(Cat_est_line_raw_T) )
-        print( 'Cat_est_line_std_T.shape' )
-        print( type(Cat_est_line_var_T) )
-        print( len(Cat_est_line_var_T) )   
-        print('')
-        print('')        
-        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T):
-            print(data.shape)
-            print(vari.shape)            
+        self.spectra = [] 
+        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
             spe = Spectrum(data=data, var=vari, wave=self.wave,
                            mask=np.ma.nomask)
             self.spectra.append(spe)
@@ -1350,10 +1342,13 @@ class ORIGIN(object):
         self.param['pfa'] = pfa        
         if self.Cat3 is None:
             raise IOError('Run the step 08 to initialize self.Cat3')
-        self.Cat4 = SpatioSpectral_Merging(self.Cat3, \
+        self.Cat4, segmentation_map = SpatioSpectral_Merging(self.Cat3, \
                                            self.cube_correl.data, \
                                            self.cont_dct.data, \
                                            self.var, deltaz, pfa)
+        self.segmentation_map = Cube(data=segmentation_map, wave=self.wave,
+                                    wcs=self.wcs, mask=np.ma.nomask)
+        self._log_stdout.info('Save the segmentation map in self.segmentation_map')        
         self._log_stdout.info('Save the updated catalogue in self.Cat4')
         self._log_file.info('09 Done')
 
