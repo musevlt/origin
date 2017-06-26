@@ -48,7 +48,6 @@ from scipy.ndimage import measurements, morphology, filters
 from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import KDTree
 from scipy.sparse.linalg import svds
-from skimage import measure
 from six.moves import range, zip
 
 from mpdaf.obj import Cube, Image, Spectrum
@@ -2526,7 +2525,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     sources = binary_dilation(sources,iterations=1)    
     
     # Label
-    map_in = measure.label(sources)
+    map_in = measurements.label(sources)[0]
     
     # Map Position
     x_list = []
