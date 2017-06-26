@@ -1930,20 +1930,23 @@ def Estimation_Line_2(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2['dec'] = dec
     Cat2['lbda'] = lbda
     #
+    col_flux = Column(name='flux', data=Cat2_flux5)    
     col_res = Column(name='residual', data=Cat2_res_min5)    
-#    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
-#    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
-#    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
-#    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
+    
+    col_res5 = Column(name='residual_5', data=Cat2_res_min5)
+    col_res10 = Column(name='residual_10', data=Cat2_res_min10)    
+    col_flux5 = Column(name='flux_5', data=Cat2_flux5)
+    col_flux10 = Column(name='flux_10', data=Cat2_flux10)    
+    
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
-    col_flux = Column(name='flux', data=Cat2_flux5)
+
  
-#    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
-#    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
-#    col_zgd = Column(name='z_grid', data=Cat2_z_grid)    
-#    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
-#                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
-    Cat2.add_columns([col_res, col_flux, col_num])    
+    col_xgd = Column(name='x_grid', data=Cat2_x_grid)
+    col_ygd = Column(name='y_grid', data=Cat2_y_grid)
+    col_zgd = Column(name='z_grid', data=Cat2_z_grid)    
+    Cat2.add_columns([col_res,col_res5,col_res10,col_flux5,col_flux10,                      
+                      col_flux, col_num, col_xgd, col_ygd, col_zgd])
+#    Cat2.add_columns([col_res, col_flux, col_num])    
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))        
     
@@ -2134,12 +2137,6 @@ def Estimation_Line(Cat1_T, profile, Nx, Ny, Nz, sigma, cube_faint,
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat2, Cat_est_line_raw, Cat_est_line_std
-
-
-
-
-
-
 
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
@@ -2465,6 +2462,52 @@ def Spectral_Merging(Cat, Cat_est_line_raw, deltaz=1):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return CatF
 
+def Segmentation(cnt_in, var_in,pfa):
+    """Generate from a 3D Cube a 2D map where sources and background are 
+    separated
+
+    Parameters
+    ---------                   
+    cnt_in       : Array
+                   continu part of DCT from preprocessing step - Cube 
+    var_in       : Array
+                   Variance Cube given or computed in preprocessing step
+                   
+    pfa          : Pvalue for the test which performs segmentation                   
+
+    Returns
+    -------
+    map_in : label
+
+    Date  : June, 26 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+    
+    nl,ny,nx = cnt_in.shape
+
+    # STD Cube
+    STD_in = cnt_in / np.sqrt( var_in )    
+    
+    # Standardized STD Cube
+    mask = (cnt_in==0)
+    VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
+    VAR[mask] = np.inf    
+    x = STD_in/np.sqrt(VAR)
+    
+    # test 
+    test = np.mean(x**2, axis=0) - 1 
+    gamma =  stats.chi2.ppf(1-pfa, 1) 
+    
+    # threshold - erosion and dilation to clean ponctual "source"
+    sources = test>gamma
+    sources = binary_erosion(sources,border_value=1,iterations=1)
+    sources = binary_dilation(sources,iterations=1)    
+    
+    # Label
+    map_in = measurements.label(sources)[0]
+    
+    return map_in
+
 def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa): 
     """Merge the detected emission lines distants to less than deltaz
     spectral channel in a source area
@@ -2506,26 +2549,8 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
 
     nl,ny,nx = cor_in.shape
 
-    # STD Cube
-    STD_in = cnt_in / np.sqrt( var_in )    
-    
-    # Standardized STD Cube
-    mask = (cnt_in==0)
-    VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
-    VAR[mask] = np.inf    
-    x = STD_in/np.sqrt(VAR)
-    
-    # test 
-    test = np.mean(x**2, axis=0) - 1 
-    gamma =  stats.chi2.ppf(1-pfa, 1) 
-    
-    # threshold - erosion and dilation to clean ponctual "source"
-    sources = test>gamma
-    sources = binary_erosion(sources,border_value=1,iterations=1)
-    sources = binary_dilation(sources,iterations=1)    
-    
     # Label
-    map_in = measurements.label(sources)[0]
+    map_in = Segmentation(cnt_in, var_in,pfa)
     
     # Map Position
     x_list = []
@@ -2649,13 +2674,18 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     for n in ID_arr:
         for m in range(len(ID_tmp)):
             if ID_tmp[m] == n[0]:
-                ID_tmp[m] = n[1]
-                
+                ID_tmp[m] = n[1]                      
     
     cat_out['ID'] = ID_tmp
     cat_out.add_columns([col_old_id])    
-    
-    return cat_out, sources     
+
+    # Spatial Centroid
+    for ind_id_src, id_src in enumerate( np.unique(cat_out['ID']) ):  
+        x = np.mean( cat_out[cat_out['ID']==ind_id_src]['x'] )
+        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y'] )    
+        cat_out[cat_out['ID']==ind_id_src]['x_centroid'] = x
+        cat_out[cat_out['ID']==ind_id_src]['y_centroid'] = y        
+    return cat_out, map_in     
 
 
 def Construct_Object(k, ktot, uflux, unone, cols, units, desc, fmt, step_wave,

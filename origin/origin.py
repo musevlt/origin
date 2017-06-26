@@ -38,7 +38,7 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Construct_Object_Catalogue, dct_residual, Compute_Standardized_data, \
     O2test,Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator, \
     Compute_pval_local_max_zone, Create_local_max_cat, \
-    Estimation_Line_2, var_from_raw, SpatioSpectral_Merging
+    Estimation_Line_2, var_from_raw, SpatioSpectral_Merging, Segmentation
     
 __version__ ='beta2'
 
@@ -1422,6 +1422,30 @@ class ORIGIN(object):
         self._log_file.info('10 Done')
 
         return nsources
+
+
+        
+    def plot_Segmentation(self, pfa=5e-2, ax=None):
+        """ Plot the 2D segmentation map associated to a PFA
+        
+        Parameters
+        ----------
+        i: integer in [0, NbSubCube[
+           x-coordinate of the zone
+        ax : matplotlib.Axes
+                the Axes instance in which the image is drawn
+        log10 : To draw histogram in logarithmic scale or not
+        """
+        if self.cont_dct is None or self.var is None:
+            raise IOError('Run the step 00 to initialize self.cont_dct and self.var')        
+            
+        if ax is None:
+            ax = plt.gca()
+            
+        map_in = Segmentation(self.cont_dct.data, self.var, pfa)            
+        
+        plt.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')  
+        plt.title('Labels of segmentation, pfa: %f' %(pfa))
         
     def plot_PCA(self, i, j, ax=None, log10=True):
         """ Plot the histogram and the threshold for the starting point of the PCA
@@ -1437,7 +1461,7 @@ class ORIGIN(object):
         log10 : To draw histogram in logarithmic scale or not
         """
         if self.histO2 is None or self.freqO2 is None:
-            raise IOError('Run the step 01 to initialize self.histO2 and selb.freqO2')
+            raise IOError('Run the step 01 to initialize self.histO2 and self.freqO2')
             
         if ax is None:
             ax = plt.gca()
@@ -1482,7 +1506,7 @@ class ORIGIN(object):
         else:
             mapO2 = self.mapO2[(i, j)].data>iteration
             
-        plt.imshow(mapO2,origin='lower',cmap='jet')
+        plt.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
         plt.colorbar()
         plt.show()
         plt.title('zone (%d, %d)' %(i,j))
