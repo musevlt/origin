@@ -58,6 +58,7 @@ def test_origin():
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
     nsources = my_origin.step07_write_sources(ncpu=1)
+    nsources = my_origin.step07_write_sources(ncpu=1, overwrite=True)
     assert (nsources == 3) 
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 3)

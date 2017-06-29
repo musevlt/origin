@@ -1132,7 +1132,7 @@ class ORIGIN(object):
         # create the final catalog
         self._log_stdout.info('Create the final catalog')
         catF = Catalog.from_path(path_src, fmt='working')
-        catF.write(catname)
+        catF.write(catname, overwrite=overwrite)
                       
         self._log_file.info('07 Done')
 
