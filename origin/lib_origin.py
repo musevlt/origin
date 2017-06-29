@@ -187,7 +187,7 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
 
 
 def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
-                              Noise_population, threshold_test):
+                              Noise_population, threshold_test,itermax):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
@@ -205,6 +205,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
     Noise_population:   proportion of estimated noise part used to 
                         define the background spectra
     threshold       :   threshold of nuisance_test
+    itermax         :   max iteration
 
     Returns
     -------
@@ -235,7 +236,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
                 # greedy PCA on each subcube
                 cube_faint[:, y1:y2, x1:x2], mO2, hO2, fO2, tO2 = \
                 Compute_GreedyPCA( cube_temp, test_fun, Noise_population,
-                                  threshold_test)
+                                  threshold_test,itermax)
                 mapO2[(numx, numy)] = mO2
                 histO2[(numx, numy)] = hO2
                 frecO2[(numx, numy)] = fO2
@@ -266,7 +267,8 @@ def O2test(Cube_in):
     """    
     return np.mean( Cube_in**2 ,axis=0)
 
-def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
+def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test\
+                      ,itermax):
     """Function to compute greedy svd. thanks to the test (test_fun) and 
     according to a defined threshold (threshold_test) the cube is segmented
     in nuisance and background part. A part of the background part 
@@ -293,7 +295,8 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
                             the fraction of spectra estimated as background
                             
     threshold_test      :   float
-                            the pfa of the test (default=.05)                        
+                            the pfa of the test (default=.05) 
+    itermax             : max iterations
     Returns
     -------
     faint    :  array 
@@ -327,12 +330,15 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test):
     
     with ProgressBar(npix) as bar:
         # greedy loop based on test
+        tmp=0
         while True:
-            
+            tmp+=1
             mapO2[py,px] += 1
             if len(py)==0:
                 break 
-            
+            if tmp>itermax:
+                print('Warning iterations stopped at %d' %(tmp))
+                break
             # vector data
             test_v = np.ravel(test)
             test_v = test_v[test_v>0] 

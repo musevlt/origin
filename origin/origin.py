@@ -775,7 +775,8 @@ class ORIGIN(object):
         self._log_file.info('01 Done')
 
     def step02_compute_greedy_PCA(self, test_fun=O2test, mixing=False,
-                              Noise_population=50, threshold_test=.05):
+                              Noise_population=50, threshold_test=.05,
+                              itermax=100):
         """ Loop on each zone of the data cube and compute the greedy PCA.
         The test (test_fun) and the threshold (threshold_test) define the part
         of the each zone of the cube to segment in nuisance and background. 
@@ -805,6 +806,9 @@ class ORIGIN(object):
                                 
         threshold_test      :   float
                                 the threshold of the test (default=1)  
+                                
+        itermax             :   integer
+                                maximum iterations
 
         Returns
         -------
@@ -837,7 +841,7 @@ class ORIGIN(object):
         faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_SubCube(self.NbSubcube, self.cube_std._data,
                                   self.intx, self.inty, test_fun,
-                                  Noise_population, threshold_test)
+                                  Noise_population, threshold_test,itermax)
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
             pval = 1 - stats.chi2.cdf(continuum, 2) 
