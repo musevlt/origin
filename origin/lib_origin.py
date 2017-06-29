@@ -1711,104 +1711,43 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     # Label
     map_in = Segmentation(cnt_in, var_in,pfa)
     
-    # Map Position
-    x_list = []
-    y_list = []
-    
-    for src in range(map_in.max()):
-        y,x = np.where(map_in==(1+src))
-        x_list.append(x)
-        y_list.append(y)       
-    
-    # dictionanny and list
-    dico = {}
-    area_name=[]    
-    
     # MAX Spectra for sources with same ID 
-    for ind_id_src, id_src in enumerate( np.unique(cat_in['ID']) ):   
-        
+    _id = []
+    _area = []
+    _specmax = []
+    for id_src in np.unique(cat_in['ID']):   
         cat_src = cat_in[cat_in['ID']==id_src]
         mean_x = int(np.mean(cat_src['x']))
         mean_y = int(np.mean(cat_src['y']))
         max_spectre = np.amax(cor_in[:,cat_src['y'], cat_src['x']], axis=1)
+        area = map_in[mean_y, mean_x]
         
-        #len_id = len(cat_in[cat_in['ID']==id_src] )
-        # Take spectrum of source or max spectrum of sources
-#        if len_id > 1:
-#            
-#            max_spectre = np.zeros((nl,len_id))
-#            mean_x = np.zeros(len_id)
-#            mean_y = np.zeros(len_id)                
-#            
-#            for ind_src,src in enumerate( cat_in[cat_in['ID']==id_src] ):
-#                y = src['y']
-#                x = src['x']
-#                max_spectre[:,ind_src] = cor_in[:,y,x]
-#                mean_y[ind_src] = y
-#                mean_x[ind_src] = x            
-#    
-#            mean_y = int( np.mean( mean_y ))
-#            mean_x = int( np.mean( mean_x ))        
-#            max_spectre = np.amax( max_spectre , axis = 1 )
-#            
-#        else:
-#            src = cat_in[cat_in['ID']==id_src]
-#            mean_y = src['y']
-#            mean_x = src['x']
-#            max_spectre = cor_in[:,mean_y,mean_x].data
-#            
-            
-        # search for sources area ID 
-        area = 0    
-        for ind_area in range(len(x_list)): 
-            
-            x_area = x_list[ind_area]
-            y_area = y_list[ind_area]        
-            if mean_x in x_area and mean_y in y_area:
-#                tmp = np.zeros((ny,nx))
-#                tmp[y_area,x_area] = 1 
-                
-                area = ind_area
-                area_name.append(area)
-            dico[ind_id_src]= {} 
-            dico[ind_id_src]['area'] = area
-            dico[ind_id_src]['ID'] = id_src
-            dico[ind_id_src]['specmax'] = np.argmax(max_spectre)    
+        _id.append(id_src)
+        _area.append(area)
+        _specmax.append(np.argmax(max_spectre))
+           
+    _area = np.asarray(_area)
+    _id = np.asarray(_id)
+    _specmax = np.asarray(_specmax)
     
-    # sadly I failed the creation of dictionnary so I put everything in 
-    # dictionnary per area, at same time I reduce amount of data to analyse
+    # analyze per area
     # we skip background and when a single source is detected in an area
-    dico_per_area = {}
-    for a_n in np.unique(area_name):
-        if a_n > 0:  
-            spec = []
-            ID = []    
-            for ind in dico:
-                small_dico = dico[ind]
-                area = small_dico['area']
-        
-                if area == a_n: 
-                    spec.append(small_dico['specmax'])
-                    ID.append(small_dico['ID'])
+    _area2 = []
+    _id2 = []
+    _specmax2 = []
+    for a_n in np.unique(_area):
+        a_n = int(a_n)
+        if a_n > 0:
+            ID = _id[_area==a_n]
             if len(ID)>1:
-                dico_per_area[a_n] = {}
-                dico_per_area[a_n]['ID'] = list
-                dico_per_area[a_n]['specmax'] = list                  
-                dico_per_area[a_n]['specmax'] = spec
-                dico_per_area[a_n]['ID'] = ID        
-    
-    # processing of second dictionnary
+                _area2.append(a_n)
+                _id2.append(ID)
+                _specmax2.append(_specmax[_area==a_n])
+                
     # for each area with several sources
     # make comparison and give unique ID     
-
-    
     id_cal = []
-    for area in dico_per_area:
-        content_area = dico_per_area[area]
-        ID = content_area['ID']
-        
-        listcopy = content_area['specmax']
-        id_cp  = np.array(ID)
+    for area, id_cp, listcopy in zip(_area2, _id2, _specmax2):
         while len(listcopy)>0:
             
             loc = listcopy[0]
@@ -1841,21 +1780,34 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
                 ID_tmp[m] = n[1]                      
     
     cat_out['ID'] = ID_tmp
-    cat_out.add_columns([col_old_id])    
 
-    # Spatial Centroid
-    for ind_id_src, id_src in enumerate( np.unique(cat_out['ID']) ):  
+    xc = np.zeros(len(cat_in))
+    yc = np.zeros(len(cat_in))
+    seg = np.zeros(len(cat_in), dtype=np.int)
+    
+    # Spatial Centroid and label of the segmentation map
+    for ind_id_src in np.unique(cat_out['ID']):
+        ind_id_src = int(ind_id_src)
         x = np.mean( cat_out[cat_out['ID']==ind_id_src]['x'] )
-        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y'] )    
-        cat_out[cat_out['ID']==ind_id_src]['x_centroid'] = x
-        cat_out[cat_out['ID']==ind_id_src]['y_centroid'] = y        
+        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y'] )
+        seg_label = map_in[int(y), int(x)]
+        xc[cat_out['ID']==ind_id_src] = x
+        yc[cat_out['ID']==ind_id_src] = y
+        seg[cat_out['ID']==ind_id_src] = seg_label
+        
+    cat_out['x_centroid'] = xc
+    cat_out['y_centroid'] = yc
+        
+    #save the label of the segmentation map
+    col_seg_label = Column(name='seg_label', data=seg)
+    cat_out.add_columns([col_old_id, col_seg_label])
     return cat_out, map_in     
 
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, correl, fwhm_profiles, 
                      param, path, name, i, ra, dec, x_centroid,
-                     y_centroid, wave_pix, GLR, num_profil, pvalC,
+                     y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
                      nb_lines, Cat_est_line_data,
                      Cat_est_line_var, y, x, flux, src_vers, author):
     """Function to create the final source
@@ -1880,6 +1832,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                  unit=u.pix, fmt='d')
     src.add_attr('y', y_centroid, desc='y position in pixel',
                  unit=u.pix, fmt='d')
+    src.add_attr('seg', seg_label, desc='label in the segmentation map',
+                 fmt='d')
     
     src.add_white_image(cube)
     src.add_cube(cube, 'MUSE_CUBE')
@@ -2017,6 +1971,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         dec = E['dec_centroid'][0]
         x_centroid = E['x_centroid'][0]
         y_centroid = E['y_centroid'][0]
+        seg_label = E['seg_label'][0]
         # Lines of this group
         wave_pix = E['z']
         GLR = E['T_GLR']
@@ -2033,9 +1988,10 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         x = E['x']
         flux = E['flux']
         
-        source_arglist = (i, ra, dec, x_centroid,
-                     y_centroid, wave_pix, GLR, num_profil, pvalC, nb_lines, Cat_est_line_data,
-                     Cat_est_line_var, y, x, flux, src_vers, author)
+        source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
+                          wave_pix, GLR, num_profil, pvalC, nb_lines,
+                          Cat_est_line_data, Cat_est_line_var, y, x, flux,
+                          src_vers, author)
         sources_arglist.append(source_arglist)
         
     if ncpu > 1:
