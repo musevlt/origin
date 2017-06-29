@@ -972,7 +972,8 @@ class ORIGIN(object):
                                          self.cube_pval_correl._data,
                                          self.wcs, self.wave)
         self._log_stdout.info('Save a first version of the catalogue of ' + \
-                              'emission lines in self.Cat0')        
+                              'emission lines in self.Cat0 (%d lines)' \
+                              %(len(self.Cat0)))        
         
         self._log_file.info('04 Done')
 
@@ -1014,7 +1015,7 @@ class ORIGIN(object):
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
             
-        self._log_stdout.info('Save the updated catalogue in self.Cat1')
+        self._log_stdout.info('Save the updated catalogue in self.Cat1 (%d lines)'%len(self.Cat1))
         self.spectra = [] 
         for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
             spe = Spectrum(data=data, var=vari, wave=self.wave,
@@ -1064,7 +1065,7 @@ class ORIGIN(object):
         self.segmentation_map = Image(data=segmentation_map,
                                     wcs=self.wcs, mask=np.ma.nomask)
         self._log_stdout.info('Save the segmentation map in self.segmentation_map')        
-        self._log_stdout.info('Save the updated catalogue in self.Cat2')
+        self._log_stdout.info('Save the updated catalogue in self.Cat2 (%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0], len(self.Cat2)))
         self._log_file.info('06 Done')
 
     def step07_write_sources(self, path=None, overwrite=True,
