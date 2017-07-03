@@ -1811,7 +1811,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
 
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
-                     origin, filename, maxmap, correl, fwhm_profiles, 
+                     origin, filename, maxmap, segmap, correl, fwhm_profiles, 
                      param, path, name, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
                      nb_lines, Cat_est_line_data,
@@ -1832,6 +1832,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         maxmap_ = Image(maxmap)
     else:
         maxmap_ = maxmap
+    
    
     src = Source.from_data(i, ra, dec, origin)
     src.add_attr('x', x_centroid, desc='x position in pixel',
@@ -1844,6 +1845,12 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     src.add_white_image(cube)
     src.add_cube(cube, 'MUSE_CUBE')
     src.add_image(maxmap_, 'MAXMAP')
+    if seg_label > 0:
+        if type(segmap) is str:
+            segmap_ = Image(segmap)
+        else:
+            segmap_ = segmap
+        src.add_image(segmap_, 'SEG_ORIGIN')
     src.add_attr('SRC_V', src_vers, desc='Source version')
     
     src.add_history('Source created with Origin', author)
@@ -1920,7 +1927,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author,
-                               path, maxmap, ncpu=1):
+                               path, maxmap, segmap, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -1962,6 +1969,11 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     else:
         maxmap.write('%s/tmp_maxmap.fits'%path2)
         f_maxmap = '%s/tmp_maxmap.fits'%path2
+    if os.path.isfile('%s/segmentation_map.fits'%path2):
+        f_segmap = '%s/segmentation_map.fits'%path2
+    else:
+        segmap.write('%s/tmp_segmap.fits'%path2)
+        f_segmap = '%s/tmp_segmap.fits'%path2
     if os.path.isfile('%s/cube_correl.fits'%path2):        
         f_correl = '%s/cube_correl.fits'%path2
     else:
@@ -2005,7 +2017,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
             delayed(Construct_Object)(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
-                                      f_maxmap, f_correl, fwhm_profiles, 
+                                      f_maxmap, f_segmap, f_correl, fwhm_profiles, 
                                       param, path_src, name, *source_arglist)
             for k,source_arglist in enumerate(sources_arglist))
         # print error messages if any
@@ -2016,7 +2028,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         for k,source_arglist in enumerate(sources_arglist):
             msg = Construct_Object(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
-                                      maxmap, correl, fwhm_profiles, 
+                                      maxmap, segmap, correl, fwhm_profiles, 
                                       param, path_src, name, *source_arglist)
             
             if msg is not None:
@@ -2024,6 +2036,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                 
     if os.path.isfile('%s/tmp_maxmap.fits'%path2):
         os.remove('%s/tmp_maxmap.fits'%path2)
+    if os.path.isfile('%s/tmp_segmap.fits'%path2):
+        os.remove('%s/tmp_segmap.fits'%path2)
     if os.path.isfile('%s/tmp_cube_correl.fits'%path2):
         os.remove('%s/tmp_cube_correl.fits'%path2)
         

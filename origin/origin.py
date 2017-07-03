@@ -1132,7 +1132,8 @@ class ORIGIN(object):
                                               self.wave, self.FWHM_profiles,
                                               path_src, self.name, self.param,
                                               src_vers, author,
-                                              self.path, self.maxmap, ncpu)
+                                              self.path, self.maxmap,
+                                              self.segmentation_map, ncpu)
                                               
         # create the final catalog
         self._log_stdout.info('Create the final catalog')
@@ -1143,8 +1144,6 @@ class ORIGIN(object):
 
         return nsources
 
-
-        
     def plot_Segmentation(self, pfa=5e-2, ax=None):
         """ Plot the 2D segmentation map associated to a PFA
         
