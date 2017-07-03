@@ -1838,7 +1838,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                  unit=u.pix, fmt='d')
     src.add_attr('y', y_centroid, desc='y position in pixel',
                  unit=u.pix, fmt='d')
-    src.add_attr('seg', seg_label, desc='label in the segmentation map',
+    src.add_attr('seglabel', seg_label, desc='label in the segmentation map',
                  fmt='d')
     
     src.add_white_image(cube)
