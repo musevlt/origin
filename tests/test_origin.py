@@ -35,33 +35,36 @@ def test_origin():
     my_origin.step03_compute_TGLR()
     my_origin.write()
 
-    # threshold applied on pvalues
-    threshold = 8
     # Connectivity of contiguous voxels
     neighboors = 26
     # compute pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step04_compute_local_max(threshold, neighboors)
+    my_origin.step04_compute_local_max(neighboors)
+    my_origin.write()
+    
+    # threshold applied on pvalues
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step05_threshold_pval()
     my_origin.write()
 
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
-    my_origin.step05_compute_spectra()
+    my_origin.step06_compute_spectra()
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     my_origin = ORIGIN.load('tmp2')
-    my_origin.step06_spatiospectral_merging(deltaz=deltaz)
+    my_origin.step07_spatiospectral_merging(deltaz=deltaz)
     my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
-    nsources = my_origin.step07_write_sources(ncpu=1)
-    nsources = my_origin.step07_write_sources(ncpu=2, overwrite=True)
-    assert (nsources == 3) 
+    nsources = my_origin.step08_write_sources(ncpu=1)
+    nsources = my_origin.step08_write_sources(ncpu=2, overwrite=True)
+    assert (nsources == 7) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 3)
+    assert (len(cat) == 7)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')

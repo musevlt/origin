@@ -2349,7 +2349,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                                         is_sum=True, subtract_off=True)
 
         if 'ThresholdPval' in param.keys():
-            src.OP_THRES = (param['ThresholdPval'], 'Orig Threshold Pval')
+            for key, item in param['ThresholdPval'].items():
+                src.header['OP_THRES_%02d_%02d'%(key[0], key[1])] = item
         if 'deltaz' in param.keys():
             src.OP_DZ = (param['deltaz'], 'Orig deltaz')
         if 'r0PCA' in param.keys():

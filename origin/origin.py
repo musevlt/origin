@@ -1004,7 +1004,7 @@ class ORIGIN(object):
         
         self._log_file.info('04 Done')
 
-    def step05_Threshold_pval(self, fidelity=.9, threshold_add=0, area = True):
+    def step05_threshold_pval(self, fidelity=.9, threshold_add=0, area = True):
         """Threshold the Pvalue with the given threshold, if the threshold is
         None the threshold is automaticaly computed from confidence applied
         on local maximam from maximum correlation and local maxima from 
