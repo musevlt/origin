@@ -3,10 +3,12 @@ ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
 This software has been developped by Carole Clastres under the supervision of
 David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL).
+Laure Piqueras (CRAL). From November 2016 the software is updated by 
+Antony Schutz.
 
-The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). Please contact
-Carole for more info at carole.clastres@univ-lyon1.fr
+The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). 
+Please contact Carole for more info at carole.clastres@univ-lyon1.fr
+Please contact Antony for more info at antonyschutz@gmail.com
 
 origin.py contains an oriented-object interface to run the ORIGIN software
 """
@@ -34,8 +36,11 @@ from mpdaf.tools import write_hdulist_to
 from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Construct_Object_Catalogue, dct_residual, Compute_Standardized_data, \
     O2test,Compute_GreedyPCA_SubCube, init_calibrators, add_calibrator, \
-    Compute_pval_local_max_zone, Create_local_max_cat, \
-    Estimation_Line, SpatioSpectral_Merging, Segmentation, Spatial_Merging_Circle, __version__
+    Compute_local_max_zone, Create_local_max_cat, \
+    Estimation_Line, SpatioSpectral_Merging, Segmentation, \
+    Spatial_Merging_Circle, Correlation_GLR_test_zone, \
+    Compute_thresh_PCA_hist, Compute_threshold, Threshold_pval, \
+    Compute_threshold_area, __version__
 
 
 class ORIGIN(object):
@@ -43,9 +48,11 @@ class ORIGIN(object):
 
        This software has been developped by Carole Clastres under the
        supervision of David Mary (Lagrange institute, University of Nice).
+       From November 2016 the software is updated by Antony Schutz. 
 
        The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
        Please contact Carole for more info at carole.clastres@univ-lyon1.fr
+       Please contact Antony for more info at antonyschutz@gmail.com      
 
        An Origin object is mainly composed by:
         - cube data (raw data and covariance)
@@ -98,35 +105,42 @@ class ORIGIN(object):
         cube_faint         : `~mpdaf.obj.Cube`
                              Projection on the eigenvectors associated to the
                              lower eigenvalues of the data cube (representing
-                             the faint signal). Result of step01_compute_PCA.
+                             the faint signal). Result of step02_compute_PCA.
         cube_correl        : `~mpdaf.obj.Cube`
                              Cube of T_GLR values. Result of
-                             step02_compute_TGLR.
+                             step03_compute_TGLR. From Max correlations
+        cube_correl_min    : `~mpdaf.obj.Cube`
+                             Cube of T_GLR values. Result of
+                             step03_compute_TGLR. From Min correlations                            
         cube_local_max     : `~mpdaf.obj.Cube`
                              Cube of Local maximam of T_GLR values. Result of
-                             step03_compute_Local_max.
+                             step04_compute_Local_max. From Max correlations
+        cube_local_min     : `~mpdaf.obj.Cube`
+                             Cube of Local maximam of T_GLR values. Result of
+                             step04_compute_Local_max. From Min correlations                             
         cube_profile       : `~mpdaf.obj.Cube` (type int)
                              Number of the profile associated to the T_GLR.
-                             Result of step02_compute_TGLR.
+                             Result of step03_compute_TGLR.
         cube_pval_correl: `~mpdaf.obj.Cube`
                              Cube of thresholded p-values associated to the
                              local maxima of T_GLR values. 
-                             Result of step03_compute_Local_max.                             
+                             Result of step04_compute_Local_max.                             
         Cat0               : astropy.Table
-                             Catalog returned by step04_compute_ref_pix
+                             Catalog returned by step04_compute_Local_max
         Cat1               : astropy.Table
-                             Catalog returned by step07_compute_spectra.
+                             Catalog returned by step06_compute_spectra.
         spectra            : list of `~mpdaf.obj.Spectrum`
-                             Estimated lines. Result of step07_compute_spectra.
+                             Estimated lines. Result of step06_compute_spectra.
         Cat2               : astropy.Table
-                             Catalog returned by step09_spectral_merging.
+                             Catalog returned by step07_spatiospectral_merging.
     """
     
     def __init__(self, path, name, filename, NbSubcube, profiles, PSF,
                  FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, freqO2,
                  thresO2, cube_correl, maxmap, cube_profile, Cat0, Cat1, spectra,
                  Cat2, param, cube_std, var, expmap, cube_pval_correl,
-                 cube_local_max, cont_dct, segmentation_map):
+                 cube_local_max, cont_dct, segmentation_map, cube_local_min,
+                 cube_correl_min):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -290,7 +304,9 @@ class ORIGIN(object):
         self.thresO2 = thresO2
         # step3
         self.cube_correl = cube_correl
-        self.cube_local_max = cube_local_max            
+        self.cube_correl_min = cube_correl_min        
+        self.cube_local_max = cube_local_max     
+        self.cube_local_min = cube_local_min             
         self.cube_profile = cube_profile
         self.maxmap = maxmap
         # step4
@@ -345,7 +361,8 @@ class ORIGIN(object):
                    Cat1=None, spectra=None, Cat2=None, param=None,
                    cube_std=None, var=None, expmap=None,
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
-                   segmentation_map=None)
+                   segmentation_map=None,cube_local_min=None,
+                   cube_correl_min=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -445,10 +462,18 @@ class ORIGIN(object):
             cube_correl = Cube('%s/cube_correl.fits'%folder)
         else:
             cube_correl = None
+        if os.path.isfile('%s/cube_correl_min.fits'%folder):
+            cube_correl_min = Cube('%s/cube_correl_min.fits'%folder)
+        else:
+            cube_correl_min = None            
         if os.path.isfile('%s/cube_local_max.fits'%folder):
             cube_local_max = Cube('%s/cube_local_max.fits'%folder)
         else:
-            cube_local_max = None                                    
+            cube_local_max = None     
+        if os.path.isfile('%s/cube_local_min.fits'%folder):
+            cube_local_min = Cube('%s/cube_local_min.fits'%folder)
+        else:
+            cube_local_min = None                                    
         if os.path.isfile('%s/maxmap.fits'%folder):
             maxmap = Image('%s/maxmap.fits'%folder)
         else:
@@ -505,7 +530,9 @@ class ORIGIN(object):
                    spectra=spectra, Cat2=Cat2, param=param,
                    expmap=expmap, cube_pval_correl=cube_pval_correl,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
-                   segmentation_map=segmentation_map)
+                   segmentation_map=segmentation_map,
+                   cube_local_min=cube_local_min, 
+                   cube_correl_min=cube_correl_min)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -587,15 +614,17 @@ class ORIGIN(object):
         # step3
         if self.cube_correl is not None:
             self.cube_correl.write('%s/cube_correl.fits'%path2)
-#        if self.cube_correl_min is not None:
-#            self.cube_correl_min.write('%s/cube_correl_min.fits'%path2)            
+        if self.cube_correl_min is not None:
+            self.cube_correl_min.write('%s/cube_correl_min.fits'%path2)            
         if self.cube_profile is not None:
             self.cube_profile.write('%s/cube_profile.fits'%path2)
         if self.maxmap is not None:
             self.maxmap.write('%s/maxmap.fits'%path2)
         # step4
         if self.cube_local_max is not None:
-            self.cube_local_max.write('%s/cube_local_max.fits'%path2)                                
+            self.cube_local_max.write('%s/cube_local_max.fits'%path2)    
+        if self.cube_local_min is not None:
+            self.cube_local_min.write('%s/cube_local_min.fits'%path2)                                
         if self.cube_pval_correl is not None:
             self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
         if self.Cat0 is not None:
@@ -774,7 +803,7 @@ class ORIGIN(object):
                          mask=np.ma.nomask)
         self._log_file.info('01 Done')
 
-    def step02_compute_greedy_PCA(self, test_fun=O2test, mixing=False,
+    def step02_compute_greedy_PCA(self, mixing=False,
                               Noise_population=50, threshold_test=.05,
                               itermax=100):
         """ Loop on each zone of the data cube and compute the greedy PCA.
@@ -793,8 +822,6 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        test_fun            :   function
-                                the test to be performed on data
                     
         mixing              :   bool
                                 if True the output of PCA is mixed with its
@@ -835,12 +862,13 @@ class ORIGIN(object):
         self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
         self.param['Noise_population'] = Noise_population
         self.param['threshold_test'] = threshold_test        
+        self._log_stdout.info('Step 02 - greedy PCA computation')                
         self._log_stdout.info('Compute greedy PCA on each zone')  
         
         
         faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_SubCube(self.NbSubcube, self.cube_std._data,
-                                  self.intx, self.inty, test_fun,
+                                  self.intx, self.inty, 
                                   Noise_population, threshold_test,itermax)
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
@@ -861,12 +889,17 @@ class ORIGIN(object):
         self._log_file.info('02 Done')        
      
 
-    def step03_compute_TGLR(self):
+    def step03_compute_TGLR(self, area=False):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
 
-        
+        Parameters
+        ----------                    
+        area              :   bool
+                              if True, The correlation is performed on smaller 
+                              subcube and combined after. Useful to avoid swapp                                                            
+                                
         Returns
         -------
         self.cube_correl  : `~mpdaf.obj.Cube`
@@ -887,9 +920,15 @@ class ORIGIN(object):
         else:
             var = self.var
             var[self.expmap==0] = np.inf
+
+        if area: 
+            correl, profile, cm = Correlation_GLR_test_zone( \
+                    self.cube_faint._data, var, self.PSF, self.wfields,
+                    self.profiles, self.intx, self.inty, self.NbSubcube)  
             
-        correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, var,
-                                               self.PSF, self.wfields,
+        else:                          
+            correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
+                                            var, self.PSF, self.wfields,
                                                self.profiles)                                                               
         
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
@@ -900,8 +939,8 @@ class ORIGIN(object):
         
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
-#        self.cube_correl_min = Cube(data=cm, wave=self.wave, wcs=self.wcs,
-#                      mask=np.ma.nomask)        
+        self.cube_correl_min = Cube(data=cm, wave=self.wave, wcs=self.wcs,
+                      mask=np.ma.nomask)        
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         
         profile[mask] = 0       
@@ -915,7 +954,7 @@ class ORIGIN(object):
         self._log_file.info('03 Done')
 
 
-    def step04_compute_local_max(self, threshold=8, neighboors=26):
+    def step04_compute_local_max(self, neighboors=26):
         """Loop on each zone of self.cube_correl and compute for each zone:
         
         - The local maxima distribution of each zone
@@ -929,15 +968,57 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        threshold  : float
-                     Threshold applied on pvalues.
         neighboors : integer
                      Connectivity of contiguous voxels
                             
         Returns
         -------
         self.cube_local_max    : `~mpdaf.obj.Cube`
-                                 Local maxima
+                                 Local maxima from max correlation
+        self.cube_local_min    : `~mpdaf.obj.Cube`
+                                 Local maxima from minus min correlation                                 
+        self.cube_pval_correl  : `~mpdaf.obj.Cube`
+                                 Cube of thresholded p-values associated
+                                 to the local max of T_GLR values
+        """
+        self._log_stdout.info('Step 04 - Local maximum and p-values computation')
+        self._log_stdout.info('Compute p-values of local maximum of correlation values')
+        if self.cube_correl is None:
+            raise IOError('Run the step 03 to initialize self.cube_correl')
+
+        cube_local_max, cube_local_min = Compute_local_max_zone(
+                                                    self.cube_correl._data,
+                                                    self.cube_correl_min._data,
+                                                    self.expmap==0,
+                                                    self.intx, self.inty,
+                                                    self.NbSubcube,
+                                                    neighboors)
+        self._log_stdout.info('Save self.cube_local_max from max correlations')
+        self.cube_local_max = Cube(data=cube_local_max, \
+                                     wave=self.wave,
+                                     wcs=self.wcs, mask=np.ma.nomask)      
+        self._log_stdout.info('Save self.cube_local_min from min correlations')        
+        self.cube_local_min = Cube(data=cube_local_min, \
+                                     wave=self.wave,
+                                     wcs=self.wcs, mask=np.ma.nomask)                                 
+        
+        self._log_file.info('04 Done')
+
+    def step05_Threshold_pval(self, fidelity=.9, threshold_add=0, area = True):
+        """Threshold the Pvalue with the given threshold, if the threshold is
+        None the threshold is automaticaly computed from confidence applied
+        on local maximam from maximum correlation and local maxima from 
+        minus minimum correlation
+
+        Parameters
+        ----------
+        fidelity : float
+                   fidelity to automatically compute the threshold        
+        threshold_add : float
+                     additional value added to Threshold applied on pvalues.
+                            
+        Returns
+        -------                               
         self.cube_pval_correl  : `~mpdaf.obj.Cube`
                                  Cube of thresholded p-values associated
                                  to the local max of T_GLR values
@@ -946,42 +1027,60 @@ class ORIGIN(object):
                     Columns: x y z ra dec lbda T_GLR profile pvalC pvalS pvalF
                     Coordinates are in pixels.
         """
-        self._log_stdout.info('Step 04 - Local maximum and p-values computation')
-        self._log_stdout.info('Compute p-values of local maximum of correlation values')
-        self._log_file.info('   p-values computation threshold=%.1f'%threshold)
-        self.param['ThresholdPval'] = threshold
-        if self.cube_correl is None:
-            raise IOError('Run the step 03 to initialize self.cube_correl')
-
-        cube_pval_correl, cube_local_max = Compute_pval_local_max_zone(\
-                                                    self.cube_correl._data,
-                                                    self.expmap==0,
-                                                    self.intx, self.inty,
-                                                    self.NbSubcube,
-                                                    threshold,
-                                                    neighboors)
-        self._log_stdout.info('Save self.cube_local_max')
-        self.cube_local_max = Cube(data=cube_local_max, \
-                                     wave=self.wave,
-                                     wcs=self.wcs, mask=np.ma.nomask)      
+        self._log_stdout.info('Step 05 - p-values Thresholding')
+        self._log_stdout.info('Threshold the Pvalues')
+        self._log_file.info('   computation of threshold with fidelity =%.1f'%fidelity)
+        self.param['fidelity'] = fidelity
+        self.param['threshold_add'] = threshold_add            
+        if self.cube_local_max is None:
+            raise IOError('Run the step 04 to initialize self.cube_local_max and self.cube_local_min')
         
+        if area: 
+            threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, \
+            cube_pval_correl, mapThresh = Compute_threshold_area(
+                                               fidelity, 
+                                               self.cube_local_max.data,
+                                               self.cube_local_min.data,
+                                               threshold_add, 
+                                               self.intx, self.inty,
+                                               self.NbSubcube)
+            self.mapThresh = mapThresh
+        else:
+            threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind = \
+                                               Compute_threshold(
+                                               fidelity, 
+                                               self.cube_local_max.data,
+                                               self.cube_local_min.data)
+            
+            threshold+=threshold_add
+            
+            cube_pval_correl = Threshold_pval(self.cube_local_max.data, \
+                                              threshold)
+        
+        
+        
+        self.param['ThresholdPval'] = threshold
+        self.param['Pval_M'] = Pval_M
+        self.param['Pval_m'] = Pval_m
+        self.param['Pval_r'] = Pval_r
+        self.param['index_pval'] = index_pval
+        self.param['fid_ind'] = fid_ind
         
         self._log_stdout.info('Save self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, \
                                      wave=self.wave,
-                                     wcs=self.wcs, mask=np.ma.nomask)
-
+                                     wcs=self.wcs, mask=np.ma.nomask)      
+        
         self.Cat0 = Create_local_max_cat(self.cube_correl._data,
                                          self.cube_profile._data,
                                          self.cube_pval_correl._data,
                                          self.wcs, self.wave)
         self._log_stdout.info('Save a first version of the catalogue of ' + \
                               'emission lines in self.Cat0 (%d lines)' \
-                              %(len(self.Cat0)))        
+                              %(len(self.Cat0))) 
         
-        self._log_file.info('04 Done')
-
-    def step05_compute_spectra(self, grid_dxy=0):
+        
+    def step06_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1002,12 +1101,12 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._log_file.info('05 Lines estimation grid_dxy=%d' %(grid_dxy))
-        self._log_stdout.info('Step 05 - Lines estimation')
+        self._log_file.info('06 Lines estimation grid_dxy=%d' %(grid_dxy))
+        self._log_stdout.info('Step 06 - Lines estimation')
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat0 is None:
-            raise IOError('Run the step 04 to initialize self.Cat0 catalogs')
+            raise IOError('Run the step 05 to initialize self.Cat0 catalogs')
         if self.cube_std.var is None:
             var = self.var
         else:
@@ -1026,9 +1125,9 @@ class ORIGIN(object):
                            mask=np.ma.nomask)
             self.spectra.append(spe)
         self._log_stdout.info('Save the estimated spectrum of each line in self.spectra')
-        self._log_file.info('05 Done')       
+        self._log_file.info('06 Done')       
 
-    def step06_spatiospectral_merging(self, deltaz=20, pfa=5e-2):
+    def step07_spatiospectral_merging(self, deltaz=20, pfa=5e-2):
         """Construct a catalogue of sources by spatial merging of the
         detected emission lines in a circle with a diameter equal to
         the mean over the wavelengths of the FWHM of the FSF.
@@ -1051,8 +1150,8 @@ class ORIGIN(object):
                     z ra dec lbda T_GLR profile pvalC residual flux
                     num_line
         """
-        self._log_file.info('06 spatio spectral merging deltaz=%d'%deltaz)
-        self._log_stdout.info('Step 06 - Spectral merging')
+        self._log_file.info('07 spatio spectral merging deltaz=%d'%deltaz)
+        self._log_stdout.info('Step 07 - Spectral merging')
         if self.wfields is None:
             fwhm = self.FWHM_PSF
         else:
@@ -1070,9 +1169,9 @@ class ORIGIN(object):
                                     wcs=self.wcs, mask=np.ma.nomask)
         self._log_stdout.info('Save the segmentation map in self.segmentation_map')        
         self._log_stdout.info('Save the updated catalogue in self.Cat2 (%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0], len(self.Cat2)))
-        self._log_file.info('06 Done')
+        self._log_file.info('07 Done')
 
-    def step07_write_sources(self, path=None, overwrite=True,
+    def step08_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
@@ -1095,12 +1194,12 @@ class ORIGIN(object):
         sources : mpdaf.sdetect.SourceList
                   List of sources
         """
-        self._log_file.info('07 Sources creation')
+        self._log_file.info('08 Sources creation')
         # Add RA-DEC to the catalogue
-        self._log_stdout.info('Step 07 - Sources creation')
+        self._log_stdout.info('Step 08 - Sources creation')
         self._log_stdout.info('Add RA-DEC to the catalogue')
         if self.Cat2 is None:
-            raise IOError('Run the step 06 to initialize self.Cat2')
+            raise IOError('Run the step 05 to initialize self.Cat2')
 
         # path
         if path is not None and not os.path.exists(path):
@@ -1126,7 +1225,7 @@ class ORIGIN(object):
         if self.cube_correl is None:
             raise IOError('Run the step 03 to initialize self.cube_correl')
         if self.spectra is None:
-            raise IOError('Run the step 05 to initialize self.spectra')
+            raise IOError('Run the step 06 to initialize self.spectra')
         nsources = Construct_Object_Catalogue(self.Cat2, self.spectra,
                                               self.cube_correl,
                                               self.wave, self.FWHM_profiles,
@@ -1140,7 +1239,7 @@ class ORIGIN(object):
         catF = Catalog.from_path(path_src, fmt='working')
         catF.write(catname, overwrite=overwrite)
                       
-        self._log_file.info('07 Done')
+        self._log_file.info('08 Done')
 
         return nsources
 
@@ -1165,6 +1264,115 @@ class ORIGIN(object):
         
         plt.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')  
         plt.title('Labels of segmentation, pfa: %f' %(pfa))
+
+
+    def plot_step05_area(self, i, j,ax=None):
+        """Draw number of sources per threshold computed in step05
+        """
+        if self.cube_faint is None:
+            raise IOError('Run the step 01 to initialize self.cube_std')
+            
+        if ax is None:
+            ax = plt.gca()        
+        
+        threshold = self.param['ThresholdPval'][(i,j)]
+        Pval_M = self.param['Pval_M'][(i,j)]
+        Pval_m = self.param['Pval_m'][(i,j)]
+        Pval_r = self.param['Pval_r'][(i,j)]
+        index_pval = self.param['index_pval'][(i,j)]
+        fid_ind = self.param['fid_ind'][(i,j)]
+
+        
+        plt.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
+        plt.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
+        ym,yM = ax.get_ylim()
+        plt.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
+        plt.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
+                 label='automatic threshold' )
+        plt.plot(threshold, Pval_r[fid_ind],'xr')
+        ax.set_ylim((ym,yM))
+        plt.xlabel('Threshold')
+        plt.ylabel('Fidelity')
+        plt.title('zone (%d, %d) - threshold %f' %(i,j,threshold))
+        plt.legend()  
+        
+    def plot_step05(self, ax=None):
+        """Draw number of sources per threshold computed in step05
+        """
+        if self.cube_faint is None:
+            raise IOError('Run the step 01 to initialize self.cube_std')
+            
+        if ax is None:
+            ax = plt.gca()        
+        
+        threshold = self.param['ThresholdPval']
+        Pval_M = self.param['Pval_M']
+        Pval_m = self.param['Pval_m']
+        Pval_r = self.param['Pval_r']
+        index_pval = self.param['index_pval']
+        fid_ind = self.param['fid_ind']
+
+        
+        plt.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
+        plt.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
+        ym,yM = ax.get_ylim()
+        plt.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
+        plt.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
+                 label='automatic threshold' )
+        plt.plot(threshold, Pval_r[fid_ind],'xr')
+        ax.set_ylim((ym,yM))
+        plt.xlabel('Threshold')
+        plt.ylabel('Fidelity')
+        plt.title('threshold %0.2f' %(threshold))
+        plt.legend()    
+        
+    def plot_For_step02(self, i, j, threshold_test=.05, ax=None, log10=True):
+        """ Plot the histogram and the threshold for the starting point of the 
+        PCA, this version of the plot is to do before doing the PCA
+        
+        Parameters
+        ----------
+        i: integer in [0, NbSubCube[
+           x-coordinate of the zone
+        j: integer in [0, NbSubCube[
+           y-coordinate of the zone
+        threshold_test :   float
+                           the pfa of the test (default=.05) 
+                            
+        ax : matplotlib.Axes
+                the Axes instance in which the image is drawn
+        log10 : To draw histogram in logarithmic scale or not
+        """
+        if self.cube_std is None:
+            raise IOError('Run the step 01 to initialize self.cube_std')
+            
+        if ax is None:
+            ax = plt.gca()
+    
+        # limits of each spatial zone
+        x1 = self.intx[i]
+        x2 = self.intx[i + 1]
+        y2 = self.inty[j]
+        y1 = self.inty[j + 1]
+        # Data in this spatio-spectral zone
+
+        test = O2test(self.cube_std.data[:, y1:y2, x1:x2])
+        
+        # automatic threshold computation     
+        hist, bins, thre = Compute_thresh_PCA_hist(test, threshold_test)    
+    
+        if log10:
+            hist = np.log10(hist)
+        
+        center = (bins[:-1] + bins[1:]) / 2
+        ax.plot(center, hist,'-k')
+        ax.plot(center, hist,'.r')    
+        ym,yM = ax.get_ylim()
+        plt.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+        plt.grid()
+        plt.xlim((center.min(),center.max()))
+        plt.show()
+        plt.title('zone (%d, %d) - threshold %f' %(i,j,thre))
         
     def plot_PCA(self, i, j, ax=None, log10=True):
         """ Plot the histogram and the threshold for the starting point of the PCA
@@ -1180,7 +1388,7 @@ class ORIGIN(object):
         log10 : To draw histogram in logarithmic scale or not
         """
         if self.histO2 is None or self.freqO2 is None:
-            raise IOError('Run the step 01 to initialize self.histO2 and self.freqO2')
+            raise IOError('Run the step 02 to initialize self.histO2 and self.freqO2')
             
         if ax is None:
             ax = plt.gca()

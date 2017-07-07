@@ -20,10 +20,12 @@ ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
 This software has been developped by Carole Clastres under the supervision of
 David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL).
+Laure Piqueras (CRAL). From November 2016 the software is updated by Antony
+Schutz under the supervision of David Mary 
 
-The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). Please contact
-Carole for more info at carole.clastres@univ-lyon1.fr
+The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). 
+Please contact Carole for more info at carole.clastres@univ-lyon1.fr
+Please contact Antony for more info at antonyschutz@gmail.com
 
 lib_origin.py contains the methods that compose the ORIGIN software
 """
@@ -186,7 +188,7 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     return STD, var
 
 
-def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
+def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, 
                               Noise_population, threshold_test,itermax):
     """Function to compute the PCA on each zone of a data cube.
 
@@ -235,7 +237,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty, test_fun,
                 cube_temp = cube_std[:, y1:y2, x1:x2]
                 # greedy PCA on each subcube
                 cube_faint[:, y1:y2, x1:x2], mO2, hO2, fO2, tO2 = \
-                Compute_GreedyPCA( cube_temp, test_fun, Noise_population,
+                Compute_GreedyPCA( cube_temp, Noise_population,
                                   threshold_test,itermax)
                 mapO2[(numx, numy)] = mO2
                 histO2[(numx, numy)] = hO2
@@ -267,7 +269,39 @@ def O2test(Cube_in):
     """    
     return np.mean( Cube_in**2 ,axis=0)
 
-def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test\
+def Compute_thresh_PCA_hist(test, threshold_test): 
+    """Function to compute greedy svd.
+    Parameters
+    ----------
+    test :   array 
+             2D data from the O2 test 
+    threshold_test      :   float
+                            the pfa of the test (default=.05)              
+                
+    Returns
+    -------
+    histO2  :   histogram value of the test 
+    frecO2  :   frequencies of the histogram 
+    thresO2 :   automatic threshold for the O2 test 
+
+    Date  : July, 06 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """  
+    
+    test_v = np.ravel(test)
+    c = test_v[test_v>0]     
+    histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
+    ind = np.argmax(histO2)
+    mod = frecO2[ind]
+    ind2 = np.argmin(( histO2[ind]/2 - histO2[:ind] )**2)
+    fwhm = mod - frecO2[ind2]
+    sigma = fwhm/np.sqrt(2*np.log(2))
+    
+    thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
+    
+    return histO2, frecO2, thresO2     
+
+def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
                       ,itermax):
     """Function to compute greedy svd. thanks to the test (test_fun) and 
     according to a defined threshold (threshold_test) the cube is segmented
@@ -301,25 +335,24 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test\
     -------
     faint    :  array 
                 cleaned cube
+                
+    mapO2   :   array 
+                2D MAP filled with the number of iteration per spectra 
 
+    histO2  :   histogram value of the test 
+    frecO2  :   frequencies of the histogram 
+    thresO2 :   automatic threshold for the O2 test 
+    
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """          
     
     faint = cube_in.copy()
     nl,ny,nx = cube_in.shape
-    test = test_fun(faint)
+    test = O2test(faint)
     
-    test_v = np.ravel(test)
-    c = test_v[test_v>0]     
-    histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
-    ind = np.argmax(histO2)
-    mod = frecO2[ind]
-    ind2 = np.argmin(( histO2[ind]/2 - histO2[:ind] )**2)
-    fwhm = mod - frecO2[ind2]
-    sigma = fwhm/np.sqrt(2*np.log(2))
-    
-    thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
+    # automatic threshold computation     
+    histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, threshold_test)
     
     # nuisance part
     py,px = np.where(test>thresO2)
@@ -365,6 +398,16 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test\
             
             # sparse svd if nb spectrum > 1 else normal svd            
             if x_red.shape[1]==1:        
+                break
+                # if PCA will not converge or if giant pint source will exists
+                # in faint PCA the reason will be here, in later case
+                # add condition while calculating the "mean_in_pca" 
+                # deactivate the substraction of the mean.
+                # This will make the vector whish is above threshold 
+                # equal to the background. For now we prefer to keep it, to
+                # stop iteration earlier in order to keep residual sources
+                # with the hypothesis that this spectrum is slightly above
+                # the threshold (what we observe in data)
                 U,s,V = np.linalg.svd( x_red_nomean , full_matrices=False)
             else:
                 U,s,V = svds( x_red_nomean , k=1)         
@@ -375,7 +418,7 @@ def Compute_GreedyPCA(cube_in, test_fun, Noise_population, threshold_test\
             faint -= np.reshape(xest,(nl,ny,nx))
             
             # test 
-            test = test_fun(faint)
+            test = O2test(faint)
             
             # nuisance part
             py,px = np.where(test>thresO2)
@@ -558,8 +601,88 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
         
     return Cube_out
+def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
+                              intx, inty, NbSubcube):
+    """Function to compute the cube of GLR test values per zone 
+    obtained with the given PSF and dictionary of spectral profile.
 
-def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
+    Parameters
+    ----------
+    cube       : array
+                 data cube on test
+    sigma      : array
+                 MUSE covariance
+    PSF_Moffat : list of arrays
+                 FSF for each field of this data cube
+    weights    : list of array
+                 Weight maps of each field
+    Dico       : array
+                 Dictionary of spectral profiles to test
+    intx      : array
+                limits in pixels of the columns for each zone
+    inty      : array
+                limits in pixels of the rows for each zone
+    NbSubcube : int
+                Number of subcube in the spatial segmentation                 
+
+    Returns
+    -------
+    correl  : array
+              cube of T_GLR values
+    profile : array
+              Number of the profile associated to the T_GLR
+
+    Date  : Jul, 4 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    # initialization
+    # size psf
+    if weights is None:
+        sizpsf = PSF_Moffat.shape[1]        
+    else:
+        sizpsf = PSF_Moffat[0].shape[1]     
+    longxy = int(sizpsf // 2)  
+    
+    Nl,Ny,Nx = cube.shape
+    
+    correl = np.zeros((Nl,Ny,Nx))
+    correl_min = np.zeros((Nl,Ny,Nx))    
+    profile = np.zeros((Nl,Ny,Nx))
+    
+    for numy in range(NbSubcube):
+        for numx in range(NbSubcube):
+            logger.info('Area %d,%d / (%d,%d)' %(numy,numx,NbSubcube,NbSubcube))
+            # limits of each spatial zone
+            x1 = np.maximum(0,intx[numx] - longxy)
+            x2 = np.minimum(intx[numx + 1]+longxy,Nx)
+            y1 = np.maximum(0,inty[numy+1 ] - longxy)
+            y2 = np.minimum(inty[numy ]+longxy,Ny)
+            
+            x11 = intx[numx]-x1
+            y11 = inty[numy+1]-y1
+            x22 = intx[numx+1]-x1        
+            y22 = inty[numy]-y1            
+    
+            mini_cube = cube[:,y1:y2,x1:x2]
+            mini_sigma = sigma[:,y1:y2,x1:x2]
+    
+            c,p,cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat, \
+                                          weights, Dico)
+            
+            correl[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]] = \
+            c[:,y11:y22,x11:x22]
+            
+            profile[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]] = \
+            p[:,y11:y22,x11:x22]   
+            
+            correl_min[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]] = \
+            cm[:,y11:y22,x11:x22] 
+    
+    return correl, profile, correl_min
+
+
+def Correlation_GLR_test3(cube, sigma, PSF_Moffat, weights, Dico):
     # Antony optimiser
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
@@ -599,13 +722,13 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     Nz = cube_var.shape[0]
     Ny = cube_var.shape[1]
     Nx = cube_var.shape[2]
-    
+
     cube_fsf = np.empty(shape)
     norm_fsf = np.empty(shape)
     if weights is None: # one FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
         logger.info('Step 1/4 Spatial convolution of the weighted data with the '
-                'zero-mean FSF')
+               'zero-mean FSF')
         PSF_Moffat_m = PSF_Moffat \
             - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
         for i in ProgressBar(list(range(Nz))):
@@ -647,6 +770,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         del PSF_Moffat_m
         # Spatial part of the norm of the 3D atom
         logger.info('Step 2/4 Computing Spatial part of the norm of the 3D atoms')
+        
         for i in ProgressBar(list(range(Nz))):
             norm_fsf[i, :, :] = 0
             for n in range(nfields):
@@ -673,7 +797,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     cube_profile = np.empty(shape)
     norm_profile = np.empty(shape)
-    
+
     logger.info('Step 3/4 Spectral convolution of the weighted datacube')
     with ProgressBar(Nx * Ny) as bar:
         for y in range(Ny):
@@ -683,21 +807,26 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 # by the FSF and the spectral profile : correlation between the
                 # data and the 3D atom
                 cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                                                          mode = 'same')
+                                                         mode = 'same')
                 # Spectral convolution between the spatial part of the norm of the
                 # 3D atom and the spectral profile : The norm of the 3D atom
                 norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                                                          profile_square,
-                                                          mode = 'same')
+                                                         profile_square,
+                                                         mode = 'same')
 
+    GLRm = np.zeros((Nz, Ny, Nx, 2))
+    GLRm[:, :, :, 0] = cube_profile / np.sqrt(np.abs(norm_profile))
     # Set to the infinity the norm equal to 0
-    norm_profile[norm_profile <= 0] = np.inf
+    norm_profile[norm_profile == 0] = np.inf
     # T_GLR values with constraint  : cube_profile>0
     GLR = np.zeros((Nz, Ny, Nx, 2))
+    GLRm = np.zeros((Nz, Ny, Nx, 2))
     GLR[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
+    GLRm[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
+
 
     logger.info('Step 4/4 Computing second cube of correlation values')
-    
+
     for k in ProgressBar(list(range(1, len(Dico)))):
         # Second cube of correlation values
         d_j = Dico[k]
@@ -708,39 +837,192 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         for y in range(Ny):
             for x in range(Nx):
                 cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                                                         mode = 'same')
+                                                        mode = 'same')
                 norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                                                         profile_square,
-                                                         mode = 'same')
+                                                        profile_square,
+                                                        mode = 'same')
 
-        norm_profile[norm_profile <= 0] = np.inf
+
+        norm_profile[norm_profile == 0] = np.inf
         GLR[:, :, :, 1] = cube_profile / np.sqrt(norm_profile)
+        GLRm[:, :, :, 1] = cube_profile / np.sqrt(norm_profile)
 
         # maximum over the fourth dimension
         PROFILE_MAX = np.argmax(GLR, axis=3)
-        
+
         correl = np.amax(GLR, axis=3)
-        correl_min = np.amin(GLR, axis=3)        
+        correl_min = np.amin(GLRm, axis=3)
+
         # Number of corresponding real profile
         profile[PROFILE_MAX == 1] = k
         # Set the first cube of correlation values correspond
         # to the maximum of the two previous ones
         GLR[:, :, :, 0] = correl
+        GLRm[:, :, :, 0] = correl_min
+
+
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
+
+    return correl, profile, correl_min
+
+
+#%%
+def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
+    # Antony optimiser
+    """Function to compute the cube of GLR test values obtained with the given
+    PSF and dictionary of spectral profile.
+
+    Parameters
+    ----------
+    cube       : array
+                 data cube on test
+    sigma      : array
+                 MUSE covariance
+    PSF_Moffat : list of arrays
+                 FSF for each field of this data cube
+    weights    : list of array
+                 Weight maps of each field
+    Dico       : array
+                 Dictionary of spectral profiles to test
+
+    Returns
+    -------
+    correl  : array
+              cube of T_GLR values of maximum correlation
+    profile : array
+              Number of the profile associated to the T_GLR
+    correl_min : array
+                 cube of T_GLR values of minimum correlation              
+
+    Date  : July, 6 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    # data cube weighted by the MUSE covariance
+    cube_var = cube / np.sqrt(sigma)
+    # Inverse of the MUSE covariance
+    inv_var = 1. / sigma
+
+    # Dimensions of the data
+    shape = cube_var.shape
+    Nz = cube_var.shape[0]
+    Ny = cube_var.shape[1]
+    Nx = cube_var.shape[2]
+    
+    cube_fsf = np.empty(shape)
+    norm_fsf = np.empty(shape)
+    if weights is None: # one FSF
+        # Spatial convolution of the weighted data with the zero-mean FSF
+        logger.info('Step 1/3 Spatial convolution of the weighted data with the '
+                'zero-mean FSF')
+        PSF_Moffat_m = PSF_Moffat \
+            - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
+        for i in ProgressBar(list(range(Nz))):
+            cube_fsf[i, :, :] = signal.fftconvolve(cube_var[i, :, :],
+                                                   PSF_Moffat_m[i, :, :][::-1, ::-1],
+                                                   mode='same')
+        del cube_var
+        fsf_square = PSF_Moffat_m**2
+        del PSF_Moffat_m
+        # Spatial part of the norm of the 3D atom
+        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
+        for i in ProgressBar(list(range(Nz))):
+            norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
+                                                   fsf_square[i, :, :][::-1, ::-1],
+                                                   mode='same')
+        del fsf_square, inv_var
+    else: # several FSF
+        # Spatial convolution of the weighted data with the zero-mean FSF
+        logger.info('Step 1/3 Spatial convolution of the weighted data with the '
+                'zero-mean FSF')
+        nfields = len(PSF_Moffat)
+        PSF_Moffat_m = []
+        for n in range(nfields):
+            PSF_Moffat_m.append(PSF_Moffat[n] \
+            - np.mean(PSF_Moffat[n], axis=(1, 2))[:, np.newaxis, np.newaxis])
+        # build a weighting map per PSF and convolve
+        cube_fsf = np.empty(shape)
+        for i in ProgressBar(list(range(Nz))):
+            cube_fsf[i, :, :] = 0
+            for n in range(nfields):
+                cube_fsf[i, :, :] = cube_fsf[i, :, :] \
+                        + signal.fftconvolve(weights[n]*cube_var[i, :, :],
+                                             PSF_Moffat_m[n][i, :, :][::-1, ::-1],
+                                            mode='same')
+        del cube_var
+        fsf_square = []
+        for n in range(nfields):
+            fsf_square.append(PSF_Moffat_m[n]**2)
+        del PSF_Moffat_m
+        # Spatial part of the norm of the 3D atom
+        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
+        for i in ProgressBar(list(range(Nz))):
+            norm_fsf[i, :, :] = 0
+            for n in range(nfields):
+                norm_fsf[i, :, :] = norm_fsf[i, :, :] \
+                + signal.fftconvolve(weights[n]*inv_var[i, :, :],
+                                    fsf_square[n][i, :, :][::-1, ::-1],
+                                    mode='same')
+
+    # First cube of correlation values
+    # initialization with the first profile
+    profile = np.zeros(shape, dtype=np.int)
+
+    # First spectral profile
+    k0 = 0
+    d_j = Dico[k0]
+    # zero-mean spectral profile
+    d_j = d_j - np.mean(d_j)
+    # Compute the square of the spectral profile
+    profile_square = d_j**2
+
+    ygrid, xgrid = np.mgrid[0:Ny, 0:Nx]
+    xgrid = xgrid.flatten()
+    ygrid = ygrid.flatten()
+
+    logger.info('Step 3/3 Computing second cube of correlation values')
+    profile = np.empty(shape)
+    correl = -np.inf * np.ones(shape)
+    correl_min = np.inf * np.ones(shape)        
+    for k in ProgressBar(list(range(len(Dico)))):
+        # Second cube of correlation values
+        d_j = Dico[k]
+        d_j = d_j - np.mean(d_j)
+        profile_square = d_j**2
+
+
+        for y in range(Ny):
+            for x in range(Nx):
+                cube_profile = signal.fftconvolve(cube_fsf[:,y,x], d_j,
+                                                         mode = 'same')
+                norm_profile = signal.fftconvolve(norm_fsf[:,y,x],
+                                                         profile_square,
+                                                         mode = 'same')
+
+
+                norm_profile[norm_profile <= 0] = np.inf         
+                tmp = cube_profile/np.sqrt(norm_profile)
+                PROFILE_MAX = np.where( tmp > correl[:, y, x])[0]                
+                correl[:, y, x] = np.maximum( correl[:, y, x],tmp)
+                correl_min[:, y, x] = np.minimum( correl_min[:, y, x],tmp)                    
+                profile[PROFILE_MAX,y,x] = k
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
         
     return correl, profile, correl_min
 
 
-def Compute_pval_local_max_zone(correl, mask, intx, inty, NbSubcube, \
-                                threshold, neighboors):
-    """Function to compute the p-values associated to the
-    local max of T_GLR values for each zone
+def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
+                                NbSubcube, neighboors):
+    """Function to compute the local max of T_GLR values for each zone
 
     Parameters
     ----------
     correl    : array
-                cube of T_GLR values (correlations)
+                cube of maximum T_GLR values (correlations)
+    correl_min: array
+                cube of minimum T_GLR values (correlations)                
     mask      : array
                 boolean cube (true if pixel is masked)
     intx      : array
@@ -748,26 +1030,27 @@ def Compute_pval_local_max_zone(correl, mask, intx, inty, NbSubcube, \
     inty      : array
                 limits in pixels of the rows for each zone
     NbSubcube : int
-                Number of subcube in the spatial segementation
+                Number of subcube in the spatial segmentation
     threshold : float
                 The threshold applied to the p-values cube
     neighboors: int
                 Number of connected components                
 
     Returns
-    -------
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the local max of T_GLR values
+    -------                       
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    cube_Local_min : array
+                     cube of local maxima from minus minimum correlation                     
 
-    Date  : June, 19 2017
+    Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
     # initialization
-    cube_pval_lm_correl = np.ones(correl.shape)
     cube_Local_max = np.zeros(correl.shape)
+    cube_Local_min = np.zeros(correl.shape)    
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             # limits of each spatial zone
@@ -777,32 +1060,202 @@ def Compute_pval_local_max_zone(correl, mask, intx, inty, NbSubcube, \
             y1 = inty[numy + 1]
 
             correl_temp_edge = correl[:, y1:y2, x1:x2]
+            correl_temp_edge_min = correl_min[:, y1:y2, x1:x2]            
             mask_temp_edge = mask[:, y1:y2, x1:x2]
             # Cube of pvalues for each zone
-            cube_pval_lm_correl_temp, cube_Local_max_temp = \
-              Compute_pval_localmax(correl_temp_edge,mask_temp_edge,neighboors)
+            cube_Local_max_temp,cube_Local_min_temp= \
+              Compute_localmax(correl_temp_edge,correl_temp_edge_min\
+                                    ,mask_temp_edge,neighboors)
             
-            cube_pval_lm_correl[:, y1:y2, x1:x2] = cube_pval_lm_correl_temp
             cube_Local_max[:, y1:y2, x1:x2] = cube_Local_max_temp
+            cube_Local_min[:, y1:y2, x1:x2] = cube_Local_min_temp            
 
-    # Threshold the pvalues
-    threshold_log = 10**(-threshold)
-    eps = np.finfo(float).eps
-    cube_pval_lm_correl = (eps + cube_pval_lm_correl) * \
-                            (cube_pval_lm_correl < threshold_log)
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_pval_lm_correl , cube_Local_max
+    return cube_Local_max, cube_Local_min
 
-def Compute_pval_localmax(correl_temp_edge, mask_temp_edge, neighboors):
-    """Function to compute the local maxima distribution of the T_GLR values 
-    with hypothesis : local maxima of T_GLR are distributed according a normal 
+
+def Compute_threshold_area(fidelity, cube_local_max, cube_local_min, \
+                           threshold_add, intx, inty, NbSubcube):  
+    """Function to threshold the p-values from 
+    computatino of threshold from the local maxima of:
+        - Maximum correlation
+        - Minus minimum correlation
+
+    Parameters
+    ----------
+    fidelity    : float
+                the fidelity between 0 and 1 
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    cube_Local_min : array
+                     cube of local maxima from minus minimum correlation                  
+
+    Returns
+    -------          
+    Confidence : float
+                     the threshold associated to the fidelity        
+    PVal_M : array
+             the P Value associated to Maximum Correlation local maxima
+    PVal_m : array
+             the P Value associated to Minus Minimum Correlation local maxima
+    PVal_r : array
+             The fidelity function
+    index_pval: array
+                index value to plot 
+    fid_ind: integer
+             the index in index_pval related to the confidence            
+    cube_pval_correl : array
+                       cube of thresholded p-values associated
+                       to the local max of T_GLR values                  
+
+    Date  : July, 6 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """     
+    # initialization
+    cube_pval_correl = np.zeros(cube_local_max.shape)
+    mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))    
+    threshold = {} 
+    Pval_M = {}  
+    Pval_m = {}  
+    Pval_r = {}  
+    index_pval = {}  
+    fid_ind = {} 
+    
+    for numy in range(NbSubcube):
+        for numx in range(NbSubcube):
+            # limits of each spatial zone
+            x1 = intx[numx]
+            x2 = intx[numx + 1]
+            y2 = inty[numy]
+            y1 = inty[numy + 1]
+
+            cube_local_max_edge = cube_local_max[:, y1:y2, x1:x2]
+            cube_local_min_edge = cube_local_min[:, y1:y2, x1:x2]            
+
+            thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
+                                               Compute_threshold(
+                                               fidelity, 
+                                               cube_local_max_edge,
+                                               cube_local_min_edge)
+
+            thresh = thres_l + threshold_add                                 
+
+            threshold[(numx, numy)] = thresh
+            Pval_M[(numx, numy)] = Pval_M_l
+            Pval_m[(numx, numy)] = Pval_m_l
+            Pval_r[(numx, numy)] = Pval_r_l
+            index_pval[(numx, numy)] = index_pval_l
+            fid_ind[(numx, numy)] = fid_ind_l                                                
+            # Cube of pvalues for each zone
+            
+            
+            cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
+                                              thresh)
+            cube_pval_correl[:, y1:y2, x1:x2] = cube_pval_correl_l
+            mapThresh[y1:y2, x1:x2] = thresh
+        
+    
+    return threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, cube_pval_correl, mapThresh
+
+def Compute_threshold(fidelity, cube_local_max, cube_local_min):
+    """Function to compute the threshold from the local maxima of:
+        - Maximum correlation
+        - Minus minimum correlation
+
+    Parameters
+    ----------
+    fidelity    : float
+                the fidelity between 0 and 1 
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    cube_Local_min : array
+                     cube of local maxima from minus minimum correlation                  
+
+    Returns
+    -------          
+    Confidence : float
+                     the threshold associated to the fidelity        
+    PVal_M : array
+             the P Value associated to Maximum Correlation local maxima
+    PVal_m : array
+             the P Value associated to Minus Minimum Correlation local maxima
+
+    Date  : July, 6 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """    
+    N = 100 
+    
+    Lc_max = cube_local_max
+    Lc_min = cube_local_min
+
+    ind = (Lc_max)==0
+    Lc_M = Lc_max[~ind]
+    
+    ind = (Lc_min)==0
+    Lc_m = Lc_min[~ind]   
+    
+    mini = np.minimum( Lc_m.min() , Lc_M.min() )
+    maxi = np.maximum( Lc_m.max() , Lc_M.max() )
+    
+    dx = (maxi-mini)/N
+    index = np.arange(mini,maxi,dx)
+    
+    PVal_M = [np.mean( (Lc_M>seuil) ) for seuil in index ]
+    PVal_m = [np.mean( (Lc_m>seuil) ) for seuil in index ]
+    
+    Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
+    
+    PVal_r = [(1-np.mean(Lc_m>seuil)/np.mean(Lc_M>seuil))>=fidelity for seuil in index]
+    
+    fid_ind = PVal_r.index(True)
+    Confidence = index[fid_ind]
+
+    PVal_M = np.array(PVal_M)
+    PVal_m = np.array(PVal_m)
+    return Confidence, PVal_M, PVal_m, Pval_r, index, fid_ind      
+
+def Threshold_pval(cube_local_max, threshold):
+    """Function to threshold the p-values 
+
+    Parameters
+    ----------
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    threshold : float
+                The threshold applied to the p-values cube           
+
+    Returns
+    -------
+
+    cube_pval_correl : array
+                       cube of thresholded p-values associated
+                       to the local max of T_GLR values                    
+
+    Date  : July, 6 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()    
+    # Threshold the pvalues
+   
+    cube_pval_lm_correl = ( cube_local_max > threshold ) + 0.
+    
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))                            
+    return cube_pval_lm_correl
+
+def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
+                          mask_temp_edge, neighboors):
+    """Function to compute the local maxima of the maximum correlation and 
+    local maxima of minus the minimum correlation
     distribution
 
     Parameters
     ----------
     correl_temp_edge :  array
-                        T_GLR values with edges excluded
+                        T_GLR values with edges excluded (from max correlation)
+    correl_temp_edge_min :  array
+                        T_GLR values with edges excluded (from min correlation)                       
     mask_temp_edge   :  array 
                         mask array (true if pixel is masked)
     neighboors       :  int
@@ -817,20 +1270,21 @@ def Compute_pval_localmax(correl_temp_edge, mask_temp_edge, neighboors):
     """
     # connected components
     conn = (neighboors + 1)**(1 / 3.) 
-    # local maxima
+    # local maxima of maximum correlation 
     Max_filter = filters.maximum_filter(correl_temp_edge,size=(conn,conn,conn))
     Local_max_mask= (correl_temp_edge == Max_filter)
     Local_max_mask[mask_temp_edge]=0
     Local_max=correl_temp_edge*Local_max_mask
-    
-    Local_max_red = Local_max[~mask_temp_edge]
-    Local_max_red = Local_max[Local_max>0]
-    moy_est = np.mean(Local_max_red)
-    std_est = np.std(Local_max_red)
-    # hypothesis : T_GLR are distributed according a normal distribution
-    cube_pval_lm_correl = 1-stats.norm.cdf(Local_max,loc=moy_est,scale=std_est)
 
-    return cube_pval_lm_correl , Local_max
+    # local maxima of minus minimum correlation 
+    minus_correl_min = - correl_temp_edge_min
+    Max_filter = filters.maximum_filter(minus_correl_min ,\
+                                        size=(conn,conn,conn))
+    Local_min_mask= (minus_correl_min == Max_filter)
+    Local_min_mask[mask_temp_edge]=0
+    Local_min=minus_correl_min*Local_min_mask
+
+    return Local_max, Local_min
     
 def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     """Function to compute refrerent voxel of each group of connected voxels
@@ -1379,8 +1833,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
                        PSF_Moffat, longxy, Dico, xmin, ymin):
-#    plt.imshow(np.sum(cube_faint_t,axis=0))    
-#    plt.pause(1)
     
     """Function to compute the estimated emission line for each coordinate
     with the deconvolution model :
