@@ -36,13 +36,15 @@ Usage
     
  >  my_origin.step03_compute_TGLR()
     
- >  my_origin.step04_compute_local_max(threshold, neighboors)
+ >  my_origin.step04_compute_local_max(neighboors)
+ 
+ >  my_origin.step05_threshold_pval()
     
- >  my_origin.step05_compute_spectra()
+ >  my_origin.step06_compute_spectra()
     
- >  my_origin.step06_spatiospectral_merging(deltaz)
+ >  my_origin.step07_spatiospectral_merging(deltaz)
     
- >  nsources = my_origin.step07_write_sources(ncpu=1)
+ >  nsources = my_origin.step08_write_sources(ncpu=1)
  
  
 3- Resulted detected sources can be load by using mpdaf
