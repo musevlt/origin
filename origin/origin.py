@@ -1243,7 +1243,7 @@ class ORIGIN(object):
 
         return nsources
 
-    def plot_Segmentation(self, pfa=5e-2, ax=None):
+    def plot_segmentation(self, pfa=5e-2, ax=None):
         """ Plot the 2D segmentation map associated to a PFA
         
         Parameters
@@ -1262,11 +1262,11 @@ class ORIGIN(object):
             
         map_in = Segmentation(self.cont_dct.data, self.var, pfa)            
         
-        plt.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')  
-        plt.title('Labels of segmentation, pfa: %f' %(pfa))
+        ax.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')
+        ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
 
 
-    def plot_step05_area(self, i, j,ax=None):
+    def plot_step05(self, i, j, ax=None):
         """Draw number of sources per threshold computed in step05
         """
         if self.cube_faint is None:
@@ -1283,50 +1283,20 @@ class ORIGIN(object):
         fid_ind = self.param['fid_ind'][(i,j)]
 
         
-        plt.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
-        plt.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
+        ax.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
+        ax.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
         ym,yM = ax.get_ylim()
-        plt.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
-        plt.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
+        ax.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
+        ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
                  label='automatic threshold' )
-        plt.plot(threshold, Pval_r[fid_ind],'xr')
+        ax.plot(threshold, Pval_r[fid_ind],'xr')
         ax.set_ylim((ym,yM))
-        plt.xlabel('Threshold')
-        plt.ylabel('Fidelity')
-        plt.title('zone (%d, %d) - threshold %f' %(i,j,threshold))
+        ax.set_xlabel('Threshold')
+        ax.set_ylabel('Fidelity')
+        ax.set_title('zone (%d, %d) - threshold %f' %(i,j,threshold))
         plt.legend()  
         
-    def plot_step05(self, ax=None):
-        """Draw number of sources per threshold computed in step05
-        """
-        if self.cube_faint is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-            
-        if ax is None:
-            ax = plt.gca()        
-        
-        threshold = self.param['ThresholdPval']
-        Pval_M = self.param['Pval_M']
-        Pval_m = self.param['Pval_m']
-        Pval_r = self.param['Pval_r']
-        index_pval = self.param['index_pval']
-        fid_ind = self.param['fid_ind']
-
-        
-        plt.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
-        plt.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
-        ym,yM = ax.get_ylim()
-        plt.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
-        plt.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
-                 label='automatic threshold' )
-        plt.plot(threshold, Pval_r[fid_ind],'xr')
-        ax.set_ylim((ym,yM))
-        plt.xlabel('Threshold')
-        plt.ylabel('Fidelity')
-        plt.title('threshold %0.2f' %(threshold))
-        plt.legend()    
-        
-    def plot_For_step02(self, i, j, threshold_test=.05, ax=None, log10=True):
+    def plot_step02(self, i, j, threshold_test=.05, ax=None, log10=True):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
@@ -1368,11 +1338,10 @@ class ORIGIN(object):
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')    
         ym,yM = ax.get_ylim()
-        plt.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
-        plt.grid()
-        plt.xlim((center.min(),center.max()))
-        plt.show()
-        plt.title('zone (%d, %d) - threshold %f' %(i,j,thre))
+        ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+        ax.grid()
+        ax.set_xlim((center.min(),center.max()))
+        ax.set_title('zone (%d, %d) - threshold %f' %(i,j,thre))
         
     def plot_PCA(self, i, j, ax=None, log10=True):
         """ Plot the histogram and the threshold for the starting point of the PCA
@@ -1403,11 +1372,10 @@ class ORIGIN(object):
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')    
         ym,yM = ax.get_ylim()
-        plt.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
-        plt.grid()
-        plt.xlim((center.min(),center.max()))
-        plt.show()
-        plt.title('zone (%d, %d) - threshold %f' %(i,j,thre))
+        ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+        ax.grid()
+        ax.set_xlim((center.min(),center.max()))
+        ax.set_title('zone (%d, %d) - threshold %f' %(i,j,thre))
         
     def plot_mapPCA(self, i, j, ax=None, iteration=None):
         """ Plot the histogram and the threshold for the starting point of the PCA
@@ -1423,7 +1391,7 @@ class ORIGIN(object):
         iteration : Display the nuisance/bacground pixels at itartion k
         """
         if self.mapO2 is None:
-            raise IOError('Run the step 01 to initialize self.mapO2')
+            raise IOError('Run the step 02 to initialize self.mapO2')
             
         if ax is None:
             ax = plt.gca()
@@ -1433,10 +1401,12 @@ class ORIGIN(object):
         else:
             mapO2 = self.mapO2[(i, j)].data>iteration
             
-        plt.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
-        plt.colorbar()
-        plt.show()
-        plt.title('zone (%d, %d)' %(i,j))
+        cax = ax.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax)
+        cax2 = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(cax, cax=cax2)
+        ax.set_title('zone (%d, %d)' %(i,j))
         
     def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
