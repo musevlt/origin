@@ -1051,13 +1051,28 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     # initialization
     cube_Local_max = np.zeros(correl.shape)
     cube_Local_min = np.zeros(correl.shape)    
+    cube_Local_max = np.zeros(correl.shape)
+    cube_Local_min = np.zeros(correl.shape) 
+    nl,Ny,Nx = correl.shape
+    lag = 1
+    
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             # limits of each spatial zone
-            x1 = intx[numx]
-            x2 = intx[numx + 1]
-            y2 = inty[numy]
-            y1 = inty[numy + 1]
+#            x1 = intx[numx]
+#            x2 = intx[numx + 1]
+#            y2 = inty[numy]
+#            y1 = inty[numy + 1]
+
+            x1 = np.maximum(0,intx[numx] - lag)
+            x2 = np.minimum(intx[numx + 1]+lag,Nx)
+            y1 = np.maximum(0,inty[numy+1 ] - lag)
+            y2 = np.minimum(inty[numy ]+lag,Ny)
+            
+            x11 = intx[numx]-x1
+            y11 = inty[numy+1]-y1
+            x22 = intx[numx+1]-x1        
+            y22 = inty[numy]-y1            
 
             correl_temp_edge = correl[:, y1:y2, x1:x2]
             correl_temp_edge_min = correl_min[:, y1:y2, x1:x2]            
@@ -1067,8 +1082,13 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
               Compute_localmax(correl_temp_edge,correl_temp_edge_min\
                                     ,mask_temp_edge,neighboors)
             
-            cube_Local_max[:, y1:y2, x1:x2] = cube_Local_max_temp
-            cube_Local_min[:, y1:y2, x1:x2] = cube_Local_min_temp            
+             
+#            cube_Local_max[:, y1:y2, x1:x2] = cube_Local_max_temp
+#            cube_Local_min[:, y1:y2, x1:x2] = cube_Local_min_temp            
+            cube_Local_max[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]]=\
+            cube_Local_max_temp[:,y11:y22,x11:x22]
+            cube_Local_min[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]]=\
+            cube_Local_min_temp[:,y11:y22,x11:x22]           
 
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
