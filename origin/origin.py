@@ -1019,7 +1019,7 @@ class ORIGIN(object):
         
         self._log_file.info('04 Done')
 
-    def step05_threshold_pval(self, fidelity=.9, threshold_add=0, area = True):
+    def step05_threshold_pval(self, purity=.9, threshold_add=0, area = True):
         """Threshold the Pvalue with the given threshold, if the threshold is
         None the threshold is automaticaly computed from confidence applied
         on local maximam from maximum correlation and local maxima from 
@@ -1027,8 +1027,8 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        fidelity : float
-                   fidelity to automatically compute the threshold        
+        purity : float
+                 fidelity to automatically compute the threshold        
         threshold_add : float
                      additional value added to Threshold applied on pvalues.
                             
@@ -1044,8 +1044,8 @@ class ORIGIN(object):
         """
         self._log_stdout.info('Step 05 - p-values Thresholding')
         self._log_stdout.info('Threshold the Pvalues')
-        self._log_file.info('   computation of threshold with fidelity =%.1f'%fidelity)
-        self.param['fidelity'] = fidelity
+        self._log_file.info('   computation of threshold with purity =%.1f'%purity)
+        self.param['purity'] = purity
         self.param['threshold_add'] = threshold_add            
         if self.cube_local_max is None:
             raise IOError('Run the step 04 to initialize self.cube_local_max and self.cube_local_min')
@@ -1053,7 +1053,7 @@ class ORIGIN(object):
         if area: 
             threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, \
             cube_pval_correl, mapThresh = Compute_threshold_area(
-                                               fidelity, 
+                                               purity, 
                                                self.cube_local_max.data,
                                                self.cube_local_min.data,
                                                threshold_add, 
@@ -1063,7 +1063,7 @@ class ORIGIN(object):
         else:
             threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind = \
                                                Compute_threshold(
-                                               fidelity, 
+                                               purity, 
                                                self.cube_local_max.data,
                                                self.cube_local_min.data)
             
