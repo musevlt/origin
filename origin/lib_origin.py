@@ -242,7 +242,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty,
                 mapO2[(numx, numy)] = mO2
                 histO2[(numx, numy)] = hO2
                 frecO2[(numx, numy)] = fO2
-                thresO2[numx, numy] = tO2
+                thresO2[(numx, numy)] = tO2
                 bar.update()
                 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
@@ -1095,7 +1095,7 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     return cube_Local_max, cube_Local_min
 
 
-def Compute_threshold_area(fidelity, cube_local_max, cube_local_min, \
+def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
                            threshold_add, intx, inty, NbSubcube):  
     """Function to threshold the p-values from 
     computatino of threshold from the local maxima of:
@@ -1104,7 +1104,7 @@ def Compute_threshold_area(fidelity, cube_local_max, cube_local_min, \
 
     Parameters
     ----------
-    fidelity    : float
+    purity    : float
                 the fidelity between 0 and 1 
     cube_Local_max : array
                      cube of local maxima from maximum correlation
@@ -1155,7 +1155,7 @@ def Compute_threshold_area(fidelity, cube_local_max, cube_local_min, \
 
             thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
                                                Compute_threshold(
-                                               fidelity, 
+                                               purity, 
                                                cube_local_max_edge,
                                                cube_local_min_edge)
 
@@ -1178,15 +1178,15 @@ def Compute_threshold_area(fidelity, cube_local_max, cube_local_min, \
     
     return threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, cube_pval_correl, mapThresh
 
-def Compute_threshold(fidelity, cube_local_max, cube_local_min):
+def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
         - Maximum correlation
         - Minus minimum correlation
 
     Parameters
     ----------
-    fidelity    : float
-                the fidelity between 0 and 1 
+    purity    : float
+                the purity between 0 and 1 
     cube_Local_max : array
                      cube of local maxima from maximum correlation
     cube_Local_min : array
@@ -1226,7 +1226,7 @@ def Compute_threshold(fidelity, cube_local_max, cube_local_min):
     
     Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
     
-    PVal_r = [(1-np.mean(Lc_m>seuil)/np.mean(Lc_M>seuil))>=fidelity for seuil in index]
+    PVal_r = [(1-np.mean(Lc_m>seuil)/np.mean(Lc_M>seuil))>=purity for seuil in index]
     
     fid_ind = PVal_r.index(True)
     Confidence = index[fid_ind]

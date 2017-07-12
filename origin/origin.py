@@ -449,13 +449,23 @@ class ORIGIN(object):
             freqO2 = {}
             for i in range(NbSubcube):
                 for j in range(NbSubcube):
-                    freqO2[(i,j)] = np.loadtxt('%s/histO2_%d_%d.txt'%(folder,
+                    freqO2[(i,j)] = np.loadtxt('%s/freqO2_%d_%d.txt'%(folder,
                                                                       i,j))
         else:
             freqO2 = None
+#        if os.path.isfile('%s/thresO2_%d_%d.txt'%(folder, NbSubcube-1,
+#                                                 NbSubcube-1)):
+#            thresO2 = {}
+#            for i in range(NbSubcube):
+#                for j in range(NbSubcube):
+#                    thresO2[(i,j)] = np.loadtxt('%s/thresO2_%d_%d.txt'%(folder,
+#                                                                      i,j))
+#        else:
+#            thresO2 = None            
+
         if os.path.isfile('%s/thresO2.txt'%(folder)):
             thresO2 = np.loadtxt('%s/thresO2.txt'%(folder)).\
-            reshape((NbSubcube, NbSubcube)).astype(np.int)
+            reshape((NbSubcube, NbSubcube)).astype(np.float)
         else:
             thresO2 = None
         if os.path.isfile('%s/cube_correl.fits'%folder):
@@ -603,6 +613,11 @@ class ORIGIN(object):
                 for j in range(self.NbSubcube):
                     np.savetxt('%s/freqO2_%d_%d.txt'%(path2, i,j),
                                self.freqO2[(i,j)])
+#        if self.thresO2 is not None:
+#            for i in range(self.NbSubcube):
+#                for j in range(self.NbSubcube):
+#                    np.savetxt('%s/thresO2_%d_%d.txt'%(path2, i,j),
+#                               self.thresO2[(i,j)])                    
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
         if self.mapO2 is not None:
