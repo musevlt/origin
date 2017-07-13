@@ -1095,6 +1095,115 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     return cube_Local_max, cube_Local_min
 
 
+#%%
+def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
+                           threshold_add, intx, inty, NbSubcube, 
+                           cube_cont, pfa):  
+    """Function to threshold the p-values from 
+    computatino of threshold from the local maxima of:
+        - Maximum correlation
+        - Minus minimum correlation
+
+    Parameters
+    ----------
+    purity    : float
+                the fidelity between 0 and 1 
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    cube_Local_min : array
+                     cube of local maxima from minus minimum correlation   
+    cube_cont    : array
+                   cube of standardized continuum estimated from DCT
+    pfa          : Pvalue for the test which performs segmentation                        
+
+    Returns
+    -------          
+    Confidence : float
+                     the threshold associated to the fidelity        
+    PVal_M : array
+             the P Value associated to Maximum Correlation local maxima
+    PVal_m : array
+             the P Value associated to Minus Minimum Correlation local maxima
+    PVal_r : array
+             The fidelity function
+    index_pval: array
+                index value to plot 
+    fid_ind: integer
+             the index in index_pval related to the confidence            
+    cube_pval_correl : array
+                       cube of thresholded p-values associated
+                       to the local max of T_GLR values                  
+
+    Date  : July, 6 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """     
+    # Label
+    map_in = Segmentation(cube_cont, pfa)    
+
+    src_y, src_x = np.where(map_in>0)
+    bck_y, bck_x = np.where(map_in==0)
+    
+    # initialization
+    cube_pval_correl = np.zeros(cube_local_max.shape)
+    mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))    
+    threshold = {} 
+    Pval_M = {}  
+    Pval_m = {}  
+    Pval_r = {}  
+    index_pval = {}  
+    fid_ind = {} 
+    
+    # src     
+    ind_x = src_x
+    ind_y = src_y    
+    cube_local_max_edge = cube_local_max[:, ind_y, ind_x]
+    cube_local_min_edge = cube_local_min[:, ind_y, ind_x]      
+    thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
+                                       Compute_threshold(
+                                       purity, 
+                                       cube_local_max_edge,
+                                       cube_local_min_edge)    
+    
+    threshold[(0)] = thres_l
+    Pval_M[(0)] = Pval_M_l
+    Pval_m[(0)] = Pval_m_l
+    Pval_r[(0)] = Pval_r_l
+    index_pval[(0)] = index_pval_l
+    fid_ind[(0)] = fid_ind_l     
+    
+    cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
+                                      thres_l)
+    cube_pval_correl[:, ind_y, ind_x] = cube_pval_correl_l
+    mapThresh[ind_y, ind_x] = thres_l  
+    
+    # bck     
+    ind_x = bck_x
+    ind_y = bck_y    
+    cube_local_max_edge = cube_local_max[:, ind_y, ind_x]
+    cube_local_min_edge = cube_local_min[:, ind_y, ind_x]      
+    thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
+                                       Compute_threshold(
+                                       purity, 
+                                       cube_local_max_edge,
+                                       cube_local_min_edge)    
+    
+    threshold[(1)] = thres_l
+    Pval_M[(1)] = Pval_M_l
+    Pval_m[(1)] = Pval_m_l
+    Pval_r[(1)] = Pval_r_l
+    index_pval[(1)] = index_pval_l
+    fid_ind[(1)] = fid_ind_l     
+    
+    cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
+                                      thres_l)
+    cube_pval_correl[:, ind_y, ind_x] = cube_pval_correl_l
+    mapThresh[ind_y, ind_x] = thres_l              
+    
+    return threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, cube_pval_correl, mapThresh, map_in
+
+
+#%%
+
 def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
                            threshold_add, intx, inty, NbSubcube):  
     """Function to threshold the p-values from 
@@ -1576,12 +1685,20 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
         
     # orthogonal projection
     xest = np.dot( np.dot(U,np.transpose(U)), data_st_pca )
-    residual = data_std - np.reshape(xest,(nl,sizpsf,sizpsf))   
+    cont = np.reshape(xest,(nl,sizpsf,sizpsf)) 
+    residual = data_std - cont  
         
-    # LS deconv 
+    # LS deconvolution of the line 
     estimated_line, estimated_var = LS_deconv_wgt(residual, var_in, psf_in)    
+
+    # PSF convolution of estimated line
+    conv_out = conv_wgt(estimated_line, psf_in)           
+    # cleaning line in data to estimate convolved continuum    
+    continuum = data_std - conv_out
+    # LS deconvolution of the continuum     
+    estimated_cont, tmp = LS_deconv_wgt(continuum, var_in, psf_in)  
     
-    return estimated_line, estimated_var 
+    return estimated_line, estimated_var, estimated_cont 
 
 
 def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
@@ -1669,6 +1786,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 
     lin_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))
     var_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))   
+    cnt_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))       
     # half size psf    
     longxy = int(sizpsf // 2)          
     inds = slice(longxy-horiz_psf,longxy+1+horiz_psf)    
@@ -1686,7 +1804,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                                                axis=1)*psf, axis=0)
 
                     # estimate Full Line and theoretic variance
-                    deconv_met,varest_met = method_PCA_wgt(r1, var, psf, \
+                    deconv_met,varest_met,cont = method_PCA_wgt(r1, var, psf, \
                                                            order_dct)   
                     
                     maxz = z0  - 5 + np.argmax(deconv_met[ind_max])
@@ -1696,7 +1814,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     ind_hrz = slice(maxz-horiz,maxz+horiz)
                     
                     lin_est[:,dy,dx] = deconv_met
-                    var_est[:,dy,dx] = varest_met            
+                    var_est[:,dy,dx] = varest_met     
+                    cnt_est[:,dy,dx] = cont                         
                     
                     # compute MSE                    
                     LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz,:,:])  
@@ -1734,10 +1853,11 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     MSE_5 = float( mse_5[wy,wx] )
     #MSE_10 = float( mse_10[wy,wx] )    
     estimated_line = lin_est[:,wy,wx]
-    estimated_variance = var_est[:,wy,wx]    
+    estimated_variance = var_est[:,wy,wx]  
+    estimated_continuum = cnt_est[:,wy,wx]      
     
     return flux_est_5, MSE_5, estimated_line, \
-            estimated_variance, int(y), int(x), int(z)
+            estimated_variance, int(y), int(x), int(z), estimated_continuum
 
 def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                     criteria = 'flux', order_dct = 30, horiz_psf = 1, \
@@ -1803,7 +1923,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2_flux5 = []  
     Cat_est_line_raw = []
     Cat_est_line_var = []
-            
+    Cat_est_cont_raw = []            
     for src in Cat1_T:
         y0 = src['y']
         x0 = src['x']
@@ -1812,7 +1932,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
                                                           y0, x0, size_grid)
         
-        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
+        f5, m5, lin_est, var_est, y, x, z, cnt_est = GridAnalysis(red_dat,  \
                       red_var, red_psf, red_wgt, horiz,  \
                       size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,\
                       order_dct)
@@ -1824,6 +1944,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         Cat2_flux5.append(f5)    
         Cat_est_line_raw.append(lin_est.ravel())
         Cat_est_line_var.append(var_est.ravel())
+        Cat_est_cont_raw.append(cnt_est.ravel())
         
     Cat2 = Cat1_T.copy()
 
@@ -1848,7 +1969,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))        
     
-    return Cat2, Cat_est_line_raw, Cat_est_line_var
+    return Cat2, Cat_est_line_raw, Cat_est_line_var, Cat_est_cont_raw
 
 def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
                        sigmat, sigma_t, cube_faint_t, cube_faint_pad,
@@ -2099,16 +2220,14 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
 
     return CatF
 
-def Segmentation(cnt_in, var_in,pfa):
+def Segmentation(STD_in, pfa):
     """Generate from a 3D Cube a 2D map where sources and background are 
     separated
 
     Parameters
     ---------                   
-    cnt_in       : Array
-                   continu part of DCT from preprocessing step - Cube 
-    var_in       : Array
-                   Variance Cube given or computed in preprocessing step
+    STD_in       : Array
+                   standard continu part of DCT from preprocessing step - Cube 
                    
     pfa          : Pvalue for the test which performs segmentation                   
 
@@ -2120,13 +2239,11 @@ def Segmentation(cnt_in, var_in,pfa):
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
     
-    nl,ny,nx = cnt_in.shape
+    nl,ny,nx = STD_in.shape
 
-    # STD Cube
-    STD_in = cnt_in / np.sqrt( var_in )    
     
     # Standardized STD Cube
-    mask = (cnt_in==0)
+    mask = (STD_in==0)
     VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
     VAR[mask] = np.inf    
     x = STD_in/np.sqrt(VAR)
@@ -2145,7 +2262,7 @@ def Segmentation(cnt_in, var_in,pfa):
     
     return map_in
 
-def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa): 
+def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz): 
     """Merge the detected emission lines distants to less than deltaz
     spectral channel in a source area
 
@@ -2161,15 +2278,13 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
                    
     cor_in       : Array
                    Correlation Cube 
-    cnt_in       : Array
-                   continu part of DCT from preprocessing step - Cube 
+    map_in       : Array
+                   segmentation map 
     var_in       : Array
                    Variance Cube given or computed in preprocessing step
                    
     deltaz       : integer
-                   Distance maximum between 2 different lines
-                   
-    pfa          : Pvalue for the test which performs segmentation                   
+                   Distance maximum between 2 different lines                                   
 
     Returns
     -------
@@ -2186,8 +2301,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
 
     nl,ny,nx = cor_in.shape
 
-    # Label
-    map_in = Segmentation(cnt_in, var_in,pfa)
+
     
     # MAX Spectra for sources with same ID 
     _id = []
@@ -2279,15 +2393,16 @@ def SpatioSpectral_Merging(cat_in, cor_in, cnt_in, var_in , deltaz, pfa):
     #save the label of the segmentation map
     col_seg_label = Column(name='seg_label', data=seg)
     cat_out.add_columns([col_old_id, col_seg_label])
-    return cat_out, map_in     
+    return cat_out     
 
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, segmap, correl, fwhm_profiles, 
                      param, path, name, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
-                     nb_lines, Cat_est_line_data,
-                     Cat_est_line_var, y, x, flux, src_vers, author):
+                     nb_lines, Cat_est_line_data, Cat_est_line_var,
+                     Cat_est_cont_data, Cat_est_cont_var,
+                     y, x, flux, src_vers, author):
     """Function to create the final source
 
     Parameters
@@ -2344,11 +2459,15 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     for j in range(nb_lines):
         sp_est = Spectrum(data=Cat_est_line_data[j, :], 
                           wave=cube.wave)
+        ct_est = Spectrum(data=Cat_est_cont_data[j, :], 
+                          wave=cube.wave)        
         ksel = np.where(sp_est._data != 0)
         z1 = ksel[0][0]
         z2 = ksel[0][-1] + 1
         # Estimated line
         src.spectra['LINE_{:s}'.format(names[j])] = sp_est[z1:z2]
+        # Estimated Continu
+        src.spectra['CONT_{:s}'.format(names[j])] = ct_est[z1:z2]        
         # correl
         src.spectra['CORR_{:s}'.format(names[j])] = correl_[z1:z2, y[j], x[j]]
         # FWHM in arcsec of the profile
@@ -2362,7 +2481,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.add_narrow_band_image_lbdaobs(cube,
                                         'NB_LINE_{:s}'.format(names[j]),
                                         w[j], width=2 * profil_FWHM,
-                                        is_sum=True, subtract_off=True)
+                                        is_sum=True, subtract_off=True)      
         src.add_narrow_band_image_lbdaobs(correl_,
                                         'NB_CORR_{:s}'.format(names[j]),
                                         w[j], width=2 * profil_FWHM,
@@ -2400,7 +2519,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author,
-                               path, maxmap, segmap, ncpu=1):
+                               path, maxmap, segmap, Cat_est_cont, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -2411,6 +2530,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                        flux num_line RA DEC
     Cat_est_line     : list of spectra
                        Catalogue of estimated lines
+    Cat_est_cont     : list of spectra
+                       Catalogue of roughly estimated continuum                       
     correl            : array
                         Cube of T_GLR values
     wave              : `mpdaf.obj.WaveCoord`
@@ -2472,16 +2593,22 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         nb_lines = E['nb_lines'][0]
         Cat_est_line_data = np.empty((nb_lines, wave.shape))
         Cat_est_line_var = np.empty((nb_lines, wave.shape))
+        Cat_est_cont_data = np.empty((nb_lines, wave.shape))
+        Cat_est_cont_var = np.empty((nb_lines, wave.shape))        
         for j in range(nb_lines):
             Cat_est_line_data[j,:] = Cat_est_line[E['num_line'][j]]._data
             Cat_est_line_var[j,:] = Cat_est_line[E['num_line'][j]]._var
+            Cat_est_cont_data[j,:] = Cat_est_cont[E['num_line'][j]]._data
+            Cat_est_cont_var[j,:] = Cat_est_cont[E['num_line'][j]]._var            
         y = E['y']
         x = E['x']
         flux = E['flux']
         
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
                           wave_pix, GLR, num_profil, pvalC, nb_lines,
-                          Cat_est_line_data, Cat_est_line_var, y, x, flux,
+                          Cat_est_line_data, Cat_est_line_var, 
+                          Cat_est_cont_data, Cat_est_cont_var,                           
+                          y, x, flux,
                           src_vers, author)
         sources_arglist.append(source_arglist)
         
