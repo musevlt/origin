@@ -39,9 +39,9 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Compute_local_max_zone, Create_local_max_cat, \
     Estimation_Line, SpatioSpectral_Merging, Segmentation, \
     Spatial_Merging_Circle, Correlation_GLR_test_zone, \
-    Compute_thresh_PCA_hist, Threshold_pval, \
+    Compute_thresh_PCA_hist, \
     Compute_threshold_segmentation, __version__
-# , Compute_threshold
+# , Threshold_pval , Compute_threshold
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -143,7 +143,7 @@ class ORIGIN(object):
                  thresO2, cube_correl, maxmap, cube_profile, Cat0, Cat1, spectra,
                  Cat2, param, cube_std, var, expmap, cube_pval_correl,
                  cube_local_max, cont_dct, segmentation_map, cube_local_min,
-                 cube_correl_min,continuum):
+                 cube_correl_min, continuum, mapThresh):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -314,13 +314,14 @@ class ORIGIN(object):
         self.maxmap = maxmap
         # step4
         self.cube_pval_correl = cube_pval_correl
+        self.segmentation_map = segmentation_map
+        self.mapThresh = mapThresh        
         self.Cat0 = Cat0
         # step5
         self.Cat1 = Cat1
         self.spectra = spectra
         self.continuum = continuum
         # step6
-        self.segmentation_map = segmentation_map
         self.Cat2 = Cat2
         
         self._log_file.info('00 Done')
@@ -366,7 +367,7 @@ class ORIGIN(object):
                    cube_std=None, var=None, expmap=None,
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
                    segmentation_map=None,cube_local_min=None,
-                   cube_correl_min=None, continuum=None)
+                   cube_correl_min=None, continuum=None, mapThresh=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -539,6 +540,10 @@ class ORIGIN(object):
             segmentation_map = Image('%s/segmentation_map.fits'%folder)
         else:
             segmentation_map = None
+        if os.path.isfile('%s/mapThresh.fits'%folder):
+            mapThresh = Image('%s/mapThresh.fits'%folder)
+        else:
+            mapThresh = None            
             
         if newpath is not None:
             path = newpath
@@ -558,7 +563,8 @@ class ORIGIN(object):
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_map=segmentation_map,
                    cube_local_min=cube_local_min, 
-                   cube_correl_min=cube_correl_min, continuum=continuum)
+                   cube_correl_min=cube_correl_min, continuum=continuum,
+                   mapThresh=mapThresh)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -658,6 +664,10 @@ class ORIGIN(object):
             self.cube_local_min.write('%s/cube_local_min.fits'%path2)                                
         if self.cube_pval_correl is not None:
             self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
+        if self.segmentation_map is not None:
+            self.segmentation_map.write('%s/segmentation_map.fits'%path2)  
+        if self.mapThresh is not None:
+            self.mapThresh.write('%s/mapThresh.fits'%path2)              
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
         # step5
@@ -688,8 +698,7 @@ class ORIGIN(object):
         # step6
         if self.Cat2 is not None:
             self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
-        if self.segmentation_map is not None:
-            self.segmentation_map.write('%s/segmentation_map.fits'%path2)        
+      
         
 
     def init_calibrator(self,x=None, y=None, z=None, amp=None ,profil=None,\
@@ -848,7 +857,7 @@ class ORIGIN(object):
         self._log_file.info('01 Done')
 
     def step02_compute_greedy_PCA(self, mixing=False,
-                              Noise_population=50, threshold_test=.05,
+                              Noise_population=50, threshold_test=.01,
                               itermax=100):
         """ Loop on each zone of the data cube and compute the greedy PCA.
         The test (test_fun) and the threshold (threshold_test) define the part
@@ -1042,7 +1051,7 @@ class ORIGIN(object):
         
         self._log_file.info('03 Done')
 
-    def step04_threshold_pval(self, purity=.9, threshold_add=0, area = True, pfa=5e-2):        
+    def step04_threshold_pval(self, purity=.9, threshold_option=None, pfa=5e-2):        
         """Threshold the Pvalue with the given threshold, if the threshold is
         None the threshold is automaticaly computed from confidence applied
         on local maximam from maximum correlation and local maxima from 
@@ -1052,8 +1061,10 @@ class ORIGIN(object):
         ----------
         purity : float
                  fidelity to automatically compute the threshold        
-        threshold_add : float
-                     additional value added to Threshold applied on pvalues.
+        threshold_option : float
+                           float it is a manual threshold.
+                           string 'background'
+                           threshold based on background threshold
                             
         Returns
         -------                               
@@ -1067,24 +1078,30 @@ class ORIGIN(object):
         """
         self._log_stdout.info('Step 04 - p-values Thresholding')
         self._log_stdout.info('Threshold the Pvalues')
-        self._log_file.info('   computation of threshold with purity =%.1f'%purity)
+        if threshold_option is None:
+            self._log_file.info('   computation of threshold with purity =%.1f'%purity)
+        elif threshold_option == 'background' :
+            self._log_file.info('   computation of threshold with purity =%.1f (background option)'%purity)
+        else: 
+            self._log_file.info('   threshold =%.1f '%threshold_option)            
         self.param['purity'] = purity
-        self.param['threshold_add'] = threshold_add            
+        self.param['threshold_option'] = threshold_option            
         if self.cube_local_max is None:
             raise IOError('Run the step 03 to initialize self.cube_local_max and self.cube_local_min')
 
 
-        threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, \
-        cube_pval_correl, mapThresh, segmentation_map \
-                                = Compute_threshold_segmentation(
+        threshold, Pval_M, Pval_m, Pval_r, index_pval, cube_pval_correl, \
+         mapThresh, segmentation_map, Det_M, Det_m \
+                                         = Compute_threshold_segmentation(
                                            purity, 
                                            self.cube_local_max.data,
                                            self.cube_local_min.data,
-                                           threshold_add, 
+                                           threshold_option, 
                                            self.intx, self.inty,
                                            self.NbSubcube, 
                                            self.cont_dct.data, pfa)
-        self.mapThresh = mapThresh                
+        self._log_stdout.info('Save the threshold map in self.mapThresh')                                          
+        self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
             
         
         self.param['pfa'] = pfa             
@@ -1093,39 +1110,8 @@ class ORIGIN(object):
         self.param['Pval_m'] = Pval_m
         self.param['Pval_r'] = Pval_r
         self.param['index_pval'] = index_pval
-        self.param['fid_ind'] = fid_ind
-
-        
-#        if area: 
-#            threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, \
-#            cube_pval_correl, mapThresh = Compute_threshold_area(
-#                                               purity, 
-#                                               self.cube_local_max.data,
-#                                               self.cube_local_min.data,
-#                                               threshold_add, 
-#                                               self.intx, self.inty,
-#                                               self.NbSubcube)
-#            self.mapThresh = mapThresh
-#        else:
-#            threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind = \
-#                                               Compute_threshold(
-#                                               purity, 
-#                                               self.cube_local_max.data,
-#                                               self.cube_local_min.data)
-#            
-#            threshold+=threshold_add
-#            
-#            cube_pval_correl = Threshold_pval(self.cube_local_max.data, \
-#                                              threshold)
-#        
-#        
-#        
-#        self.param['ThresholdPval'] = threshold
-#        self.param['Pval_M'] = Pval_M
-#        self.param['Pval_m'] = Pval_m
-#        self.param['Pval_r'] = Pval_r
-#        self.param['index_pval'] = index_pval
-#        self.param['fid_ind'] = fid_ind
+        self.param['Det_M'] = Det_M
+        self.param['Det_m'] = Det_m        
         
         self._log_stdout.info('Save self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, \
@@ -1340,47 +1326,49 @@ class ORIGIN(object):
         ax.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')
         ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
 
+    def plot_step04_detnumber(self, i, ax=None):
+        """Draw number of sources per threshold computed in step04
+        i = 0 : background
+        i = 1 : source
+        """
+        if i == 0: 
+            i_titre = 'background'
+        else: 
+            i_titre = 'sources'
+            
+        if self.cube_faint is None:
+            raise IOError('Run the step 02 to initialize self.cube_faint')
+            
+        if ax is None:
+            ax = plt.gca()        
+        
+        threshold = self.param['ThresholdPval'][(i)]
+        Det_M = self.param['Det_M'][(i)]
+        Det_m = self.param['Det_m'][(i)]
+        index_pval = self.param['index_pval'][(i)]
 
-#    def plot_step04(self, i, j, ax=None):
-#        """Draw number of sources per threshold computed in step04
-#        """
-#        if self.cube_faint is None:
-#            raise IOError('Run the step 02 to initialize self.cube_faint')
-#            
-#        if ax is None:
-#            ax = plt.gca()        
-#        
-#        threshold = self.param['ThresholdPval'][(i,j)]
-#        Pval_M = self.param['Pval_M'][(i,j)]
-#        Pval_m = self.param['Pval_m'][(i,j)]
-#        Pval_r = self.param['Pval_r'][(i,j)]
-#        index_pval = self.param['index_pval'][(i,j)]
-#        fid_ind = self.param['fid_ind'][(i,j)]
-#
-#        
-#        ax.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
-#        ax.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
-#        ym,yM = ax.get_ylim()
-#        ax.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
-#        ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
-#                 label='automatic threshold' )
-#        ax.plot(threshold, Pval_r[fid_ind],'xr')
-#        ax.set_ylim((ym,yM))
-#        ax.set_xlabel('Threshold')
-#        ax.set_ylabel('Fidelity')
-#        ax.set_title('zone (%d, %d) - threshold %f' %(i,j,threshold))
-#        plt.legend()  
-
+        
+        ax.semilogy( index_pval, Det_M, '.-', label = 'from Max Correl' )
+        ax.semilogy( index_pval, Det_m, '.-', label = 'from -Min Correl' )
+        ym,yM = ax.get_ylim()
+        ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
+                 label='automatic threshold' )
+        ax.set_ylim((ym,yM))
+        ax.set_xlabel('Threshold')
+        ax.set_ylabel('Number of detection')        
+        ax.set_title('zone %s - threshold %f' %(i_titre,threshold))
+        plt.legend()          
 
     def plot_step04(self, i, ax=None):
         """Draw number of sources per threshold computed in step04
-        i = 0 : source
-        i = 1 : background
+        i = 0 : background
+        i = 1 : source
         """
+                
         if i == 0: 
-            i_titre = 'sources'
-        else: 
             i_titre = 'background'
+        else: 
+            i_titre = 'sources'
             
         if self.cube_faint is None:
             raise IOError('Run the step 02 to initialize self.cube_faint')
@@ -1393,21 +1381,22 @@ class ORIGIN(object):
         Pval_m = self.param['Pval_m'][(i)]
         Pval_r = self.param['Pval_r'][(i)]
         index_pval = self.param['index_pval'][(i)]
-        fid_ind = self.param['fid_ind'][(i)]
-
+#        fid_ind = self.param['fid_ind'][(i)]
+        purity = self.param['purity']       
         
-        ax.semilogy( index_pval, Pval_M, '.-', label = 'from Max Correl' )
-        ax.semilogy( index_pval, Pval_m, '.-', label = 'from -Min Correl' )
+        ax.semilogy( index_pval, Pval_M, '.-', label = 'from +Max Correl (+DATA)' )
+        ax.semilogy( index_pval, Pval_m, '.-', label = 'from -Max Correl (-DATA)' )
         ym,yM = ax.get_ylim()
         ax.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
         ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
                  label='automatic threshold' )
-        ax.plot(threshold, Pval_r[fid_ind],'xr')
+#        ax.plot(index_pval[fid_ind], Pval_r[fid_ind],'xg')
+        ax.plot(threshold, purity,'xr')        
         ax.set_ylim((ym,yM))
         ax.set_xlabel('Threshold')
         ax.set_ylabel('Fidelity')
         ax.set_title('zone %s - threshold %f' %(i_titre,threshold))
-        plt.legend()  
+         
         
         
     def plot_step02(self, i, j, threshold_test=.05, ax=None, log10=True):
@@ -1452,7 +1441,7 @@ class ORIGIN(object):
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')    
         ym,yM = ax.get_ylim()
-        ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+        ax.plot([thre,thre],[ym,yM],'r',lw=2,alpha=.5)
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
         ax.set_title('zone (%d, %d) - threshold %f' %(i,j,thre))
@@ -1479,16 +1468,29 @@ class ORIGIN(object):
         bins = self.freqO2[(i, j)]
         hist = self.histO2[(i, j)]
         thre = self.thresO2[(i, j)]
-        if log10:
-            hist = np.log10(hist)
+        
+        
+        ind = np.argmax(hist)
+        mod = bins[ind]
+        ind2 = np.argmin(( hist[ind]/2 - hist[:ind] )**2)
+        fwhm = mod - bins[ind2]
+        sigma = fwhm/np.sqrt(2*np.log(2))        
         
         center = (bins[:-1] + bins[1:]) / 2
+        gauss = stats.norm.pdf(center,loc=mod,scale=sigma) 
+        
+        if log10:
+            hist = np.log10(hist)
+            gauss = np.log10(gauss)                           
+        
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')    
-        ym,yM = ax.get_ylim()
+        ym,yM = ax.get_ylim()        
+        ax.plot(center, gauss,'-b',alpha=.5)            
         ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
+        ax.set_ylim((ym,yM))        
         ax.set_title('zone (%d, %d) - threshold %f' %(i,j,thre))
         
     def plot_mapPCA(self, i, j, ax=None, iteration=None):

@@ -682,7 +682,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
     return correl, profile, correl_min
 
 
-def Correlation_GLR_test3(cube, sigma, PSF_Moffat, weights, Dico):
+def Correlation_GLR_test4(cube, sigma, PSF_Moffat, weights, Dico):
     # Antony optimiser
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
@@ -969,17 +969,17 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     # initialization with the first profile
     profile = np.zeros(shape, dtype=np.int)
 
-    # First spectral profile
-    k0 = 0
-    d_j = Dico[k0]
-    # zero-mean spectral profile
-    d_j = d_j - np.mean(d_j)
-    # Compute the square of the spectral profile
-    profile_square = d_j**2
-
-    ygrid, xgrid = np.mgrid[0:Ny, 0:Nx]
-    xgrid = xgrid.flatten()
-    ygrid = ygrid.flatten()
+#    # First spectral profile
+#    k0 = 0
+#    d_j = Dico[k0]
+#    # zero-mean spectral profile
+#    d_j = d_j - np.mean(d_j)
+#    # Compute the square of the spectral profile
+#    profile_square = d_j**2
+#
+#    ygrid, xgrid = np.mgrid[0:Ny, 0:Nx]
+#    xgrid = xgrid.flatten()
+#    ygrid = ygrid.flatten()
 
     logger.info('Step 3/3 Computing second cube of correlation values')
     profile = np.empty(shape)
@@ -991,7 +991,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         d_j = d_j - np.mean(d_j)
         profile_square = d_j**2
 
-
+        cube_profile2 = np.zeros((Nz,Ny,Nx))
+        norm_profile2 = np.zeros((Nz,Ny,Nx))        
         for y in range(Ny):
             for x in range(Nx):
                 cube_profile = signal.fftconvolve(cube_fsf[:,y,x], d_j,
@@ -999,7 +1000,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 norm_profile = signal.fftconvolve(norm_fsf[:,y,x],
                                                          profile_square,
                                                          mode = 'same')
-
+                norm_profile2[:,y,x] = norm_profile
+                cube_profile2[:,y,x] = cube_profile                
 
                 norm_profile[norm_profile <= 0] = np.inf         
                 tmp = cube_profile/np.sqrt(norm_profile)
@@ -1008,8 +1010,13 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 correl_min[:, y, x] = np.minimum( correl_min[:, y, x],tmp)                    
                 profile[PROFILE_MAX,y,x] = k
 
+        np.save('cube_profile'+str(k)+'.npy',cube_profile2)
+        np.save('norm_profile'+str(k)+'.npy',norm_profile2) 
+    
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-        
+    
+   
+    
     return correl, profile, correl_min
 
 
@@ -1097,7 +1104,7 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
 
 #%%
 def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
-                           threshold_add, intx, inty, NbSubcube, 
+                           threshold_option, intx, inty, NbSubcube, 
                            cube_cont, pfa):  
     """Function to threshold the p-values from 
     computatino of threshold from the local maxima of:
@@ -1112,8 +1119,19 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
                      cube of local maxima from maximum correlation
     cube_Local_min : array
                      cube of local maxima from minus minimum correlation   
+    threshold_option : float
+                       float it is a manual threshold.
+                       string 
+                       threshold based on background threshold                     
+                       
     cube_cont    : array
                    cube of standardized continuum estimated from DCT
+    intx      : integer
+                limits in pixels of the columns for each zone
+    inty      : integer                   
+                limits in pixels of the rows for each zone    
+    NbSubcube : integer
+                Number of subcubes for the spatial segmentation    
     pfa          : Pvalue for the test which performs segmentation                        
 
     Returns
@@ -1127,9 +1145,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     PVal_r : array
              The fidelity function
     index_pval: array
-                index value to plot 
-    fid_ind: integer
-             the index in index_pval related to the confidence            
+                index value to plot            
     cube_pval_correl : array
                        cube of thresholded p-values associated
                        to the local max of T_GLR values                  
@@ -1137,13 +1153,11 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """     
-    # Label
-    map_in = Segmentation(cube_cont, pfa)    
 
-    src_y, src_x = np.where(map_in>0)
-    bck_y, bck_x = np.where(map_in==0)
+    # Label
+    map_in = Segmentation(cube_cont, pfa)  
     
-    # initialization
+    # initialization        
     cube_pval_correl = np.zeros(cube_local_max.shape)
     mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))    
     threshold = {} 
@@ -1151,55 +1165,49 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     Pval_m = {}  
     Pval_r = {}  
     index_pval = {}  
-    fid_ind = {} 
+    det_m = {}  
+    det_M = {} 
     
-    # src     
-    ind_x = src_x
-    ind_y = src_y    
-    cube_local_max_edge = cube_local_max[:, ind_y, ind_x]
-    cube_local_min_edge = cube_local_min[:, ind_y, ind_x]      
-    thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
-                                       Compute_threshold(
-                                       purity, 
-                                       cube_local_max_edge,
-                                       cube_local_min_edge)    
+  
+    # index of segmentation 
+    ind_y = []
+    ind_x = []    
+    bck_y, bck_x = np.where(map_in==0)
+    ind_y.append(bck_y)
+    ind_x.append(bck_x)      
+    src_y, src_x = np.where(map_in>0)
+    ind_y.append(src_y)
+    ind_x.append(src_x)      
     
-    threshold[(0)] = thres_l
-    Pval_M[(0)] = Pval_M_l
-    Pval_m[(0)] = Pval_m_l
-    Pval_r[(0)] = Pval_r_l
-    index_pval[(0)] = index_pval_l
-    fid_ind[(0)] = fid_ind_l     
-    
-    cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
-                                      thres_l)
-    cube_pval_correl[:, ind_y, ind_x] = cube_pval_correl_l
-    mapThresh[ind_y, ind_x] = thres_l  
-    
-    # bck     
-    ind_x = bck_x
-    ind_y = bck_y    
-    cube_local_max_edge = cube_local_max[:, ind_y, ind_x]
-    cube_local_min_edge = cube_local_min[:, ind_y, ind_x]      
-    thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
-                                       Compute_threshold(
-                                       purity, 
-                                       cube_local_max_edge,
-                                       cube_local_min_edge)    
-    
-    threshold[(1)] = thres_l
-    Pval_M[(1)] = Pval_M_l
-    Pval_m[(1)] = Pval_m_l
-    Pval_r[(1)] = Pval_r_l
-    index_pval[(1)] = index_pval_l
-    fid_ind[(1)] = fid_ind_l     
-    
-    cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
-                                      thres_l)
-    cube_pval_correl[:, ind_y, ind_x] = cube_pval_correl_l
-    mapThresh[ind_y, ind_x] = thres_l              
-    
-    return threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, cube_pval_correl, mapThresh, map_in
+
+
+    # threshold
+    for ind_n in range(2):    
+   
+        cube_local_max_edge = cube_local_max[:, ind_y[ind_n], ind_x[ind_n]]
+        cube_local_min_edge = cube_local_min[:, ind_y[ind_n], ind_x[ind_n]]      
+        
+        threshold[(ind_n)], Pval_M[(ind_n)], Pval_m[(ind_n)], \
+        Pval_r[(ind_n)], index_pval[(ind_n)], det_m[(ind_n)], \
+        det_M[(ind_n)] = Compute_threshold( purity, cube_local_max_edge, \
+                                           cube_local_min_edge)    
+              
+        if threshold_option is not None: 
+
+            if threshold_option=='background': 
+                print('background')
+                threshold[(ind_n)] = threshold[(0)]            
+            else: 
+                print('given')
+                threshold[(ind_n)] = threshold_option
+                        
+        cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
+                                            threshold[(ind_n)])
+        
+        cube_pval_correl[:, ind_y[ind_n], ind_x[ind_n]]= cube_pval_correl_l
+        mapThresh[ind_y[ind_n], ind_x[ind_n]] = threshold[(ind_n)]      
+    return threshold, Pval_M, Pval_m, Pval_r, index_pval,  \
+            cube_pval_correl, mapThresh, map_in, det_m, det_M
 
 
 #%%
@@ -1249,7 +1257,6 @@ def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
     Pval_m = {}  
     Pval_r = {}  
     index_pval = {}  
-    fid_ind = {} 
     
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
@@ -1262,7 +1269,7 @@ def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
             cube_local_max_edge = cube_local_max[:, y1:y2, x1:x2]
             cube_local_min_edge = cube_local_min[:, y1:y2, x1:x2]            
 
-            thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l, fid_ind_l = \
+            thres_l, Pval_M_l, Pval_m_l, Pval_r_l, index_pval_l = \
                                                Compute_threshold(
                                                purity, 
                                                cube_local_max_edge,
@@ -1274,8 +1281,7 @@ def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
             Pval_M[(numx, numy)] = Pval_M_l
             Pval_m[(numx, numy)] = Pval_m_l
             Pval_r[(numx, numy)] = Pval_r_l
-            index_pval[(numx, numy)] = index_pval_l
-            fid_ind[(numx, numy)] = fid_ind_l                                                
+            index_pval[(numx, numy)] = index_pval_l                                        
             # Cube of pvalues for each zone
             
             
@@ -1285,7 +1291,7 @@ def Compute_threshold_area(purity, cube_local_max, cube_local_min, \
             mapThresh[y1:y2, x1:x2] = thresh
         
     
-    return threshold, Pval_M, Pval_m, Pval_r, index_pval, fid_ind, cube_pval_correl, mapThresh
+    return threshold, Pval_M, Pval_m, Pval_r, index_pval, cube_pval_correl, mapThresh
 
 def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
@@ -1329,20 +1335,34 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     
     dx = (maxi-mini)/N
     index = np.arange(mini,maxi,dx)
+
+    Det_M = [np.sum( (Lc_M>seuil) ) for seuil in index ]
+    Det_m = [np.sum( (Lc_m>seuil) ) for seuil in index ]
     
     PVal_M = [np.mean( (Lc_M>seuil) ) for seuil in index ]
     PVal_m = [np.mean( (Lc_m>seuil) ) for seuil in index ]
     
     Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
     
-    PVal_r = [(1-np.mean(Lc_m>seuil)/np.mean(Lc_M>seuil))>=purity for seuil in index]
+    PVal_r = [(1-np.mean(Lc_m>=seuil)/np.mean(Lc_M>=seuil))>=purity for seuil in index]
     
     fid_ind = PVal_r.index(True)
-    Confidence = index[fid_ind]
+    
+    x2 = index[fid_ind]
+    x1 = index[fid_ind-1]
+    y2 = Pval_r[fid_ind] 
+    y1 = Pval_r[fid_ind-1] 
+    
+    b = y2-y1 
+    a = x2-x1 
+    
+    tan_theta = b/a 
+    threshold = (purity-y1)/tan_theta + x1     
+
 
     PVal_M = np.array(PVal_M)
     PVal_m = np.array(PVal_m)
-    return Confidence, PVal_M, PVal_m, Pval_r, index, fid_ind      
+    return threshold, PVal_M, PVal_m, Pval_r, index, Det_M, Det_m       
 
 def Threshold_pval(cube_local_max, threshold):
     """Function to threshold the p-values 
@@ -1777,7 +1797,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     mse_5 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf    
     #mse_10 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf        
     
-    ind_max = slice(z0-5,z0+5)
+    nl = data_in.shape[0]
+    ind_max = slice(np.maximum(0,z0-5),np.minimum(nl,z0+5))
     
     if weight_in is None:
         nl,sizpsf,tmp = psf.shape        
@@ -2489,7 +2510,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
         if 'ThresholdPval' in param.keys():
             for key, item in param['ThresholdPval'].items():
-                src.header['OP_THRES_%02d_%02d'%(key[0], key[1])] = item
+#                src.header['OP_THRES_%02d_%02d'%(key[0], key[1])] = item
+                src.header['OP_THRES_%02d'%(key)] = item
         if 'deltaz' in param.keys():
             src.OP_DZ = (param['deltaz'], 'Orig deltaz')
         if 'r0PCA' in param.keys():
