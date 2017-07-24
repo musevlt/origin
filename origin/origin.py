@@ -114,10 +114,10 @@ class ORIGIN(object):
                              step03_compute_TGLR. From Min correlations                            
         cube_local_max     : `~mpdaf.obj.Cube`
                              Cube of Local maximam of T_GLR values. Result of
-                             step04_compute_Local_max. From Max correlations
+                             step04_threshold_pval. From Max correlations
         cube_local_min     : `~mpdaf.obj.Cube`
                              Cube of Local maximam of T_GLR values. Result of
-                             step04_compute_Local_max. From Min correlations                             
+                             step04_threshold_pval. From Min correlations                             
         cube_profile       : `~mpdaf.obj.Cube` (type int)
                              Number of the profile associated to the T_GLR.
                              Result of step03_compute_TGLR.
@@ -140,10 +140,11 @@ class ORIGIN(object):
     
     def __init__(self, path, name, filename, NbSubcube, profiles, PSF,
                  FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, freqO2,
-                 thresO2, cube_correl, maxmap, cube_profile, Cat0, Cat1, spectra,
-                 Cat2, param, cube_std, var, expmap, cube_pval_correl,
-                 cube_local_max, cont_dct, segmentation_map, cube_local_min,
-                 cube_correl_min, continuum, mapThresh):
+                 thresO2, cube_correl, maxmap, cube_profile, Cat0, Pval_M,
+                 Pval_m, Pval_r, index_pval, Det_M, Det_m, ThresholdPval,
+                 Cat1, spectra, Cat2, param, cube_std, var, expmap,
+                 cube_pval_correl, cube_local_max, cont_dct, segmentation_map,
+                 cube_local_min, cube_correl_min, continuum, mapThresh):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -317,6 +318,13 @@ class ORIGIN(object):
         self.segmentation_map = segmentation_map
         self.mapThresh = mapThresh        
         self.Cat0 = Cat0
+        self.Pval_M = Pval_M
+        self.Pval_m = Pval_m
+        self.Pval_r = Pval_r
+        self.index_pval = index_pval
+        self.Det_M = Det_M
+        self.Det_m = Det_m   
+        self.ThresholdPval = ThresholdPval
         # step5
         self.Cat1 = Cat1
         self.spectra = spectra
@@ -362,9 +370,10 @@ class ORIGIN(object):
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, intx=None,
                    inty=None, cube_faint=None, mapO2=None, histO2=None,
                    freqO2=None, thresO2=None, cube_correl=None, maxmap=None,
-                   cube_profile=None, Cat0=None,
-                   Cat1=None, spectra=None, Cat2=None, param=None,
-                   cube_std=None, var=None, expmap=None,
+                   cube_profile=None, Cat0=None, Pval_M=None, Pval_m=None,
+                   Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
+                   ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
+                   param=None, cube_std=None, var=None, expmap=None,
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
                    segmentation_map=None,cube_local_min=None,
                    cube_correl_min=None, continuum=None, mapThresh=None)
@@ -505,7 +514,59 @@ class ORIGIN(object):
         if os.path.isfile('%s/Cat0.fits'%folder):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
         else:
-            Cat0 = None
+            Cat0 = None        
+        if os.path.isfile('%s/Pval_M0.txt'%folder):
+            Pval_M = []
+            i = 0
+            while(os.path.isfile('%s/Pval_M%d.txt'%(folder,i))):
+                Pval_M.append(np.loadtxt('%s/Pval_M%d.txt'%(folder,i)).astype(np.float))
+                i = i + 1
+        else:
+            Pval_M = None
+        if os.path.isfile('%s/Pval_m0.txt'%folder):
+            Pval_m = []
+            i = 0
+            while(os.path.isfile('%s/Pval_m%d.txt'%(folder,i))):
+                Pval_m.append(np.loadtxt('%s/Pval_m%d.txt'%(folder,i)).astype(np.float))
+                i = i + 1
+        else:
+            Pval_m = None
+        if os.path.isfile('%s/Pval_r0.txt'%folder):
+            Pval_r = []
+            i = 0
+            while(os.path.isfile('%s/Pval_r%d.txt'%(folder,i))):
+                Pval_r.append(np.loadtxt('%s/Pval_r%d.txt'%(folder,i)).astype(np.float))
+                i = i + 1
+        else:
+            Pval_r = None
+        if os.path.isfile('%s/index_pval0.txt'%folder):
+            index_pval = []
+            i = 0
+            while(os.path.isfile('%s/index_pval%d.txt'%(folder,i))):
+                index_pval.append(np.loadtxt('%s/index_pval%d.txt'%(folder,i)).astype(np.int))  
+                i = i + 1
+        else:
+            index_pval = None
+        if os.path.isfile('%s/Det_M0.txt'%folder):
+            Det_M = []
+            i = 0
+            while(os.path.isfile('%s/Det_M%d.txt'%(folder,i))):
+                Det_M.append(np.loadtxt('%s/Det_M%d.txt'%(folder,i)).astype(np.int))
+                i = i + 1
+        else:
+            Det_M = None
+        if os.path.isfile('%s/Det_m0.txt'%folder):
+            Det_m = []
+            i = 0
+            while(os.path.isfile('%s/Det_m%d.txt'%(folder,i))):
+                Det_m.append(np.loadtxt('%s/Det_m%d.txt'%(folder,i)).astype(np.int))
+                i = i + 1
+        else:
+            Det_m = None
+        if os.path.isfile('%s/ThresholdPval.txt'%folder):
+            ThresholdPval = np.loadtxt('%s/ThresholdPval.txt'%folder).astype(np.float)
+        else:
+            ThresholdPval = None
         if os.path.isfile('%s/Cat1.fits'%folder):
             Cat1 = Table.read('%s/Cat1.fits'%folder)
         else:
@@ -556,10 +617,12 @@ class ORIGIN(object):
                    intx=intx, inty=inty, cube_std=cube_std, var=var,
                    cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
                    freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
-                   maxmap=maxmap, cube_profile=cube_profile,
-                   Cat0=Cat0, Cat1=Cat1,
-                   spectra=spectra, Cat2=Cat2, param=param,
-                   expmap=expmap, cube_pval_correl=cube_pval_correl,
+                   maxmap=maxmap, cube_profile=cube_profile, Cat0=Cat0,
+                   Pval_M=Pval_M, Pval_m=Pval_m, Pval_r=Pval_r,
+                   index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
+                   ThresholdPval= ThresholdPval, Cat1=Cat1, spectra=spectra,
+                   Cat2=Cat2, param=param,expmap=expmap,
+                   cube_pval_correl=cube_pval_correl,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_map=segmentation_map,
                    cube_local_min=cube_local_min, 
@@ -670,6 +733,26 @@ class ORIGIN(object):
             self.mapThresh.write('%s/mapThresh.fits'%path2)              
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
+        if self.Pval_M is not None:
+            for i, pval in enumerate(self.Pval_M):
+                np.savetxt('%s/Pval_M%d.txt'%(path2,i), pval)
+        if self.Pval_m is not None:
+            for i, pval in enumerate(self.Pval_m):
+                np.savetxt('%s/Pval_m%d.txt'%(path2,i), pval)
+        if self.Pval_r is not None:
+            for i, pval in enumerate(self.Pval_r):
+                np.savetxt('%s/Pval_r%d.txt'%(path2,i), pval)
+        if self.index_pval is not None:
+            for i, pval in enumerate(self.index_pval):
+                np.savetxt('%s/index_pval%d.txt'%(path2,i), pval)
+        if self.Det_M is not None:
+            for i, det in enumerate(self.Det_M):
+                np.savetxt('%s/Det_M%d.txt'%(path2,i), det)
+        if self.Det_m is not None:
+            for i, det in enumerate(self.Det_m):
+                np.savetxt('%s/Det_m%d.txt'%(path2,i), det)
+        if self.ThresholdPval is not None:
+            np.savetxt('%s/ThresholdPval.txt'%path2, self.ThresholdPval)
         # step5
         if self.Cat1 is not None:
             self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
@@ -1061,10 +1144,10 @@ class ORIGIN(object):
         ----------
         purity : float
                  fidelity to automatically compute the threshold        
-        threshold_option : float
-                           float it is a manual threshold.
-                           string 'background'
-                           threshold based on background threshold
+        threshold_option : float, 'background' or None
+                           float -> it is a manual threshold.
+                           string 'background' -> threshold based on background threshold
+                           None -> estimated
                             
         Returns
         -------                               
@@ -1085,13 +1168,13 @@ class ORIGIN(object):
         else: 
             self._log_file.info('   threshold =%.1f '%threshold_option)            
         self.param['purity'] = purity
-        self.param['threshold_option'] = threshold_option            
+        self.param['threshold_option'] = threshold_option
         if self.cube_local_max is None:
             raise IOError('Run the step 03 to initialize self.cube_local_max and self.cube_local_min')
 
 
-        threshold, Pval_M, Pval_m, Pval_r, index_pval, cube_pval_correl, \
-         mapThresh, segmentation_map, Det_M, Det_m \
+        self.ThresholdPval, self.Pval_M, self.Pval_m, self.Pval_r, self.index_pval, \
+        cube_pval_correl, mapThresh, segmentation_map, self.Det_M, self.Det_m \
                                          = Compute_threshold_segmentation(
                                            purity, 
                                            self.cube_local_max.data,
@@ -1104,14 +1187,7 @@ class ORIGIN(object):
         self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
             
         
-        self.param['pfa'] = pfa             
-        self.param['ThresholdPval'] = threshold
-        self.param['Pval_M'] = Pval_M
-        self.param['Pval_m'] = Pval_m
-        self.param['Pval_r'] = Pval_r
-        self.param['index_pval'] = index_pval
-        self.param['Det_M'] = Det_M
-        self.param['Det_m'] = Det_m        
+        self.param['pfa'] = pfa
         
         self._log_stdout.info('Save self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, \
@@ -1342,10 +1418,10 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()        
         
-        threshold = self.param['ThresholdPval'][(i)]
-        Det_M = self.param['Det_M'][(i)]
-        Det_m = self.param['Det_m'][(i)]
-        index_pval = self.param['index_pval'][(i)]
+        threshold = self.ThresholdPval[i]
+        Det_M = self.Det_M[i]
+        Det_m = self.Det_m[i]
+        index_pval = self.index_pval[i]
 
         
         ax.semilogy( index_pval, Det_M, '.-', label = 'from Max Correl' )
@@ -1376,11 +1452,11 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()        
         
-        threshold = self.param['ThresholdPval'][(i)]
-        Pval_M = self.param['Pval_M'][(i)]
-        Pval_m = self.param['Pval_m'][(i)]
-        Pval_r = self.param['Pval_r'][(i)]
-        index_pval = self.param['index_pval'][(i)]
+        threshold = self.ThresholdPval[i]
+        Pval_M = self.Pval_M[i]
+        Pval_m = self.Pval_m[i]
+        Pval_r = self.Pval_r[i]
+        index_pval = self.index_pval[i]
 #        fid_ind = self.param['fid_ind'][(i)]
         purity = self.param['purity']       
         
