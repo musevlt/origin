@@ -40,7 +40,7 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Estimation_Line, SpatioSpectral_Merging, Segmentation, \
     Spatial_Merging_Circle, Correlation_GLR_test_zone, \
     Compute_thresh_PCA_hist, \
-    Compute_threshold_segmentation, __version__
+    Compute_threshold_segmentation, Fidelity_Estimation, __version__
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -544,11 +544,11 @@ class ORIGIN(object):
                 i = i + 1
         else:
             Det_M = None
-        if os.path.isfile('%s/Det_m0.txt'%folder):
+        if os.path.isfile('%s/Det_min0.txt'%folder):
             Det_m = []
             i = 0
-            while(os.path.isfile('%s/Det_m%d.txt'%(folder,i))):
-                Det_m.append(np.loadtxt('%s/Det_m%d.txt'%(folder,i)).astype(np.int))
+            while(os.path.isfile('%s/Det_min%d.txt'%(folder,i))):
+                Det_m.append(np.loadtxt('%s/Det_min%d.txt'%(folder,i)).astype(np.int))
                 i = i + 1
         else:
             Det_m = None
@@ -734,7 +734,7 @@ class ORIGIN(object):
                 np.savetxt('%s/Det_M%d.txt'%(path2,i), det)
         if self.Det_m is not None:
             for i, det in enumerate(self.Det_m):
-                np.savetxt('%s/Det_m%d.txt'%(path2,i), det)
+                np.savetxt('%s/Det_min%d.txt'%(path2,i), det)
         if self.ThresholdPval is not None:
             np.savetxt('%s/ThresholdPval.txt'%path2, self.ThresholdPval)
         # step5
@@ -1233,6 +1233,15 @@ class ORIGIN(object):
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
             
+        self._log_stdout.info('Step 05 - estimate fidelity')    
+        # 0 for background and 1 for sources; to know which self.index_pval 
+        # is correponding to the pixel (y,x)
+        bck_or_src = self.mapThresh.data == self.ThresholdPval[0]
+        self.Cat1 = Fidelity_Estimation(self.Cat1, self.cube_correl.data, 
+                                        self.Pval_r, self.index_pval, 
+                                        bck_or_src)
+                   
+        
         self._log_stdout.info('Save the updated catalogue in self.Cat1 (%d lines)'%len(self.Cat1))
         self.spectra = [] 
    
