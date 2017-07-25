@@ -1029,7 +1029,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         cube_pval_correl[:, ind_y[ind_n], ind_x[ind_n]]= cube_pval_correl_l
         mapThresh[ind_y[ind_n], ind_x[ind_n]] = threshold[ind_n]
 
-    return threshold, Pval_M, Pval_m, Pval_r, index_pval,  \
+    return np.asarray(threshold), Pval_M, Pval_m, Pval_r, index_pval,  \
             cube_pval_correl, mapThresh, map_in, det_m, det_M
 
 
@@ -2242,7 +2242,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author,
-                               path, maxmap, segmap, Cat_est_cont, fidelity,
+                               path, maxmap, segmap, Cat_est_cont,
                                ThresholdPval, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
@@ -2256,7 +2256,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                        Catalogue of estimated lines
     Cat_est_cont     : list of spectra
                        Catalogue of roughly estimated continuum
-    fidelity         :  estimated fidelity for each line
     correl            : array
                         Cube of T_GLR values
     wave              : `mpdaf.obj.WaveCoord`
