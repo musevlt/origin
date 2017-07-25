@@ -87,7 +87,6 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     return inty, intx
 
 
-
 def DCTMAT(dct_o):
     """Function to compute the DCT Matrix or order dct_o.  
     
@@ -137,6 +136,7 @@ def dct_residual(w_raw, order):
     Faint = w_raw - cont
 
     return Faint, cont
+
 
 def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     """Function to compute the standardized data.  
@@ -248,6 +248,7 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty,
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_faint, mapO2, histO2, frecO2, thresO2
 
+
 def O2test(Cube_in):
     """Function to compute the test on data. The test estimate the background
     part and nuisance part of the data by mean of second order test: 
@@ -268,6 +269,7 @@ def O2test(Cube_in):
     Author: antony schutz (antonyschutz@gmail.com)
     """    
     return np.mean( Cube_in**2 ,axis=0)
+
 
 def Compute_thresh_PCA_hist(test, threshold_test): 
     """Function to compute greedy svd.
@@ -300,6 +302,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
     
     return histO2, frecO2, thresO2     
+
 
 def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
                       ,itermax):
@@ -601,6 +604,8 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
         
     return Cube_out
+    
+    
 def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
                               intx, inty, NbSubcube):
     """Function to compute the cube of GLR test values per zone 
@@ -682,191 +687,6 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
     return correl, profile, correl_min
 
 
-def Correlation_GLR_test4(cube, sigma, PSF_Moffat, weights, Dico):
-    # Antony optimiser
-    """Function to compute the cube of GLR test values obtained with the given
-    PSF and dictionary of spectral profile.
-
-    Parameters
-    ----------
-    cube       : array
-                 data cube on test
-    sigma      : array
-                 MUSE covariance
-    PSF_Moffat : list of arrays
-                 FSF for each field of this data cube
-    weights    : list of array
-                 Weight maps of each field
-    Dico       : array
-                 Dictionary of spectral profiles to test
-
-    Returns
-    -------
-    correl  : array
-              cube of T_GLR values
-    profile : array
-              Number of the profile associated to the T_GLR
-
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # data cube weighted by the MUSE covariance
-    cube_var = cube / np.sqrt(sigma)
-    # Inverse of the MUSE covariance
-    inv_var = 1. / sigma
-
-    # Dimensions of the data
-    shape = cube_var.shape
-    Nz = cube_var.shape[0]
-    Ny = cube_var.shape[1]
-    Nx = cube_var.shape[2]
-
-    cube_fsf = np.empty(shape)
-    norm_fsf = np.empty(shape)
-    if weights is None: # one FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/4 Spatial convolution of the weighted data with the '
-               'zero-mean FSF')
-        PSF_Moffat_m = PSF_Moffat \
-            - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
-        for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i, :, :] = signal.fftconvolve(cube_var[i, :, :],
-                                                   PSF_Moffat_m[i, :, :][::-1, ::-1],
-                                                   mode='same')
-        del cube_var
-        fsf_square = PSF_Moffat_m**2
-        del PSF_Moffat_m
-        # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/4 Computing Spatial part of the norm of the 3D atoms')
-        for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
-                                                   fsf_square[i, :, :][::-1, ::-1],
-                                                   mode='same')
-        del fsf_square, inv_var
-    else: # several FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/4 Spatial convolution of the weighted data with the '
-                'zero-mean FSF')
-        nfields = len(PSF_Moffat)
-        PSF_Moffat_m = []
-        for n in range(nfields):
-            PSF_Moffat_m.append(PSF_Moffat[n] \
-            - np.mean(PSF_Moffat[n], axis=(1, 2))[:, np.newaxis, np.newaxis])
-        # build a weighting map per PSF and convolve
-        cube_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i, :, :] = 0
-            for n in range(nfields):
-                cube_fsf[i, :, :] = cube_fsf[i, :, :] \
-                        + signal.fftconvolve(weights[n]*cube_var[i, :, :],
-                                             PSF_Moffat_m[n][i, :, :][::-1, ::-1],
-                                            mode='same')
-        del cube_var
-        fsf_square = []
-        for n in range(nfields):
-            fsf_square.append(PSF_Moffat_m[n]**2)
-        del PSF_Moffat_m
-        # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/4 Computing Spatial part of the norm of the 3D atoms')
-        
-        for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i, :, :] = 0
-            for n in range(nfields):
-                norm_fsf[i, :, :] = norm_fsf[i, :, :] \
-                + signal.fftconvolve(weights[n]*inv_var[i, :, :],
-                                    fsf_square[n][i, :, :][::-1, ::-1],
-                                    mode='same')
-
-    # First cube of correlation values
-    # initialization with the first profile
-    profile = np.zeros(shape, dtype=np.int)
-
-    # First spectral profile
-    k0 = 0
-    d_j = Dico[k0]
-    # zero-mean spectral profile
-    d_j = d_j - np.mean(d_j)
-    # Compute the square of the spectral profile
-    profile_square = d_j**2
-
-    ygrid, xgrid = np.mgrid[0:Ny, 0:Nx]
-    xgrid = xgrid.flatten()
-    ygrid = ygrid.flatten()
-
-    cube_profile = np.empty(shape)
-    norm_profile = np.empty(shape)
-
-    logger.info('Step 3/4 Spectral convolution of the weighted datacube')
-    with ProgressBar(Nx * Ny) as bar:
-        for y in range(Ny):
-            for x in range(Nx):
-                bar.update()
-                # Spectral convolution of the weighted data cube spreaded
-                # by the FSF and the spectral profile : correlation between the
-                # data and the 3D atom
-                cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                                                         mode = 'same')
-                # Spectral convolution between the spatial part of the norm of the
-                # 3D atom and the spectral profile : The norm of the 3D atom
-                norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                                                         profile_square,
-                                                         mode = 'same')
-
-    GLRm = np.zeros((Nz, Ny, Nx, 2))
-    GLRm[:, :, :, 0] = cube_profile / np.sqrt(np.abs(norm_profile))
-    # Set to the infinity the norm equal to 0
-    norm_profile[norm_profile == 0] = np.inf
-    # T_GLR values with constraint  : cube_profile>0
-    GLR = np.zeros((Nz, Ny, Nx, 2))
-    GLRm = np.zeros((Nz, Ny, Nx, 2))
-    GLR[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
-    GLRm[:, :, :, 0] = cube_profile / np.sqrt(norm_profile)
-
-
-    logger.info('Step 4/4 Computing second cube of correlation values')
-
-    for k in ProgressBar(list(range(1, len(Dico)))):
-        # Second cube of correlation values
-        d_j = Dico[k]
-        d_j = d_j - np.mean(d_j)
-        profile_square = d_j**2
-
-        i = 0
-        for y in range(Ny):
-            for x in range(Nx):
-                cube_profile[:,y,x] = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                                                        mode = 'same')
-                norm_profile[:,y,x] = signal.fftconvolve(norm_fsf[:,y,x],
-                                                        profile_square,
-                                                        mode = 'same')
-
-
-        norm_profile[norm_profile == 0] = np.inf
-        GLR[:, :, :, 1] = cube_profile / np.sqrt(norm_profile)
-        GLRm[:, :, :, 1] = cube_profile / np.sqrt(norm_profile)
-
-        # maximum over the fourth dimension
-        PROFILE_MAX = np.argmax(GLR, axis=3)
-
-        correl = np.amax(GLR, axis=3)
-        correl_min = np.amin(GLRm, axis=3)
-
-        # Number of corresponding real profile
-        profile[PROFILE_MAX == 1] = k
-        # Set the first cube of correlation values correspond
-        # to the maximum of the two previous ones
-        GLR[:, :, :, 0] = correl
-        GLRm[:, :, :, 0] = correl_min
-
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-
-    return correl, profile, correl_min
-
-
-#%%
 def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     # Antony optimiser
     """Function to compute the cube of GLR test values obtained with the given
@@ -1014,9 +834,6 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 #        np.save('norm_profile'+str(k)+'.npy',norm_profile2) 
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    
-   
-    
     return correl, profile, correl_min
 
 
@@ -1102,7 +919,6 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     return cube_Local_max, cube_Local_min
 
 
-#%%
 def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
                            threshold_option, intx, inty, NbSubcube, 
                            cube_cont, pfa):  
@@ -1216,6 +1032,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     return threshold, Pval_M, Pval_m, Pval_r, index_pval,  \
             cube_pval_correl, mapThresh, map_in, det_m, det_M
 
+
 def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
         - Maximum correlation
@@ -1284,6 +1101,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
 
     return threshold, PVal_M, PVal_m, Pval_r, index, Det_M, Det_m       
 
+
 def Threshold_pval(cube_local_max, threshold):
     """Function to threshold the p-values 
 
@@ -1312,6 +1130,7 @@ def Threshold_pval(cube_local_max, threshold):
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))                            
     return cube_pval_lm_correl
+
 
 def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
                           mask_temp_edge, neighboors):
@@ -1354,6 +1173,7 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
     Local_min=minus_correl_min*Local_min_mask
 
     return Local_max, Local_min
+    
     
 def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     """Function to compute refrerent voxel of each group of connected voxels
@@ -1407,6 +1227,7 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     Cat_ref.sort('z')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat_ref
+
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
     
@@ -1490,6 +1311,7 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
 
     return red_dat, red_var, red_wgt, red_psf 
 
+
 def LS_deconv_wgt(data_in,var_in,psf_in):
     """Function to compute the Least Square estimation of a ponctual source.
 
@@ -1521,6 +1343,7 @@ def LS_deconv_wgt(data_in,var_in,psf_in):
 
     return deconv_out, varest_out 
 
+
 def conv_wgt(deconv_met, psf_in):
     """Function to compute the convolution of a spectrum. output is a cube of
     the good size for rest of algorithm
@@ -1542,6 +1365,7 @@ def conv_wgt(deconv_met, psf_in):
     cube_conv = psf_in * deconv_met[:, np.newaxis, np.newaxis]
     cube_conv = cube_conv*(np.abs(psf_in)>0)
     return cube_conv
+
 
 def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     """Function to Perform PCA LS or Denoised PCA LS.
@@ -1800,6 +1624,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     return flux_est_5, MSE_5, estimated_line, \
             estimated_variance, int(y), int(x), int(z), estimated_continuum
 
+
 def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                     criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                     horiz = 5):
@@ -1911,121 +1736,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))        
     
     return Cat2, Cat_est_line_raw, Cat_est_line_var, Cat_est_cont_raw
-
-def Compute_Estim_Grid(x0, y0, z0, grid_dxy, profile, Nx, Ny, Nz,
-                       sigmat, sigma_t, cube_faint_t, cube_faint_pad,
-                       PSF_Moffat, longxy, Dico, xmin, ymin):
-    
-    """Function to compute the estimated emission line for each coordinate
-    with the deconvolution model :
-    subcube = FSF*line -> line_est = subcube*fsf/(fsf^2)
-
-    Parameters
-    ----------
-    x0 : integer
-         Column of the voxel to compute the estimated line
-    y0 : integer
-         Row of the voxel to compute the estimated line
-    z0 : integer
-         Spectral channel of the voxel to compute the estimated line
-    grid_dxy : integer
-               Maximum spatial shift for the grid
-    profile  : array
-               Number of the profile associated to the T_GLR
-    Nx         : int
-                 Size of the cube along the x-axis
-    Ny         : int
-                 Size of the cube along the z-axis
-    Nz         : int
-                 Size of the cube along the spectral axis
-    sigmat     : array
-                 MUSE covariance for the pixel (x0,y0)
-    sigma_t      : array
-                 MUSE covariance
-    cube_faint_t : array
-                 Projection on the eigenvectors associated to the lower
-                 eigenvalues
-    cube_faint_pad : array
-                     Pad subcube in case of the 3D atom is out of the cube data
-    PSF_Moffat : array
-                 FSF for this data cube
-    longxy     : float
-                 mid-size of the PSF
-    Dico       : array
-                 Dictionary of spectral profiles to test
-    xmin       : int
-                 Edge of the cube
-    ymin       : int
-                 Edge of the cube
-
-    Returns
-    -------
-    res          : float
-                   Residual for this line estimation
-    flux         : float
-                   Flux of the estimated line in the data space
-    line_est_raw : array
-                   Estimated line in the data space
-    line_est     : array
-                   Estimated line in the SNR space
-
-
-    Date  : Dec, 11 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
-    """
-    # spectral profile
-    
-    num_prof = profile[z0, y0, x0]
-    profil0 = Dico[num_prof]
-    profil1 = profil0[profil0 > 1e-20]
-    long0 = profil1.shape[0]
-    longz = long0 // 2
-
-    # size of the 3D atom along the spectral axis
-    intz1 = max(0, z0 - longz)
-    intz2 = min(Nz, z0 + longz + 1)
-
-    # Initialization
-    line_est = np.zeros(Nz)
-
-    # Deconvolution
-    line_est[intz1:intz2] = np.sum((PSF_Moffat[intz1:intz2, :, :] *
-                                    cube_faint_pad[intz1:intz2, :, :]),
-                                   axis=(1, 2)) \
-        / np.sum((PSF_Moffat[intz1:intz2, :, :] *
-                  PSF_Moffat[intz1:intz2, :, :]), axis=(1, 2))
-
-    # Estimated line in data space
-    line_est_raw = line_est * np.sqrt(sigmat)
-
-    # Atome 3D corresponding to the estimated line
-    atom_est = np.zeros((long0, PSF_Moffat.shape[1], PSF_Moffat.shape[2]))
-    z1 = max(0, z0 - longz)
-    z2 = min(Nz, long0 + z0 - longz)
-    atom_est[z1 - z0 + longz:z2 - z0 + longz, :, :] = \
-        line_est_raw[z1:z2, np.newaxis, np.newaxis] * PSF_Moffat[z1:z2, :, :]
-
-    z1 = np.abs(min(0, z0 - longz))
-
-    # Atom cut at the edges of the cube
-    atom_est_cut = atom_est[z1:z1 + intz2 - intz1,
-                            ymin:ymin + cube_faint_t.shape[1],
-                            xmin:xmin + cube_faint_t.shape[2]]
-    # Estimated 3D atom in SNR space
-    atom_est_std = atom_est_cut / np.sqrt(sigma_t[intz1:intz2, :, :])
-    # Norm of the 3D atom
-    norm2_atom1 = np.inner(atom_est_std.flatten(), atom_est_std.flatten())
-    # Estimated amplitude of the 3D atom
-    alpha_est = np.inner(cube_faint_t[intz1:intz2, :, :].flatten(),
-                         atom_est_std.flatten()) / norm2_atom1
-    # Estimated detected emitters
-    atom_alpha_est = alpha_est * atom_est_std
-    # Residual of the estimation
-    res = np.ma.sum(np.ma.masked_invalid((cube_faint_t[intz1:intz2, :, :] - atom_alpha_est)**2, copy=False))
-    # Flux
-    flux = np.ma.sum(np.ma.masked_invalid(line_est_raw, copy=False))
-
-    return flux, res, line_est_raw, line_est
 
 
 def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
@@ -2161,6 +1871,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
 
     return CatF
 
+
 def Segmentation(STD_in, pfa):
     """Generate from a 3D Cube a 2D map where sources and background are 
     separated
@@ -2202,6 +1913,7 @@ def Segmentation(STD_in, pfa):
     map_in = measurements.label(sources)[0]
     
     return map_in
+
 
 def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz): 
     """Merge the detected emission lines distants to less than deltaz
@@ -2339,7 +2051,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz):
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, segmap, correl, fwhm_profiles, 
-                     param, path, name, i, ra, dec, x_centroid,
+                     param, path, name, ThresholdPval, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
                      Cat_est_cont_data, Cat_est_cont_var,
@@ -2427,41 +2139,40 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                                         'NB_CORR_{:s}'.format(names[j]),
                                         w[j], width=2 * profil_FWHM,
                                         is_sum=True, subtract_off=True)
-
-        if 'ThresholdPval' in param.keys():
-            for key, item in param['ThresholdPval'].items():
-#                src.header['OP_THRES_%02d_%02d'%(key[0], key[1])] = item
-                src.header['OP_THRES_%02d'%(key)] = item
-        if 'deltaz' in param.keys():
-            src.OP_DZ = (param['deltaz'], 'Orig deltaz')
-        if 'r0PCA' in param.keys():
-            src.OP_R0 = (param['r0PCA'], 'Orig PCA R0')
-        if 'threshT1' in param.keys():
-            src.OP_T1 = (param['threshT1'], 'Orig T1 threshold')
-        if 'threshT2' in param.keys():
-            src.OP_T2 = (param['threshT2'], 'Orig T2 threshold')
-        if 'neighboors' in param.keys():
-            src.OP_NG = (param['neighboors'], 'Orig Neighboors')
-        if 'meanestPvalChan' in param.keys():
-            try:
-                src.OP_MP = (param['meanestPvalChan'], 'Orig Meanest PvalChan')
-            except:
-                for i in range(len(param['meanestPvalChan'])):
-                    src.header['OP_MP%02d'%(i+1)] = param['meanestPvalChan'][i]
-        if 'nbsubcube' in param.keys():
-            src.OP_NS = (param['nbsubcube'], 'Orig nb of subcubes')
-        if 'grid_dxy' in param.keys():
-            src.OP_DXY = (param['grid_dxy'], 'Orig Grid Nxy')
-        if 'grid_dz' in param.keys():
-            src.OP_DZ = (param['grid_dz'], 'Orig Grid Nz')
-        if 'PSF' in param.keys():
-            src.OP_FSF = (param['PSF'], 'Orig FSF cube')
-        src.write('%s/%s-%05d.fits' % (path, name, src.ID))
+    # header
+    if 'nbsubcube' in param.keys():
+        src.OP_NS = (param['nbsubcube'], 'Orig nb of subcubes')                                  
+    for i in range(ThresholdPval.shape[0]):
+        src.header['OP_TH%02d'%i] = (ThresholdPval[i], 'ThresholdPval')
+    if 'dct_order' in param.keys():
+        src.OP_DCT = (param['dct_order'], 'Orig dct order')
+    if 'Noise_population' in param.keys():
+        src.OP_FBG = (param['Noise_population'], 'Orig fraction of spectra estimated as background')
+    if 'threshold_test' in param.keys():
+        src.OP_THV = (param['threshold_test'], 'Orig threshold')
+    if 'itermax' in param.keys():
+        src.OP_ITMAX = (param['itermax'], 'Orig maximum number of iterations')
+    if 'neighboors' in param.keys():
+        src.OP_NG = (param['neighboors'], 'Orig Neighboors')    
+    if 'purity' in param.keys():
+        src.OP_PURI = (param['purity'], 'Orig purity')
+    if 'threshold_option' in param.keys():
+        src.OP_THP = (param['threshold_option'], 'Orig threshold option')
+    if 'pfa' in param.keys():
+        src.OP_PFA = (param['pfa'], 'Orig pfa')
+    if 'grid_dxy' in param.keys():
+        src.OP_DXY = (param['grid_dxy'], 'Orig Grid Nxy')
+    if 'deltaz' in param.keys():
+        src.OP_DZ = (param['deltaz'], 'Orig deltaz')
+    if 'PSF' in param.keys():
+        src.OP_FSF = (param['PSF'], 'Orig FSF cube')
+    src.write('%s/%s-%05d.fits' % (path, name, src.ID))
 
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author,
-                               path, maxmap, segmap, Cat_est_cont, ncpu=1):
+                               path, maxmap, segmap, Cat_est_cont,
+                               ThresholdPval, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -2560,7 +2271,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             delayed(Construct_Object)(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       f_maxmap, f_segmap, f_correl, fwhm_profiles, 
-                                      param, path_src, name, *source_arglist)
+                                      param, path_src, name, ThresholdPval,
+                                      *source_arglist)
             for k,source_arglist in enumerate(sources_arglist))
         # print error messages if any
         for msg in errmsg:
@@ -2571,7 +2283,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             msg = Construct_Object(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       maxmap, segmap, correl, fwhm_profiles, 
-                                      param, path_src, name, *source_arglist)
+                                      param, path_src, name, ThresholdPval,
+                                      *source_arglist)
             
             if msg is not None:
                 logger.error(msg)

@@ -41,7 +41,6 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Spatial_Merging_Circle, Correlation_GLR_test_zone, \
     Compute_thresh_PCA_hist, \
     Compute_threshold_segmentation, __version__
-# , Threshold_pval , Compute_threshold
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -467,16 +466,6 @@ class ORIGIN(object):
                                                                       i,j))
         else:
             freqO2 = None
-#        if os.path.isfile('%s/thresO2_%d_%d.txt'%(folder, NbSubcube-1,
-#                                                 NbSubcube-1)):
-#            thresO2 = {}
-#            for i in range(NbSubcube):
-#                for j in range(NbSubcube):
-#                    thresO2[(i,j)] = np.loadtxt('%s/thresO2_%d_%d.txt'%(folder,
-#                                                                      i,j))
-#        else:
-#            thresO2 = None            
-
         if os.path.isfile('%s/thresO2.txt'%(folder)):
             thresO2 = np.loadtxt('%s/thresO2.txt'%(folder)).\
             reshape((NbSubcube, NbSubcube)).astype(np.float)
@@ -697,12 +686,7 @@ class ORIGIN(object):
             for i in range(self.NbSubcube):
                 for j in range(self.NbSubcube):
                     np.savetxt('%s/freqO2_%d_%d.txt'%(path2, i,j),
-                               self.freqO2[(i,j)])
-#        if self.thresO2 is not None:
-#            for i in range(self.NbSubcube):
-#                for j in range(self.NbSubcube):
-#                    np.savetxt('%s/thresO2_%d_%d.txt'%(path2, i,j),
-#                               self.thresO2[(i,j)])                    
+                               self.freqO2[(i,j)])           
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
         if self.mapO2 is not None:
@@ -968,7 +952,7 @@ class ORIGIN(object):
                                 the fraction of spectra estimated as background
                                 
         threshold_test      :   float
-                                the threshold of the test (default=1)  
+                                the threshold of the test (default=0.01)  
                                 
         itermax             :   integer
                                 maximum iterations
@@ -997,7 +981,8 @@ class ORIGIN(object):
         self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
         self._log_file.info('   - threshold_test=%0.2f'%threshold_test)            
         self.param['Noise_population'] = Noise_population
-        self.param['threshold_test'] = threshold_test        
+        self.param['threshold_test'] = threshold_test     
+        self.param['itermax'] = itermax
         self._log_stdout.info('Step 02 - greedy PCA computation')                
         self._log_stdout.info('Compute greedy PCA on each zone')  
         
@@ -1063,16 +1048,13 @@ class ORIGIN(object):
         self.cube_local_max    : `~mpdaf.obj.Cube`
                                  Local maxima from max correlation
         self.cube_local_min    : `~mpdaf.obj.Cube`
-                                 Local maxima from minus min correlation                                 
-        self.cube_pval_correl  : `~mpdaf.obj.Cube`
-                                 Cube of thresholded p-values associated
-                                 to the local max of T_GLR values
-                                 
+                                 Local maxima from minus min correlation
         """
         self._log_file.info('03 GLR test')
         self._log_stdout.info('Step 03 - GLR test')
         if self.cube_faint is None:
             raise IOError('Run the step 02 to initialize self.cube_faint')
+        self.param['neighboors'] = neighboors
 
         # TGLR computing (normalized correlations)           
         if 'expmap' in self.param: 
@@ -1146,8 +1128,11 @@ class ORIGIN(object):
                  fidelity to automatically compute the threshold        
         threshold_option : float, 'background' or None
                            float -> it is a manual threshold.
-                           string 'background' -> threshold based on background threshold
+                           string 'background' -> threshold based on background
+                           threshold
                            None -> estimated
+        pfa              : float
+                           Pvalue for the test which performs segmentation
                             
         Returns
         -------                               
@@ -1156,7 +1141,7 @@ class ORIGIN(object):
                                  to the local max of T_GLR values
         self.Cat0 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: x y z ra dec lbda T_GLR profile pvalC pvalS pvalF
+                    Columns: x y z ra dec lbda T_GLR profile pvalC
                     Coordinates are in pixels.
         """
         self._log_stdout.info('Step 04 - p-values Thresholding')
@@ -1327,8 +1312,23 @@ class ORIGIN(object):
 
         Returns
         -------
-        sources : mpdaf.sdetect.SourceList
-                  List of sources
+        CatF : mpdaf.sdetect.Catalog
+               Final catalog
+                  
+        Each Source object O consists of:
+            - O.header: pyfits header instance that contains all parameters
+                        used during the ORIGIN detection process
+            - O.lines: astropy table that contains the parameters of spectral
+                       lines.
+            - O.spectra: Dictionary that contains spectra. It contains for each
+                         line, the estimated spectrum (LINE_**), the estimated
+                         continuum (CONT_**) and the correlation (CORR_**).
+            - O.images: Dictionary that contains images: the white image
+                        (MUSE_WHITE), the map of maxima along the wavelength
+                        axis (MAXMAP), the segmentation map (SEG_ORIG) and
+                        narrow band images (NB_LINE_** and NB_CORR_**) 
+            - O.cubes: Dictionary that contains the small data cube around the
+                       source (MUSE-CUBE)
         """
         self._log_file.info('07 Sources creation')
         # Add RA-DEC to the catalogue
@@ -1369,27 +1369,27 @@ class ORIGIN(object):
                                               src_vers, author,
                                               self.path, self.maxmap,
                                               self.segmentation_map, 
-                                              self.continuum, ncpu)                                            
+                                              self.continuum,
+                                              self.ThresholdPval, ncpu)                                            
                                               
         # create the final catalog
-        self._log_stdout.info('Create the final catalog')
+        self._log_stdout.info('Create the final catalog- %d sources'%nsources)
         catF = Catalog.from_path(path_src, fmt='working')
         catF.write(catname, overwrite=overwrite)
                       
         self._log_file.info('07 Done')
 
-        return nsources
+        return catF
 
     def plot_segmentation(self, pfa=5e-2, ax=None):
         """ Plot the 2D segmentation map associated to a PFA
         
         Parameters
         ----------
-        i: integer in [0, NbSubCube[
-           x-coordinate of the zone
-        ax : matplotlib.Axes
-                the Axes instance in which the image is drawn
-        log10 : To draw histogram in logarithmic scale or not
+        pfa : float
+              Pvalue for the test which performs segmentation
+        ax  : matplotlib.Axes
+              The Axes instance in which the image is drawn
         """
         if self.cont_dct is None:
             raise IOError('Run the step 01 to initialize self.cont_dct and self.var')        
@@ -1399,46 +1399,21 @@ class ORIGIN(object):
             
         map_in = Segmentation(self.cont_dct.data, pfa)            
         
-        ax.imshow(map_in,origin='lower',cmap='jet',interpolation='nearest')
+        ax.imshow(map_in, origin='lower', cmap='jet', interpolation='nearest')
         ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
 
-    def plot_step04_detnumber(self, i, ax=None):
+    def plot_step04(self, i, ax=None, log10=True):
         """Draw number of sources per threshold computed in step04
-        i = 0 : background
-        i = 1 : source
-        """
-        if i == 0: 
-            i_titre = 'background'
-        else: 
-            i_titre = 'sources'
-            
-        if self.cube_faint is None:
-            raise IOError('Run the step 02 to initialize self.cube_faint')
-            
-        if ax is None:
-            ax = plt.gca()        
         
-        threshold = self.ThresholdPval[i]
-        Det_M = self.Det_M[i]
-        Det_m = self.Det_m[i]
-        index_pval = self.index_pval[i]
-
-        
-        ax.semilogy( index_pval, Det_M, '.-', label = 'from Max Correl' )
-        ax.semilogy( index_pval, Det_m, '.-', label = 'from -Min Correl' )
-        ym,yM = ax.get_ylim()
-        ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
-                 label='automatic threshold' )
-        ax.set_ylim((ym,yM))
-        ax.set_xlabel('Threshold')
-        ax.set_ylabel('Number of detection')        
-        ax.set_title('zone %s - threshold %f' %(i_titre,threshold))
-        plt.legend()          
-
-    def plot_step04(self, i, ax=None):
-        """Draw number of sources per threshold computed in step04
-        i = 0 : background
-        i = 1 : source
+        Parameters
+        ----------
+        i  : integer
+             Pvalue for the test which performs segmentation
+             i = 0 : background
+             i = 1 : source
+        ax : matplotlib.Axes
+             The Axes instance in which the image is drawn
+        log10 : To draw histogram in logarithmic scale or not
         """
                 
         if i == 0: 
@@ -1457,25 +1432,39 @@ class ORIGIN(object):
         Pval_m = self.Pval_m[i]
         Pval_r = self.Pval_r[i]
         index_pval = self.index_pval[i]
-#        fid_ind = self.param['fid_ind'][(i)]
-        purity = self.param['purity']       
+        purity = self.param['purity']
+        Det_M = self.Det_M[i]
+        Det_m = self.Det_m[i]
         
-        ax.semilogy( index_pval, Pval_M, '.-', label = 'from +Max Correl (+DATA)' )
-        ax.semilogy( index_pval, Pval_m, '.-', label = 'from -Max Correl (-DATA)' )
+        ax2 = ax.twinx()
+        if log10:
+            ax.semilogy(index_pval, Pval_M, 'b.-', label = 'from +Max Correl (+DATA)' )
+            ax.semilogy(index_pval, Pval_m, 'b.--', label = 'from -Max Correl (-DATA)' )
+            ax.semilogy(index_pval, Pval_r, 'y.-', label = 'estimated fidelity' )
+            ax2.semilogy( index_pval, Det_M, 'g.-', label = 'from +Max Correl (+DATA)' )
+            ax2.semilogy( index_pval, Det_m, 'g.--', label = 'from -Max Correl (-DATA)' )
+        else:
+            ax.plot(index_pval, Pval_M, 'b.-', label = 'from +Max Correl (+DATA)' )
+            ax.plot(index_pval, Pval_m, 'b.--', label = 'from -Max Correl (-DATA)' )
+            ax.plot(index_pval, Pval_r, 'y.-', label = 'estimated fidelity' )
+            ax2.plot( index_pval, Det_M, 'g.-', label = 'from +Max Correl (+DATA)' )
+            ax2.plot( index_pval, Det_m, 'g.--', label = 'from -Max Correl (-DATA)' )
         ym,yM = ax.get_ylim()
-        ax.semilogy( index_pval, Pval_r, '.-', label = 'estimated fidelity' )
         ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
                  label='automatic threshold' )
-#        ax.plot(index_pval[fid_ind], Pval_r[fid_ind],'xg')
         ax.plot(threshold, purity,'xr')        
         ax.set_ylim((ym,yM))
         ax.set_xlabel('Threshold')
-        ax.set_ylabel('Fidelity')
-        ax.set_title('zone %s - threshold %f' %(i_titre,threshold))
-         
+        ax.set_ylabel('Fidelity', color='b')
+        ax.tick_params('y', colors='b')
+        ax2.set_ylabel('Number of detection', color='g')
+        ax2.tick_params('y', colors='g')
+        ax.set_title('%s - threshold %f' %(i_titre,threshold))
+        ax.legend() 
+        ax2.legend()
         
         
-    def plot_step02(self, i, j, threshold_test=.05, ax=None, log10=True):
+    def plot_step02(self, i, j, threshold_test=.01, ax=None, log10=True):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
@@ -1688,7 +1677,8 @@ class ORIGIN(object):
             ax3.get_yaxis().set_visible(False)
     
 
-    def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None, ax=None):
+    def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None,
+                     ax=None, **kwargs):
         """Plot detected emission lines on the 2D map of maximum of the T_GLR
         values over the spectral channels.
 
@@ -1707,8 +1697,13 @@ class ORIGIN(object):
                 Minimum pixel value to use for the scaling.
         vmax : float
                 Maximum pixel value to use for the scaling.
+        title : str
+                An optional title for the figure (None by default).
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
+        kwargs : matplotlib.artist.Artist
+                 Optional extra keyword/value arguments to be passed to
+                 the ``ax.imshow()`` function. 
         """
         if self.cube_correl is None:
             raise IOError('Run the step 02 to initialize self.cube_correl')
@@ -1726,7 +1721,7 @@ class ORIGIN(object):
                 c = plt.Circle((px, py), np.round(fwhm / 2), color='k',
                                fill=False)
                 ax.add_artist(c)
-        self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax)
+        self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax, **kwargs)
         
     def info(self):
         """ plot information
