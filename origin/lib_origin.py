@@ -1459,12 +1459,12 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     estimated_line, estimated_var = LS_deconv_wgt(residual, var_in, psf_in)
 
     # PSF convolution of estimated line
-    conv_out = conv_wgt(estimated_line, psf_in)
+    conv_out = conv_wgt(estimated_line, psf_in) 
     # cleaning line in data to estimate convolved continuum
-    continuum = data_std - conv_out
+    continuum = (data_in - conv_out) / np.sqrt(var_in)
     # LS deconvolution of the continuum
     estimated_cont, tmp = LS_deconv_wgt(continuum, var_in, psf_in)
-
+    
     return estimated_line, estimated_var, estimated_cont
 
 
