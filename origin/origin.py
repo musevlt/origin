@@ -40,7 +40,7 @@ from .lib_origin import Spatial_Segmentation, Correlation_GLR_test, \
     Estimation_Line, SpatioSpectral_Merging, Segmentation, \
     Spatial_Merging_Circle, Correlation_GLR_test_zone, \
     Compute_thresh_PCA_hist, \
-    Compute_threshold_segmentation, Fidelity_Estimation, __version__
+    Compute_threshold_segmentation, Purity_Estimation, __version__
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -1216,7 +1216,7 @@ class ORIGIN(object):
         # 0 for background and 1 for sources; to know which self.index_pval 
         # is correponding to the pixel (y,x)
         bck_or_src = self.mapThresh.data == self.ThresholdPval[0]
-        self.Cat1 = Fidelity_Estimation(self.Cat1, self.cube_correl.data, 
+        self.Cat1 = Purity_Estimation(self.Cat1, self.cube_correl.data, 
                                         self.Pval_r, self.index_pval, 
                                         bck_or_src)
                    

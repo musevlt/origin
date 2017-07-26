@@ -930,7 +930,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     Parameters
     ----------
     purity    : float
-                the fidelity between 0 and 1
+                the purity between 0 and 1
     cube_Local_max : array
                      cube of local maxima from maximum correlation
     cube_Local_min : array
@@ -953,13 +953,13 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     Returns
     -------
     Confidence : float
-                     the threshold associated to the fidelity
+                 the threshold associated to the purity
     PVal_M : array
              the P Value associated to Maximum Correlation local maxima
     PVal_m : array
              the P Value associated to Minus Minimum Correlation local maxima
     PVal_r : array
-             The fidelity function
+             The purity function
     index_pval: array
                 index value to plot
     cube_pval_correl : array
@@ -1740,10 +1740,10 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     return Cat2, Cat_est_line_raw, Cat_est_line_var, Cat_est_cont_raw
 
-def Fidelity_Estimation(Cat_in, correl, fidelity_curves, fidelity_index, 
+def Purity_Estimation(Cat_in, correl, purity_curves, purity_index, 
                         bck_or_src): 
     
-    """Function to compute the estimated fidelity for each line.
+    """Function to compute the estimated purity for each line.
 
     Parameters
     ----------
@@ -1755,9 +1755,9 @@ def Fidelity_Estimation(Cat_in, correl, fidelity_curves, fidelity_index,
     correl     : array
                  Origin Correlation data
     fidelity_curves     : array
-                          fidelity curves related to area
+                          purity curves related to area
     fidelity_index      : array
-                          index of fidelity curves related to area             
+                          index of purity curves related to area             
     bck_or_src          : array
                           Map to know which area the source is in
 
@@ -1776,15 +1776,15 @@ def Fidelity_Estimation(Cat_in, correl, fidelity_curves, fidelity_index,
     """
     
     Cat1_2 = Cat_in.copy()
-    fidelity = []
+    purity = []
     
     for n,src in enumerate(Cat1_2):
         y = src['y']
         x = src['x'] 
         z = src['z']         
         area = bck_or_src[y,x]
-        seuil = fidelity_index[area]
-        fidel = fidelity_curves[area]
+        seuil = purity_index[area]
+        fidel = purity_curves[area]
         value = correl[z,y,x]
         if value>seuil[(fidel==1).tolist().index(True)]:
             fid_tmp = 1
@@ -1797,9 +1797,9 @@ def Fidelity_Estimation(Cat_in, correl, fidelity_curves, fidelity_index,
             y2 = fidel[fid_ind] 
             y1 = fidel[fid_ind-1] 
             fid_tmp = y1 + (value-x1)*(y2-y1)/(x2-x1)
-        fidelity.append(fid_tmp)
+        purity.append(fid_tmp)
         
-    col_fid = Column(name='fidelity', data=fidelity)
+    col_fid = Column(name='purity', data=purity)
     Cat1_2.add_columns([col_fid])
     return Cat1_2
 
@@ -2121,7 +2121,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
                      Cat_est_cont_data, Cat_est_cont_var,
-                     y, x, flux, fidelity, src_vers, author):
+                     y, x, flux, purity, src_vers, author):
     """Function to create the final source
 
     Parameters
@@ -2194,8 +2194,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
         #profile_dico = Dico[profile_num]
         fl = flux[j]
-        fi = fidelity[j]
-        vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], profile_num,fi]
+        pu = purity[j]
+        vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], profile_num,pu]
         src.add_line(cols, vals, units, desc, fmt)
 
         src.add_narrow_band_image_lbdaobs(cube,
@@ -2268,7 +2268,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
 
-    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PROF','FIDELITY']
+    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PROF','PURITY']
     units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone]
     fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', 'd', '.2f']
     desc = None
@@ -2323,12 +2323,12 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         y = E['y']
         x = E['x']
         flux = E['flux']
-        fidelity = E['fidelity']
+        purity = E['purity']
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
                           wave_pix, GLR, num_profil, pvalC, nb_lines,
                           Cat_est_line_data, Cat_est_line_var,
                           Cat_est_cont_data, Cat_est_cont_var,
-                          y, x, flux, fidelity,
+                          y, x, flux, purity,
                           src_vers, author)
         sources_arglist.append(source_arglist)
 
