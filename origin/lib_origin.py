@@ -977,8 +977,6 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     cube_pval_correl = np.zeros(cube_local_max.shape)
     mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))
     threshold = []
-    Pval_M = []
-    Pval_m = []
     Pval_r = []
     index_pval = []
     det_m = []
@@ -1003,12 +1001,10 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         cube_local_max_edge = cube_local_max[:, ind_y[ind_n], ind_x[ind_n]]
         cube_local_min_edge = cube_local_min[:, ind_y[ind_n], ind_x[ind_n]]
 
-        _threshold, _Pval_M, _Pval_m, _Pval_r, _index_pval, _det_m, _det_M \
+        _threshold, _Pval_r, _index_pval, _det_m, _det_M \
         = Compute_threshold( purity, cube_local_max_edge, \
                                            cube_local_min_edge)
         threshold.append(_threshold)
-        Pval_M.append((np.asarray(_Pval_M)))
-        Pval_m.append((np.asarray(_Pval_m)))
         Pval_r.append((np.asarray(_Pval_r)))
         index_pval.append((np.asarray(_index_pval)))
         det_m.append((np.asarray(_det_m)))
@@ -1029,7 +1025,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         cube_pval_correl[:, ind_y[ind_n], ind_x[ind_n]]= cube_pval_correl_l
         mapThresh[ind_y[ind_n], ind_x[ind_n]] = threshold[ind_n]
 
-    return np.asarray(threshold), Pval_M, Pval_m, Pval_r, index_pval,  \
+    return np.asarray(threshold), Pval_r, index_pval,  \
             cube_pval_correl, mapThresh, map_in, det_m, det_M
 
 
@@ -1104,7 +1100,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     tan_theta = b/a
     threshold = (purity-y1)/tan_theta + x1
 
-    return threshold, PVal_M, PVal_m, Pval_r, index, Det_M, Det_m
+    return threshold, Pval_r, index, Det_M, Det_m
 
 
 def Threshold_pval(cube_local_max, threshold):

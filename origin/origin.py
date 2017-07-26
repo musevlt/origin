@@ -139,8 +139,8 @@ class ORIGIN(object):
     
     def __init__(self, path, name, filename, NbSubcube, profiles, PSF,
                  FWHM_PSF, intx, inty, cube_faint, mapO2, histO2, freqO2,
-                 thresO2, cube_correl, maxmap, cube_profile, Cat0, Pval_M,
-                 Pval_m, Pval_r, index_pval, Det_M, Det_m, ThresholdPval,
+                 thresO2, cube_correl, maxmap, cube_profile, Cat0, Pval_r, 
+                 index_pval, Det_M, Det_m, ThresholdPval,
                  Cat1, spectra, Cat2, param, cube_std, var, expmap,
                  cube_pval_correl, cube_local_max, cont_dct, segmentation_map,
                  cube_local_min, cube_correl_min, continuum, mapThresh):
@@ -317,8 +317,6 @@ class ORIGIN(object):
         self.segmentation_map = segmentation_map
         self.mapThresh = mapThresh        
         self.Cat0 = Cat0
-        self.Pval_M = Pval_M
-        self.Pval_m = Pval_m
         self.Pval_r = Pval_r
         self.index_pval = index_pval
         self.Det_M = Det_M
@@ -369,7 +367,7 @@ class ORIGIN(object):
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, intx=None,
                    inty=None, cube_faint=None, mapO2=None, histO2=None,
                    freqO2=None, thresO2=None, cube_correl=None, maxmap=None,
-                   cube_profile=None, Cat0=None, Pval_M=None, Pval_m=None,
+                   cube_profile=None, Cat0=None, 
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
                    param=None, cube_std=None, var=None, expmap=None,
@@ -504,22 +502,6 @@ class ORIGIN(object):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
         else:
             Cat0 = None        
-        if os.path.isfile('%s/Pval_M0.txt'%folder):
-            Pval_M = []
-            i = 0
-            while(os.path.isfile('%s/Pval_M%d.txt'%(folder,i))):
-                Pval_M.append(np.loadtxt('%s/Pval_M%d.txt'%(folder,i)).astype(np.float))
-                i = i + 1
-        else:
-            Pval_M = None
-        if os.path.isfile('%s/Pval_m0.txt'%folder):
-            Pval_m = []
-            i = 0
-            while(os.path.isfile('%s/Pval_m%d.txt'%(folder,i))):
-                Pval_m.append(np.loadtxt('%s/Pval_m%d.txt'%(folder,i)).astype(np.float))
-                i = i + 1
-        else:
-            Pval_m = None
         if os.path.isfile('%s/Pval_r0.txt'%folder):
             Pval_r = []
             i = 0
@@ -532,7 +514,7 @@ class ORIGIN(object):
             index_pval = []
             i = 0
             while(os.path.isfile('%s/index_pval%d.txt'%(folder,i))):
-                index_pval.append(np.loadtxt('%s/index_pval%d.txt'%(folder,i)).astype(np.int))  
+                index_pval.append(np.loadtxt('%s/index_pval%d.txt'%(folder,i)).astype(np.float))  
                 i = i + 1
         else:
             index_pval = None
@@ -607,7 +589,7 @@ class ORIGIN(object):
                    cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
                    freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
                    maxmap=maxmap, cube_profile=cube_profile, Cat0=Cat0,
-                   Pval_M=Pval_M, Pval_m=Pval_m, Pval_r=Pval_r,
+                   Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
                    ThresholdPval= ThresholdPval, Cat1=Cat1, spectra=spectra,
                    Cat2=Cat2, param=param,expmap=expmap,
@@ -629,6 +611,7 @@ class ORIGIN(object):
         overwrite : bool
                     remove the folder if it exists
         """
+        self._log_stdout.info('Writing...')
         # path
         if path is not None:
             self.path = path
@@ -717,12 +700,6 @@ class ORIGIN(object):
             self.mapThresh.write('%s/mapThresh.fits'%path2)              
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
-        if self.Pval_M is not None:
-            for i, pval in enumerate(self.Pval_M):
-                np.savetxt('%s/Pval_M%d.txt'%(path2,i), pval)
-        if self.Pval_m is not None:
-            for i, pval in enumerate(self.Pval_m):
-                np.savetxt('%s/Pval_m%d.txt'%(path2,i), pval)
         if self.Pval_r is not None:
             for i, pval in enumerate(self.Pval_r):
                 np.savetxt('%s/Pval_r%d.txt'%(path2,i), pval)
@@ -1158,7 +1135,7 @@ class ORIGIN(object):
             raise IOError('Run the step 03 to initialize self.cube_local_max and self.cube_local_min')
 
 
-        self.ThresholdPval, self.Pval_M, self.Pval_m, self.Pval_r, self.index_pval, \
+        self.ThresholdPval, self.Pval_r, self.index_pval, \
         cube_pval_correl, mapThresh, segmentation_map, self.Det_M, self.Det_m \
                                          = Compute_threshold_segmentation(
                                            purity, 
@@ -1168,6 +1145,7 @@ class ORIGIN(object):
                                            self.intx, self.inty,
                                            self.NbSubcube, 
                                            self.cont_dct.data, pfa)
+        self._log_stdout.info('Threshold: %.1f (background) %.1f (sources)'%(self.ThresholdPval[0], self.ThresholdPval[1]))
         self._log_stdout.info('Save the threshold map in self.mapThresh')                                          
         self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
             
@@ -1437,8 +1415,6 @@ class ORIGIN(object):
             ax = plt.gca()        
         
         threshold = self.ThresholdPval[i]
-        Pval_M = self.Pval_M[i]
-        Pval_m = self.Pval_m[i]
         Pval_r = self.Pval_r[i]
         index_pval = self.index_pval[i]
         purity = self.param['purity']
@@ -1447,30 +1423,25 @@ class ORIGIN(object):
         
         ax2 = ax.twinx()
         if log10:
-            ax.semilogy(index_pval, Pval_M, 'b.-', label = 'from +Max Correl (+DATA)' )
-            ax.semilogy(index_pval, Pval_m, 'b.--', label = 'from -Max Correl (-DATA)' )
-            ax.semilogy(index_pval, Pval_r, 'y.-', label = 'estimated fidelity' )
-            ax2.semilogy( index_pval, Det_M, 'g.-', label = 'from +Max Correl (+DATA)' )
-            ax2.semilogy( index_pval, Det_m, 'g.--', label = 'from -Max Correl (-DATA)' )
+            ax2.semilogy(index_pval, Pval_r, 'y.-', label = 'purity' )
+            ax.semilogy( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)' )
+            ax.semilogy( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)' )
         else:
-            ax.plot(index_pval, Pval_M, 'b.-', label = 'from +Max Correl (+DATA)' )
-            ax.plot(index_pval, Pval_m, 'b.--', label = 'from -Max Correl (-DATA)' )
-            ax.plot(index_pval, Pval_r, 'y.-', label = 'estimated fidelity' )
-            ax2.plot( index_pval, Det_M, 'g.-', label = 'from +Max Correl (+DATA)' )
-            ax2.plot( index_pval, Det_m, 'g.--', label = 'from -Max Correl (-DATA)' )
+            ax2.plot(index_pval, Pval_r, 'y.-', label = 'purity' )
+            ax.plot( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)' )
+            ax.plot( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)' )
         ym,yM = ax.get_ylim()
         ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
                  label='automatic threshold' )
         ax.plot(threshold, purity,'xr')        
         ax.set_ylim((ym,yM))
         ax.set_xlabel('Threshold')
-        ax.set_ylabel('Fidelity', color='b')
-        ax.tick_params('y', colors='b')
-        ax2.set_ylabel('Number of detection', color='g')
-        ax2.tick_params('y', colors='g')
+        ax2.set_ylabel('Purity')
+        ax.set_ylabel('Number of detections')
         ax.set_title('%s - threshold %f' %(i_titre,threshold))
-        ax.legend() 
-        ax2.legend()
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax.legend(h1+h2, l1+l2, loc=2)
         
         
     def plot_step02(self, i, j, threshold_test=.01, ax=None, log10=True):
