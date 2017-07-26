@@ -887,6 +887,7 @@ class ORIGIN(object):
         # compute standardized data
         cube_std, var = Compute_Standardized_data(faint_dct, self.expmap,
                                                   self.var, newvar)
+        var[np.isnan(var)] = np.inf
         cont_dct = cont_dct / np.sqrt(var)
         
         if newvar:        
