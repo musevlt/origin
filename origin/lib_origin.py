@@ -2024,7 +2024,7 @@ def Segmentation(STD_in, pfa):
     return map_in
 
 
-def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz): 
+def SpatioSpectral_Merging(cat_in, pfa, cube_cont, cor_in, var_in , deltaz): 
     """Merge the detected emission lines distants to less than deltaz
     spectral channel in a source area
 
@@ -2037,11 +2037,11 @@ def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz):
                    x_centroid y_centroid ra_centroid, dec_centroid nb_lines
                    x y z ra dec lbda T_GLR profile pvalC
                    residual flux num_line
-
+    pfa          : Pvalue for the test which performs segmentation
+    cube_cont    : array
+                   cube of standardized continuum estimated from DCT    
     cor_in       : Array
                    Correlation Cube
-    map_in       : Array
-                   segmentation map
     var_in       : Array
                    Variance Cube given or computed in preprocessing step
 
@@ -2056,6 +2056,8 @@ def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz):
            ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
            ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
            pvalC residual flux num_line
+    map_in       : Array
+                   segmentation map           
 
     Date  : June, 23 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
@@ -2063,7 +2065,8 @@ def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz):
 
     nl,ny,nx = cor_in.shape
 
-
+    # label
+    map_in = Segmentation(cube_cont, pfa) 
 
     # MAX Spectra for sources with same ID
     _id = []
@@ -2155,7 +2158,7 @@ def SpatioSpectral_Merging(cat_in, cor_in, map_in, var_in , deltaz):
     #save the label of the segmentation map
     col_seg_label = Column(name='seg_label', data=seg)
     cat_out.add_columns([col_old_id, col_seg_label])
-    return cat_out
+    return cat_out, map_in
 
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,

@@ -142,7 +142,8 @@ class ORIGIN(object):
                  thresO2, cube_correl, maxmap, cube_profile, Cat0, Pval_r, 
                  index_pval, Det_M, Det_m, ThresholdPval,
                  Cat1, spectra, Cat2, param, cube_std, var, expmap,
-                 cube_pval_correl, cube_local_max, cont_dct, segmentation_map,
+                 cube_pval_correl, cube_local_max, cont_dct, 
+                 segmentation_map_threshold, segmentation_map_spatspect,
                  cube_local_min, cube_correl_min, continuum, mapThresh):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
@@ -314,7 +315,8 @@ class ORIGIN(object):
         self.maxmap = maxmap
         # step4
         self.cube_pval_correl = cube_pval_correl
-        self.segmentation_map = segmentation_map
+        self.segmentation_map_threshold = segmentation_map_threshold
+        self.segmentation_map_spatspect = segmentation_map_spatspect        
         self.mapThresh = mapThresh        
         self.Cat0 = Cat0
         self.Pval_r = Pval_r
@@ -372,7 +374,8 @@ class ORIGIN(object):
                    ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
                    param=None, cube_std=None, var=None, expmap=None,
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
-                   segmentation_map=None,cube_local_min=None,
+                   segmentation_map_threshold=None, 
+                   segmentation_map_spatspect=None, cube_local_min=None,
                    cube_correl_min=None, continuum=None, mapThresh=None)
         
     @classmethod
@@ -568,10 +571,16 @@ class ORIGIN(object):
             Cat2 = Table.read('%s/Cat2.fits'%folder)
         else:
             Cat2 = None
-        if os.path.isfile('%s/segmentation_map.fits'%folder):
-            segmentation_map = Image('%s/segmentation_map.fits'%folder)
+        if os.path.isfile('%s/segmentation_map_threshold.fits'%folder):
+            segmentation_map_threshold = Image('%s/segmentation_map_threshold.fits'%folder)
         else:
-            segmentation_map = None
+            segmentation_map_threshold = None
+            
+        if os.path.isfile('%s/segmentation_map_spatspect.fits'%folder):
+            segmentation_map_spatspect = Image('%s/segmentation_map_spatspect.fits'%folder)
+        else:
+            segmentation_map_spatspect = None            
+            
         if os.path.isfile('%s/mapThresh.fits'%folder):
             mapThresh = Image('%s/mapThresh.fits'%folder)
         else:
@@ -595,7 +604,8 @@ class ORIGIN(object):
                    Cat2=Cat2, param=param,expmap=expmap,
                    cube_pval_correl=cube_pval_correl,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
-                   segmentation_map=segmentation_map,
+                   segmentation_map_threshold=segmentation_map_threshold,
+                   segmentation_map_spatspect=segmentation_map_spatspect,
                    cube_local_min=cube_local_min, 
                    cube_correl_min=cube_correl_min, continuum=continuum,
                    mapThresh=mapThresh)
@@ -694,8 +704,10 @@ class ORIGIN(object):
             self.cube_local_min.write('%s/cube_local_min.fits'%path2)                                
         if self.cube_pval_correl is not None:
             self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
-        if self.segmentation_map is not None:
-            self.segmentation_map.write('%s/segmentation_map.fits'%path2)  
+        if self.segmentation_map_threshold is not None:
+            self.segmentation_map_threshold.write('%s/segmentation_map_threshold.fits'%path2)  
+        if self.segmentation_map_spatspect is not None:
+            self.segmentation_map_spatspect.write('%s/segmentation_map_spatspect.fits'%path2)              
         if self.mapThresh is not None:
             self.mapThresh.write('%s/mapThresh.fits'%path2)              
         if self.Cat0 is not None:
@@ -1094,7 +1106,7 @@ class ORIGIN(object):
         
         self._log_file.info('03 Done')
 
-    def step04_threshold_pval(self, purity=.9, threshold_option=None, pfa=5e-2):        
+    def step04_threshold_pval(self, purity=.9, threshold_option=None, pfa=0.15):        
         """Threshold the Pvalue with the given threshold, if the threshold is
         None the threshold is automaticaly computed from confidence applied
         on local maximam from maximum correlation and local maxima from 
@@ -1137,7 +1149,7 @@ class ORIGIN(object):
 
 
         self.ThresholdPval, self.Pval_r, self.index_pval, \
-        cube_pval_correl, mapThresh, segmentation_map, self.Det_M, self.Det_m \
+        cube_pval_correl, mapThresh, segmap, self.Det_M, self.Det_m \
                                          = Compute_threshold_segmentation(
                                            purity, 
                                            self.cube_local_max.data,
@@ -1161,14 +1173,14 @@ class ORIGIN(object):
         self.Cat0 = Create_local_max_cat(self.cube_correl._data,
                                          self.cube_profile._data,
                                          self.cube_pval_correl._data,
-                                         self.wcs, self.wave)
+                                         self.wcs, self.wave, segmap)
         self._log_stdout.info('Save a first version of the catalogue of ' + \
                               'emission lines in self.Cat0 (%d lines)' \
                               %(len(self.Cat0))) 
         
-        self.segmentation_map = Image(data=segmentation_map,
+        self.segmentation_map_threshold = Image(data=segmap,
                                     wcs=self.wcs, mask=np.ma.nomask)
-        self._log_stdout.info('Save the segmentation map in self.segmentation_map')          
+        self._log_stdout.info('Save the segmentation map for threshold in self.segmentation_map_threshold')          
         
         self._log_file.info('04 Done')
         
@@ -1239,7 +1251,7 @@ class ORIGIN(object):
         self._log_stdout.info('Save the estimated continuum of each line in self.continuum, CAUTION: rough estimate!')
         self._log_file.info('05 Done')       
 
-    def step06_spatiospectral_merging(self, deltaz=20):
+    def step06_spatiospectral_merging(self, deltaz=20, pfa=0.05):
         """Construct a catalogue of sources by spatial merging of the
         detected emission lines in a circle with a diameter equal to
         the mean over the wavelengths of the FWHM of the FSF.
@@ -1250,6 +1262,8 @@ class ORIGIN(object):
         ----------
         deltaz : integer
                  Distance maximum between 2 different lines
+        pfa    : float
+                 Pvalue for the test which performs segmentation                 
 
         Returns
         -------
@@ -1272,11 +1286,14 @@ class ORIGIN(object):
         if self.Cat1 is None:
             raise IOError('Run the step 05 to initialize self.Cat1')
         cat = Spatial_Merging_Circle(self.Cat1, fwhm, self.wcs)
-        self.Cat2 = SpatioSpectral_Merging(cat, \
+        self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
+                                           self.cont_dct.data, \
                                            self.cube_correl.data, \
-                                           self.segmentation_map.data, \
                                            self.var, deltaz)
-      
+        self.segmentation_map_spatspect = Image(data=segmap,
+                                    wcs=self.wcs, mask=np.ma.nomask)
+        self._log_stdout.info('Save the segmentation map for spatio-spectral merging in self.segmentation_map_spatspect')  
+        
         self._log_stdout.info('Save the updated catalogue in self.Cat2 (%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0], len(self.Cat2)))
         self._log_file.info('06 Done')
 
@@ -1356,7 +1373,8 @@ class ORIGIN(object):
                                               path_src, self.name, self.param,
                                               src_vers, author,
                                               self.path, self.maxmap,
-                                              self.segmentation_map, 
+                                              self.segmentation_map_threshold, 
+#                                              self.segmentation_map_spatspect,                                               
                                               self.continuum,
                                               self.ThresholdPval, ncpu)                                            
                                               
