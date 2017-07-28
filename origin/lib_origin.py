@@ -31,6 +31,8 @@ lib_origin.py contains the methods that compose the ORIGIN software
 """
 from __future__ import absolute_import, division
 
+import matplotlib.pyplot as plt
+
 import astropy.units as u
 import logging
 import numpy as np
@@ -1546,7 +1548,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 
     nl = data_in.shape[0]
     ind_max = slice(np.maximum(0,z0-5),np.minimum(nl,z0+5))
-
     if weight_in is None:
         nl,sizpsf,tmp = psf.shape
     else:
@@ -1575,7 +1576,18 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     deconv_met,varest_met,cont = method_PCA_wgt(r1, var, psf, \
                                                            order_dct)
 
-                    maxz = z0  - 5 + np.argmax(deconv_met[ind_max])
+                    print(np.maximum(0,z0-5),np.minimum(nl,z0+5))
+                    z_est = peakdet(deconv_met[ind_max],3)
+#                    plt.clf()
+#                    plt.plot(deconv_met[ind_max])
+#                    xaze = deconv_met[ind_max]
+#                    plt.plot(z_est,xaze[z_est],'or')
+                    plt.pause(.1)
+#                    print(z_est)
+                    if z_est ==0:
+                        break
+                    
+                    maxz = z0  - 5 + z_est
                     zest[dy,dx] = maxz
                     ind_z5 = np.arange(maxz-5,maxz+5)
                     #ind_z10 = np.arange(maxz-10,maxz+10)
@@ -1626,6 +1638,37 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 
     return flux_est_5, MSE_5, estimated_line, \
             estimated_variance, int(y), int(x), int(z), estimated_continuum
+
+def peakdet(v, delta):
+    
+    v = np.array(v)
+    nv = len(v)
+    mv = np.zeros(nv+2*delta)
+    mv[:delta] = np.Inf
+    mv[delta:-delta]=v
+    mv[-delta:] = np.Inf    
+    ind = []
+
+    # find all local maxima
+    ind = [n-delta for n in range(delta,nv+delta) if mv[n]>mv[n-1] and mv[n]>mv[n+1]]
+    
+    # take the maximum and closest from original estimation 
+    indi = np.array(ind,dtype=int)
+
+    sol = int(nv/2)
+    if len(indi)>0:
+    # methode : closest from initial estimate        
+        out = indi[np.argmin( (indi-sol)**2)]
+    # methode : maximum           
+#        out = np.argmax( v[indi] )       
+    else:
+        out = sol
+
+    plt.clf() 
+    plt.plot(v)        
+    plt.plot(indi,v[indi],'or')
+    plt.pause(.1)    
+    return out
 
 
 def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \

@@ -1427,14 +1427,18 @@ class ORIGIN(object):
             ax2.semilogy(index_pval, Pval_r, 'y.-', label = 'purity' )
             ax.semilogy( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)' )
             ax.semilogy( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)' )
+            ax2.semilogy(threshold, purity,'xr') 
+            
         else:
             ax2.plot(index_pval, Pval_r, 'y.-', label = 'purity' )
             ax.plot( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)' )
             ax.plot( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)' )
+            ax2.plot(threshold, purity,'xr') 
+            
         ym,yM = ax.get_ylim()
         ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
                  label='automatic threshold' )
-        ax.plot(threshold, purity,'xr')        
+               
         ax.set_ylim((ym,yM))
         ax.set_xlabel('Threshold')
         ax2.set_ylabel('Purity')
