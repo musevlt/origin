@@ -1575,7 +1575,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     deconv_met,varest_met,cont = method_PCA_wgt(r1, var, psf, \
                                                            order_dct)
 
-                    print(np.maximum(0,z0-5),np.minimum(nl,z0+5))
                     z_est = peakdet(deconv_met[ind_max],3)
 #                    plt.clf()
 #                    plt.plot(deconv_met[ind_max])
