@@ -569,7 +569,7 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     x = Cat_cal['x']
     y = Cat_cal['y']
     z = Cat_cal['Z']
-    print(z[0],y[0],x[0])
+#    print(z[0],y[0],x[0])
     amp = Cat_cal['amp']
     profil = Cat_cal['profil']
 
