@@ -564,7 +564,6 @@ def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
     t0 = time.time()
 
     nl,ny,nx = raw.shape
-    print(nl,ny,nx)
     Cube_out = raw.copy()
 
     x = Cat_cal['x']
