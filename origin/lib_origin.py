@@ -31,7 +31,7 @@ lib_origin.py contains the methods that compose the ORIGIN software
 """
 from __future__ import absolute_import, division
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 import astropy.units as u
 import logging
@@ -1582,7 +1582,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 #                    plt.plot(deconv_met[ind_max])
 #                    xaze = deconv_met[ind_max]
 #                    plt.plot(z_est,xaze[z_est],'or')
-                    plt.pause(.1)
+#                    plt.pause(.1)
 #                    print(z_est)
                     if z_est ==0:
                         break
@@ -1664,10 +1664,10 @@ def peakdet(v, delta):
     else:
         out = sol
 
-    plt.clf() 
-    plt.plot(v)        
-    plt.plot(indi,v[indi],'or')
-    plt.pause(.1)    
+#    plt.clf() 
+#    plt.plot(v)        
+#    plt.plot(indi,v[indi],'or')
+#    plt.pause(.1)    
     return out
 
 

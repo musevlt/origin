@@ -1173,7 +1173,7 @@ class ORIGIN(object):
         self.Cat0 = Create_local_max_cat(self.cube_correl._data,
                                          self.cube_profile._data,
                                          self.cube_pval_correl._data,
-                                         self.wcs, self.wave, segmap)
+                                         self.wcs, self.wave)
         self._log_stdout.info('Save a first version of the catalogue of ' + \
                               'emission lines in self.Cat0 (%d lines)' \
                               %(len(self.Cat0))) 
