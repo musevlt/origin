@@ -31,8 +31,6 @@ lib_origin.py contains the methods that compose the ORIGIN software
 """
 from __future__ import absolute_import, division
 
-#import matplotlib.pyplot as plt
-
 import astropy.units as u
 import logging
 import numpy as np
@@ -129,6 +127,9 @@ def dct_residual(w_raw, order):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    
     nl = w_raw.shape[0]
     D0 = DCTMAT(nl)
     D0 = D0[:, 0:order+1]
@@ -136,7 +137,7 @@ def dct_residual(w_raw, order):
 
     cont = np.tensordot(A, w_raw, axes=(0,0))
     Faint = w_raw - cont
-
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Faint, cont
 
 
@@ -168,6 +169,9 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    
     nl,ny,nx = cube_dct.shape
 
     mask = expmap==0
@@ -186,31 +190,101 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
 
     STD = (cube_dct - mean_lambda) / np.sqrt(var)
     STD[mask] = 0
-
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return STD, var
 
+def Compute_Segmentation_test(STD_in):
+    """Generate from a 3D Cube a 2D map where sources and background are
+    separated
 
-def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty,
-                              Noise_population, threshold_test,itermax):
+    Parameters
+    ---------
+    STD_in       : Array
+                   standard continu part of DCT from preprocessing step - Cube
+
+    Returns
+    -------
+    Segmentation_test : Array
+                        test for Segmentation map
+
+    Date  : June, 26 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    
+    nl,ny,nx = STD_in.shape
+
+
+    # Standardized STD Cube
+    mask = (STD_in==0)
+    VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
+    VAR[mask] = np.inf
+    x = STD_in/np.sqrt(VAR)
+
+    # test
+    Segmentation_test = np.mean(x**2, axis=0) - 1
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))    
+    return Segmentation_test
+
+def Segmentation(Segmentation_test, pfa, clean=True):
+    """Generate from a 3D Cube a 2D map where sources and background are
+    separated
+
+    Parameters
+    ---------
+    Segmentation_test   : Array
+                          Segmentation test computed in Segmentation_test
+
+    pfa                 : Pvalue for the test which performs segmentation
+    
+    clean               : Bool
+                          if thresholding of test is to clean or not  
+
+    Returns
+    -------
+    map_in : label
+
+    Date  : June, 26 2017
+    Author: Antony Schutz (antony.schutz@gmail.com)
+    """
+    gamma =  stats.chi2.ppf(1-pfa, 1)
+
+    # threshold - erosion and dilation to clean ponctual "source"
+    sources = Segmentation_test>gamma
+    if clean:
+        sources = binary_erosion(sources,border_value=1,iterations=1)
+        sources = binary_dilation(sources,iterations=1)
+
+    # Label
+    map_in = measurements.label(sources)[0]
+
+    return map_in
+
+def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
+                              Noise_population, threshold_test,itermax,
+                              userlist):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
     ----------
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
+    NbArea    : integer
+                Number of area
     cube_std  : array
                 Cube data weighted by the standard deviation
-    intx      : integer
-                limits in pixels of the columns for each zone
+    set_x      : integer
+                pixels for each area
     inty      : integer
-                limits in pixels of the rows for each zone
+                pixels for each area
     nuisance_test   :   function used to estimate the nuisance degree of a
                         spectrum (default is O2_test)
     Noise_population:   proportion of estimated noise part used to
                         define the background spectra
     threshold       :   threshold of nuisance_test
     itermax         :   max iteration
-
+    userlist        :   Boolean
+                        to know if the threshold is based on one PFA, or
+                        if the threshold of each area is given by user
     Returns
     -------
     cube_faint : array
@@ -221,35 +295,173 @@ def Compute_GreedyPCA_SubCube(NbSubcube, cube_std, intx, inty,
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
-    cube_faint = np.zeros(cube_std.shape)
-    mapO2 = {} #2D
-    histO2 = {} #1D
-    frecO2 = {} #1D
-    thresO2 = np.empty((NbSubcube, NbSubcube)) #scalaire
+#    cube_faint = np.zeros(cube_std.shape)
+    cube_faint = cube_std.copy()
+    mapO2_area = [] #2D
+    mapO2_full = np.zeros((cube_std.shape[1],cube_std.shape[2]))
+    histO2_area = [] #1D
+    frecO2_area = [] #1D
+    thresO2_area = [] #scalaire
+
     # Spatial segmentation
-    with ProgressBar(NbSubcube**2) as bar:
-        for numy in range(NbSubcube):
-            for numx in range(NbSubcube):
-                # limits of each spatial zone
-                x1 = intx[numx]
-                x2 = intx[numx + 1]
-                y2 = inty[numy]
-                y1 = inty[numy + 1]
-                # Data in this spatio-spectral zone
-                cube_temp = cube_std[:, y1:y2, x1:x2]
-                # greedy PCA on each subcube
-                cube_faint[:, y1:y2, x1:x2], mO2, hO2, fO2, tO2 = \
-                Compute_GreedyPCA( cube_temp, Noise_population,
-                                  threshold_test,itermax)
-                mapO2[(numx, numy)] = mO2
-                histO2[(numx, numy)] = hO2
-                frecO2[(numx, numy)] = fO2
-                thresO2[(numx, numy)] = tO2
-                bar.update()
+    with ProgressBar(NbArea) as bar:
+        for area_ind in range(NbArea):
+            # limits of each spatial zone
+            yset = set_y[area_ind]
+            xset = set_x[area_ind]
+            
+            # Data in this spatio-spectral zone
+            cube_temp = cube_std[:, yset, xset]
+
+
+            # greedy PCA on each subcube
+            cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
+            Compute_GreedyPCA( cube_temp, Noise_population,
+                              threshold_test[area_ind],itermax, userlist)            
+            mapO2_full[yset,xset]= mO2
+            yM = yset.max()
+            ym = yset.min()
+            xM = xset.max()
+            xm = xset.min()            
+            tmp = np.zeros((1+yM-ym,1+xM-xm))
+            tmp[yset-ym,xset-xm] = mO2
+            mapO2_area.append(tmp)
+            histO2_area.append(hO2)
+            frecO2_area.append(fO2)
+            thresO2_area.append(tO2)
+            bar.update()
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, mapO2, histO2, frecO2, thresO2
+    return cube_faint, mapO2_area, histO2_area, frecO2_area, thresO2_area, mapO2_full
 
+def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
+                      ,itermax, userlist):
+    """Function to compute greedy svd. thanks to the test (test_fun) and
+    according to a defined threshold (threshold_test) the cube is segmented
+    in nuisance and background part. A part of the background part
+    (1/Noise_population %) is used to compute a mean background, a signature.
+    The Nuisance part is orthogonalized to this signature in order to not
+    loose this part during the greedy process. SVD is performed on nuisance
+    in order to modelized the nuisance part and the principal eigen vector,
+    only one, is used to perform the projection of the whole set of data:
+    Nuisance and background. The Nuisance spectra which satisfied the test
+    are updated in the background computation and the background is so
+    cleaned from sources signature. The iteration stop when all the spectra
+    satisfy the criteria
+
+
+    Parameters
+    ----------
+    Cube_in :   array
+                The 3D cube data clean
+
+    test_fun:   function
+                the test to be performed on data
+
+    Noise_population    : float
+                          the fraction of spectra estimated as background
+
+    threshold_test      : float
+                          the pfa of the test (default=.05)
+                          or the threshold of one area if userlist is True
+                          
+    itermax             : max iterations
+    
+    userlist            : Boolean
+                          to know if the threshold is based on one PFA, or
+                          if the threshold of each area is given by user
+    Returns
+    -------
+    faint   :   array
+                cleaned cube
+
+    mapO2   :   array
+                2D MAP filled with the number of iteration per spectra
+
+    histO2  :   histogram value of the test
+    frecO2  :   frequencies of the histogram
+    thresO2 :   automatic threshold for the O2 test
+
+    Date  : Mar, 28 2017
+    Author: antony schutz (antonyschutz@gmail.com)
+    """
+
+    faint = cube_in.copy()
+    nl,nynx = cube_in.shape
+    test = O2test(faint)
+
+    # automatic threshold computation
+    histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, threshold_test)
+    if userlist:
+        thresO2 = threshold_test
+    # nuisance part
+    pypx = np.where(test>thresO2)[0]
+
+    npix = len(pypx)
+
+    mapO2 = np.zeros(nynx)
+
+    with ProgressBar(npix) as bar:
+        # greedy loop based on test
+        tmp=0
+        while True:
+            tmp+=1
+            mapO2[pypx] += 1
+            if len(pypx)==0:
+                break
+            if tmp>itermax:
+                print('Warning iterations stopped at %d' %(tmp))
+                break
+            # vector data
+            test_v = np.ravel(test)
+            test_v = test_v[test_v>0]
+            nind = np.where(test_v<=thresO2)[0]
+            sortind = np.argsort(test_v[nind])
+            # at least one spectra is used to perform the test
+            l = 1 + int( len(nind) / Noise_population)
+            # background estimation
+            b = np.mean(faint[:,nind[sortind[:l]]],axis=1)
+            # cube segmentation
+            x_red = faint[:,pypx]
+            # orthogonal projection with background
+            x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red )
+            x_red /= np.nansum(b**2)
+
+            # remove spectral mean from residual data
+            mean_in_pca = np.mean( x_red , axis = 1)
+            x_red_nomean = x_red.copy()
+            x_red_nomean -= np.repeat(mean_in_pca[:,np.newaxis], \
+                                      x_red.shape[1], axis=1)
+
+            # sparse svd if nb spectrum > 1 else normal svd
+            if x_red.shape[1]==1:
+                break
+                # if PCA will not converge or if giant pint source will exists
+                # in faint PCA the reason will be here, in later case
+                # add condition while calculating the "mean_in_pca"
+                # deactivate the substraction of the mean.
+                # This will make the vector whish is above threshold
+                # equal to the background. For now we prefer to keep it, to
+                # stop iteration earlier in order to keep residual sources
+                # with the hypothesis that this spectrum is slightly above
+                # the threshold (what we observe in data)
+                U,s,V = np.linalg.svd( x_red_nomean , full_matrices=False)
+            else:
+                U,s,V = svds( x_red_nomean , k=1)
+
+            # orthogonal projection
+            xest = np.dot( np.dot(U,np.transpose(U)), \
+                          np.reshape(faint,(nl,nynx)))
+            faint -= np.reshape(xest,(nl,nynx))
+
+            # test
+            test = O2test(faint)
+
+            # nuisance part
+            pypx = np.where(test>thresO2)[0]
+            bar.update(npix-len(pypx))
+
+    return faint, mapO2, histO2, frecO2, thresO2  
 
 def O2test(Cube_in):
     """Function to compute the test on data. The test estimate the background
@@ -304,308 +516,6 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
 
     return histO2, frecO2, thresO2
-
-
-def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
-                      ,itermax):
-    """Function to compute greedy svd. thanks to the test (test_fun) and
-    according to a defined threshold (threshold_test) the cube is segmented
-    in nuisance and background part. A part of the background part
-    (1/Noise_population %) is used to compute a mean background, a signature.
-    The Nuisance part is orthogonalized to this signature in order to not
-    loose this part during the greedy process. SVD is performed on nuisance
-    in order to modelized the nuisance part and the principal eigen vector,
-    only one, is used to perform the projection of the whole set of data:
-    Nuisance and background. The Nuisance spectra which satisfied the test
-    are updated in the background computation and the background is so
-    cleaned from sources signature. The iteration stop when all the spectra
-    satisfy the criteria
-
-
-    Parameters
-    ----------
-    Cube_in :   array
-                The 3D cube data clean
-
-    test_fun:   function
-                the test to be performed on data
-
-    Noise_population    :   float
-                            the fraction of spectra estimated as background
-
-    threshold_test      :   float
-                            the pfa of the test (default=.05)
-    itermax             : max iterations
-    Returns
-    -------
-    faint    :  array
-                cleaned cube
-
-    mapO2   :   array
-                2D MAP filled with the number of iteration per spectra
-
-    histO2  :   histogram value of the test
-    frecO2  :   frequencies of the histogram
-    thresO2 :   automatic threshold for the O2 test
-
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
-    """
-
-    faint = cube_in.copy()
-    nl,ny,nx = cube_in.shape
-    test = O2test(faint)
-
-    # automatic threshold computation
-    histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, threshold_test)
-
-    # nuisance part
-    py,px = np.where(test>thresO2)
-
-    npix = len(py)
-
-    mapO2 = np.zeros((ny, nx))
-
-    with ProgressBar(npix) as bar:
-        # greedy loop based on test
-        tmp=0
-        while True:
-            tmp+=1
-            mapO2[py,px] += 1
-            if len(py)==0:
-                break
-            if tmp>itermax:
-                print('Warning iterations stopped at %d' %(tmp))
-                break
-            # vector data
-            test_v = np.ravel(test)
-            test_v = test_v[test_v>0]
-            bckv = np.reshape(faint,(nl,ny*nx))
-            nind = np.where(test_v<=thresO2)[0]
-            sortind = np.argsort(test_v[nind])
-            # at least one spectra is used to perform the test
-            l = 1 + int( len(nind) / Noise_population)
-            # background estimation
-            b = np.mean(bckv[:,nind[sortind[:l]]],axis=1)
-
-            # cube segmentation
-            x_red = faint[:,py,px]
-
-            # orthogonal projection with background
-            x_red -= np.dot( np.dot(b[:,None],b[None,:]) , x_red )
-            x_red /= np.nansum(b**2)
-
-            # remove spectral mean from residual data
-            mean_in_pca = np.mean( x_red , axis = 1)
-            x_red_nomean = x_red.copy()
-            x_red_nomean -= np.repeat(mean_in_pca[:,np.newaxis], \
-                                      x_red.shape[1], axis=1)
-
-            # sparse svd if nb spectrum > 1 else normal svd
-            if x_red.shape[1]==1:
-                break
-                # if PCA will not converge or if giant pint source will exists
-                # in faint PCA the reason will be here, in later case
-                # add condition while calculating the "mean_in_pca"
-                # deactivate the substraction of the mean.
-                # This will make the vector whish is above threshold
-                # equal to the background. For now we prefer to keep it, to
-                # stop iteration earlier in order to keep residual sources
-                # with the hypothesis that this spectrum is slightly above
-                # the threshold (what we observe in data)
-                U,s,V = np.linalg.svd( x_red_nomean , full_matrices=False)
-            else:
-                U,s,V = svds( x_red_nomean , k=1)
-
-            # orthogonal projection
-            xest = np.dot( np.dot(U,np.transpose(U)), \
-                          np.reshape(faint,(nl,ny*nx)))
-            faint -= np.reshape(xest,(nl,ny,nx))
-
-            # test
-            test = O2test(faint)
-
-            # nuisance part
-            py,px = np.where(test>thresO2)
-            bar.update(npix-len(py))
-
-    return faint, mapO2, histO2, frecO2, thresO2
-
-
-def init_calibrators(nl, ny, nx, nprofil, x, y, z, amp, profil, random, \
-                     Cat_cal):
-    """Function to add calibrator at position z,y,x with amplitude amp
-    following the profiles profilid
-
-
-    Parameters
-    ----------
-    nl,ny,nx    :   int
-                    samples size of data in spectral and spatiales dimensions
-    nprofil     :   int
-                    number of spectrale profil
-
-    x           :   int or list
-                    the x spatiale position of the line (pixel)
-    y           :   int or list
-                    the y spatiale position of the line (pixel)
-    z           :   int or list
-                    the z spectrale position of the line (pixel)
-
-    amp         :   float
-                    if x is array or list and if amp is int, amp is repeated
-                    amplitude of the line
-
-    profilid    :   int or list
-                    if x is array or list and if profilid is int,
-                    profilid is repeated
-                    the number (id) of the profile associated to the line
-
-    random      :   int
-                    number of random line added to the data
-
-    Cat_cal     :  catalogue
-                   Catalogue with calibrators parameters
-                   string
-                   if Cat_cal='add', update of the catalogue
-
-    Returns
-    -------
-    Cat_cal     :  catalogue
-                   Catalogue with calibrators parameters
-
-    Date  : Mar, 30 2017
-    Author: antony schutz (antonyschutz@gmail.com)
-    """
-
-    logger = logging.getLogger('origin')
-
-    if random==0 and x=='' and Cat_cal=='' :
-        msg = 'no parameters given: initialize x, y, z, amp,'\
-                     +'profilid or random or give a catalogue'
-        logger.error(msg)
-    if type(Cat_cal)==Table:
-      # if input is a catalogue only
-        _x = Cat_cal['x']
-        _y = Cat_cal['y']
-        _z = Cat_cal['z']
-        _amp = Cat_cal['amp']
-        _profil = Cat_cal['profil']
-    else:
-        _x = []
-        _y = []
-        _z = []
-        _amp = []
-        _profil = []
-
-    # full random initialisation
-    if random:
-        _amp += list(np.random.rand(random) * 5)
-        _x += list(np.array(np.random.rand(random) * nx, dtype=int))
-        _y += list(np.array(np.random.rand(random) * ny, dtype=int))
-        _z += list(np.array(np.random.rand(random) * nl, dtype=int))
-        _profil += list(np.array( np.random.rand(random) * nprofil, dtype=int))
-
-    if x is not None:
-        if type(x)==int: # x is int and Table need list
-            _x.append(x)
-            _y.append(y)
-            _z.append(z)
-            _amp.append(amp)
-            _profil.append(profil)
-
-        else:
-            # if position are given but not all amplitude or all profil ID
-            if type(amp)==int:
-                amp = np.resize(amp,len(x))
-            if type(profil)==int:
-                profil = np.resize(profil,len(x))
-            _amp += list(amp)
-            _x += list(x)
-            _y += list(y)
-            _z += list(z)
-            _profil += list(profil)
-
-    # creation of (new) catalogue
-    Cat_ref = Table([_x, _y, _z, _amp, _profil ],
-                        names=('x', 'y', 'Z', 'amp', 'profil'))
-
-    return Cat_ref
-
-
-def add_calibrator(Cat_cal, raw, PSF, profiles, weights, var):
-    """Function to add calibrator to raw data
-
-
-    Parameters
-    ----------
-    Cat_cal     :   catalogue
-                    Catalogue with calibrators parameters
-
-    raw         :   array
-                    The 3D RAW data
-
-    PSF         :   array
-                    The PSF from orig.PSF
-
-    profiles    :   array
-                    The profiles from orig.profiles
-
-
-    Returns
-    -------
-    Cube_out    :  array
-                   raw data with calibrators
-
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
-    nl,ny,nx = raw.shape
-    Cube_out = raw.copy()
-
-    x = Cat_cal['x']
-    y = Cat_cal['y']
-    z = Cat_cal['Z']
-#    print(z[0],y[0],x[0])
-    amp = Cat_cal['amp']
-    profil = Cat_cal['profil']
-
-
-    if type(x) != int :
-        for n in range(len(x)):
-            Cube_test = np.zeros((nl,ny,nx))
-            Cube_test[z[n],y[n],x[n]] = 1
-            pp = profiles[profil[n]]
-            Cube_test[:, y[n],x[n]] = \
-            signal.fftconvolve(Cube_test[:,y[n],x[n]], pp, mode='same')
-            fmin = np.maximum(0, z[n]-2*len(pp))
-            fmax = np.minimum(nl,z[n]+2*len(pp))
-            for psf in range(len(PSF)):
-                if np.sum(weights[psf])>0:
-                    for i in range(fmin,fmax):
-                        Cube_test[i, :, :] += signal.fftconvolve(weights[psf]*Cube_test[i, :, :],PSF[psf][i, :, :], mode='same')
-            Cube_test = Cube_test / Cube_test.max() * amp[n]
-            Cube_out += Cube_test
-    else:
-        Cube_test = np.zeros((nl,ny,nx))
-        Cube_test[z,y,x] = 1
-        pp = profiles[profil]
-        Cube_test[:, y,x] = \
-        signal.fftconvolve(Cube_test[:,y,x], pp, mode='same')
-        for i in range(z-2*len(pp),z+2*len(pp)):
-            Cube_test[i, :, :] = signal.fftconvolve(Cube_test[i, :, :],
-                                PSF[i, :, :], mode='same')
-        Cube_test = Cube_test / Cube_test.max() * amp
-        Cube_out += Cube_test
-
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-
-    return Cube_out
-    
     
 def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
                               intx, inty, NbSubcube):
@@ -658,7 +568,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
 
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
-            logger.info('Area %d,%d / (%d,%d)' %(numy,numx,NbSubcube,NbSubcube))
+            logger.info('Area %d,%d / (%d,%d)' %(numy+1,numx+1,NbSubcube,NbSubcube))
             # limits of each spatial zone
             x1 = np.maximum(0,intx[numx] - longxy)
             x2 = np.minimum(intx[numx + 1]+longxy,Nx)
@@ -790,17 +700,6 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     # initialization with the first profile
     profile = np.zeros(shape, dtype=np.int)
 
-#    # First spectral profile
-#    k0 = 0
-#    d_j = Dico[k0]
-#    # zero-mean spectral profile
-#    d_j = d_j - np.mean(d_j)
-#    # Compute the square of the spectral profile
-#    profile_square = d_j**2
-#
-#    ygrid, xgrid = np.mgrid[0:Ny, 0:Nx]
-#    xgrid = xgrid.flatten()
-#    ygrid = ygrid.flatten()
 
     logger.info('Step 3/3 Computing second cube of correlation values')
     profile = np.empty(shape)
@@ -830,9 +729,6 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 correl[:, y, x] = np.maximum( correl[:, y, x],tmp)
                 correl_min[:, y, x] = np.minimum( correl_min[:, y, x],tmp)
                 profile[PROFILE_MAX,y,x] = k
-
-#        np.save('cube_profile'+str(k)+'.npy',cube_profile2)
-#        np.save('norm_profile'+str(k)+'.npy',norm_profile2)
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return correl, profile, correl_min
@@ -884,10 +780,6 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             # limits of each spatial zone
-#            x1 = intx[numx]
-#            x2 = intx[numx + 1]
-#            y2 = inty[numy]
-#            y1 = inty[numy + 1]
 
             x1 = np.maximum(0,intx[numx] - lag)
             x2 = np.minimum(intx[numx + 1]+lag,Nx)
@@ -907,9 +799,6 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
               Compute_localmax(correl_temp_edge,correl_temp_edge_min\
                                     ,mask_temp_edge,neighboors)
 
-
-#            cube_Local_max[:, y1:y2, x1:x2] = cube_Local_max_temp
-#            cube_Local_min[:, y1:y2, x1:x2] = cube_Local_min_temp
             cube_Local_max[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]]=\
             cube_Local_max_temp[:,y11:y22,x11:x22]
             cube_Local_min[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]]=\
@@ -919,10 +808,50 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
 
+def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
+                          mask_temp_edge, neighboors):
+    """Function to compute the local maxima of the maximum correlation and
+    local maxima of minus the minimum correlation
+    distribution
+
+    Parameters
+    ----------
+    correl_temp_edge :  array
+                        T_GLR values with edges excluded (from max correlation)
+    correl_temp_edge_min :  array
+                        T_GLR values with edges excluded (from min correlation)
+    mask_temp_edge   :  array
+                        mask array (true if pixel is masked)
+    neighboors       :  int
+                        Number of connected components
+    Returns
+    -------
+    cube_pval_correl : array
+                       p-values asssociated to the local maxima of T_GLR values
+
+    Date  : June, 19 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    # connected components
+    conn = (neighboors + 1)**(1 / 3.)
+    # local maxima of maximum correlation
+    Max_filter = filters.maximum_filter(correl_temp_edge,size=(conn,conn,conn))
+    Local_max_mask= (correl_temp_edge == Max_filter)
+    Local_max_mask[mask_temp_edge]=0
+    Local_max=correl_temp_edge*Local_max_mask
+
+    # local maxima of minus minimum correlation
+    minus_correl_min = - correl_temp_edge_min
+    Max_filter = filters.maximum_filter(minus_correl_min ,\
+                                        size=(conn,conn,conn))
+    Local_min_mask= (minus_correl_min == Max_filter)
+    Local_min_mask[mask_temp_edge]=0
+    Local_min=minus_correl_min*Local_min_mask
+
+    return Local_max, Local_min
 
 def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
-                           threshold_option, intx, inty, NbSubcube,
-                           cube_cont, pfa):
+                           threshold_option, segmentation_test, pfa):
     """Function to threshold the p-values from
     computatino of threshold from the local maxima of:
         - Maximum correlation
@@ -941,15 +870,10 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
                        string
                        threshold based on background threshold
 
-    cube_cont    : array
-                   cube of standardized continuum estimated from DCT
-    intx      : integer
-                limits in pixels of the columns for each zone
-    inty      : integer
-                limits in pixels of the rows for each zone
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
-    pfa          : Pvalue for the test which performs segmentation
+    segmentation_test : array
+                        Test on estimated continuum for segmentation
+
+    pfa       : Pvalue for the test which performs segmentation
 
     Returns
     -------
@@ -972,7 +896,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     """
 
     # Label
-    map_in = Segmentation(cube_cont, pfa)
+    map_in = Segmentation(segmentation_test, pfa, clean=False)
 
     # initialization
     cube_pval_correl = np.zeros(cube_local_max.shape)
@@ -993,8 +917,6 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     src_y, src_x = np.where(map_in>0)
     ind_y.append(src_y)
     ind_x.append(src_x)
-
-
 
     # threshold
     for ind_n in range(2):
@@ -1028,8 +950,97 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
 
     return np.asarray(threshold), Pval_r, index_pval,  \
             cube_pval_correl, mapThresh, map_in, det_m, det_M
+            
+            
+            
 
+def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):        
+    """Function to compute the threshold from the local maxima Versus the 
+    PFA of the segmentation test for a given purity
 
+    Parameters
+    ----------
+    test:   array
+            the test of continuum used for the segmentation                
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    cube_Local_min : array
+                     cube of local maxima from minus minimum correlation
+    purity    : float
+                the purity between 0 and 1
+    pfaset :    array
+                the set of PFA to test
+    Returns
+    -------
+    threshold : list
+                the threshold associated to pfaset
+    Date  : September, 7 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """    
+
+    N = 100
+    nl,ny,nx = cube_local_max.shape
+    # without nexpmap
+    test2 = np.ravel(test)
+    ind = np.where(test2**2 > 0)[0]
+    cube_local_max_2 = np.reshape(cube_local_max,(nl,ny*nx))
+    cube_local_min_2 = np.reshape(cube_local_min,(nl,ny*nx))
+    test2 = test2[ind]
+    cube_local_max_2 = cube_local_max_2[:,ind]
+    cube_local_min_2 = cube_local_min_2[:,ind]
+    
+    # pre calculus of maximas
+    ind = np.where(test2<=pfaset[0])[0]
+    Lc_M = cube_local_max_2[:,ind]
+    Lc_M = Lc_M[np.nonzero(Lc_M)]
+    Lc_m = cube_local_min_2[:,ind]
+    Lc_m = Lc_m[np.nonzero(Lc_m)]
+    mini = np.minimum( Lc_m.min() , Lc_M.min() )
+    maxi = np.maximum( Lc_m.max() , Lc_M.max() )   
+    
+    dx = (maxi-mini)/N
+    index = np.arange(mini,maxi,dx)         
+    
+    # initialization
+    threshold = []    
+    #        pfalist = []
+    datamax = np.empty(0)
+    datamin = np.empty(0)
+        
+    for pfa in pfaset[::-1]:
+        gamma =  stats.chi2.ppf(1-pfa, 1)
+        # index of segmentation
+    
+        ind = np.where(test2<=gamma)[0]
+        test2[ind]=np.inf    
+    
+        mini_max = cube_local_max_2[:, ind].data
+        mini_min = cube_local_min_2[:, ind].data
+        
+        Maxlist = mini_max[np.nonzero(mini_max)]
+        Minlist = mini_min[np.nonzero(mini_min)]         
+    
+        datamax = np.hstack((datamax,Maxlist))
+        datamin = np.hstack((datamin,Minlist))    
+    
+        PVal_M = [np.mean( (datamax>seuil) ) for seuil in index ]
+        PVal_m = [np.mean( (datamin>seuil) ) for seuil in index ]
+        Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
+    
+        fid_ind = np.where(Pval_r>=purity)[0][0] 
+      
+        x2 = index[fid_ind]
+        x1 = index[fid_ind-1]
+        y2 = Pval_r[fid_ind]
+        y1 = Pval_r[fid_ind-1]
+    
+        b = y2-y1
+        a = x2-x1
+    
+        tan_theta = b/a
+        threshold.append( (purity-y1)/tan_theta + x1)
+
+    return threshold[::-1]
 def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
         - Maximum correlation
@@ -1130,53 +1141,11 @@ def Threshold_pval(cube_local_max, threshold):
     cube_pval_lm_correl = cube_local_max.copy()
     cube_pval_lm_correl[cube_local_max <= threshold] = 0.
     
-#    cube_pval_lm_correl = cube_local_max>threshold + 0.
-    
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_pval_lm_correl
 
 
-def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
-                          mask_temp_edge, neighboors):
-    """Function to compute the local maxima of the maximum correlation and
-    local maxima of minus the minimum correlation
-    distribution
 
-    Parameters
-    ----------
-    correl_temp_edge :  array
-                        T_GLR values with edges excluded (from max correlation)
-    correl_temp_edge_min :  array
-                        T_GLR values with edges excluded (from min correlation)
-    mask_temp_edge   :  array
-                        mask array (true if pixel is masked)
-    neighboors       :  int
-                        Number of connected components
-    Returns
-    -------
-    cube_pval_correl : array
-                       p-values asssociated to the local maxima of T_GLR values
-
-    Date  : June, 19 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-    # connected components
-    conn = (neighboors + 1)**(1 / 3.)
-    # local maxima of maximum correlation
-    Max_filter = filters.maximum_filter(correl_temp_edge,size=(conn,conn,conn))
-    Local_max_mask= (correl_temp_edge == Max_filter)
-    Local_max_mask[mask_temp_edge]=0
-    Local_max=correl_temp_edge*Local_max_mask
-
-    # local maxima of minus minimum correlation
-    minus_correl_min = - correl_temp_edge_min
-    Max_filter = filters.maximum_filter(minus_correl_min ,\
-                                        size=(conn,conn,conn))
-    Local_min_mask= (minus_correl_min == Max_filter)
-    Local_min_mask[mask_temp_edge]=0
-    Local_min=minus_correl_min*Local_min_mask
-
-    return Local_max, Local_min
 
 
 def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
@@ -1540,10 +1509,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     zest = np.zeros((1+2*size_grid,1+2*size_grid))
     fest_00 = np.zeros((1+2*size_grid,1+2*size_grid))
     fest_05 = np.zeros((1+2*size_grid,1+2*size_grid))
-    #fest_10 = np.zeros((1+2*size_grid,1+2*size_grid))
     mse = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf
     mse_5 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf
-    #mse_10 = np.ones((1+2*size_grid,1+2*size_grid)) * np.inf
 
     nl = data_in.shape[0]
     ind_max = slice(np.maximum(0,z0-5),np.minimum(nl,z0+5))
@@ -1576,12 +1543,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                                                            order_dct)
 
                     z_est = peakdet(deconv_met[ind_max],3)
-#                    plt.clf()
-#                    plt.plot(deconv_met[ind_max])
-#                    xaze = deconv_met[ind_max]
-#                    plt.plot(z_est,xaze[z_est],'or')
-#                    plt.pause(.1)
-#                    print(z_est)
                     if z_est ==0:
                         break
                     
@@ -1605,11 +1566,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     LCred = LC[:,inds,inds]
                     r1red = r1[ind_z5,inds,inds]
                     mse_5[dy,dx] = np.sum((r1red - LCred)**2)/ np.sum(r1red**2)
-
-                    #LC = conv_wgt(deconv_met[ind_z10], psf[ind_z10,:,:])
-                    #LCred = LC[:,inds,inds]
-                    #r1red = r1[ind_z10,inds,inds]
-                    #mse_10[dy,dx] = np.sum((r1red - LCred)**2)/np.sum(r1red**2)
 
                     # compute flux
                     fest_00[dy,dx] = np.sum(deconv_met[ind_hrz])
@@ -1657,15 +1613,8 @@ def peakdet(v, delta):
     if len(indi)>0:
     # methode : closest from initial estimate        
         out = indi[np.argmin( (indi-sol)**2)]
-    # methode : maximum           
-#        out = np.argmax( v[indi] )       
     else:
         out = sol
-
-#    plt.clf() 
-#    plt.plot(v)        
-#    plt.plot(indi,v[indi],'or')
-#    plt.pause(.1)    
     return out
 
 
@@ -1898,17 +1847,6 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     t_centroid = KDTree(unique_centroid)
     r = t_centroid.query_ball_tree(t, fwhm_fsf / 2)
 
-#    while True:
-#        ncentroid = len(unique_centroid)
-#        t_centroid = KDTree(unique_centroid)
-#        r = t_centroid.query_ball_tree(t, np.round(fwhm_fsf/2))
-#        centroid = np.array([np.sum(col_tglr[r[i]][:,np.newaxis] * points[r[i]], axis=0) / np.sum(col_tglr[r[i]]) for i in range(len(r))])
-#        uniq = np.array(list(set(tuple(p) for p in centroid)))
-#        if len(uniq) >= ncentroid:
-#            break
-#        else:
-#            unique_centroid = uniq
-
     sorted_lists = sorted(zip(r, unique_centroid), key=lambda t: len(t[0]),
                           reverse=True)
     r = [p[0] for p in sorted_lists]
@@ -1979,50 +1917,10 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     return CatF
 
 
-def Segmentation(STD_in, pfa):
-    """Generate from a 3D Cube a 2D map where sources and background are
-    separated
-
-    Parameters
-    ---------
-    STD_in       : Array
-                   standard continu part of DCT from preprocessing step - Cube
-
-    pfa          : Pvalue for the test which performs segmentation
-
-    Returns
-    -------
-    map_in : label
-
-    Date  : June, 26 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
-    """
-
-    nl,ny,nx = STD_in.shape
 
 
-    # Standardized STD Cube
-    mask = (STD_in==0)
-    VAR = np.repeat( np.var(STD_in,axis=0)[np.newaxis,:,:],nl,axis=0)
-    VAR[mask] = np.inf
-    x = STD_in/np.sqrt(VAR)
-
-    # test
-    test = np.mean(x**2, axis=0) - 1
-    gamma =  stats.chi2.ppf(1-pfa, 1)
-
-    # threshold - erosion and dilation to clean ponctual "source"
-    sources = test>gamma
-    sources = binary_erosion(sources,border_value=1,iterations=1)
-    sources = binary_dilation(sources,iterations=1)
-
-    # Label
-    map_in = measurements.label(sources)[0]
-
-    return map_in
-
-
-def SpatioSpectral_Merging(cat_in, pfa, cube_cont, cor_in, var_in , deltaz): 
+def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in , 
+                           deltaz): 
     """Merge the detected emission lines distants to less than deltaz
     spectral channel in a source area
 
@@ -2036,8 +1934,8 @@ def SpatioSpectral_Merging(cat_in, pfa, cube_cont, cor_in, var_in , deltaz):
                    x y z ra dec lbda T_GLR profile pvalC
                    residual flux num_line
     pfa          : Pvalue for the test which performs segmentation
-    cube_cont    : array
-                   cube of standardized continuum estimated from DCT    
+    segmentation_test : array
+                        Test on estimated continuum for segmentation  
     cor_in       : Array
                    Correlation Cube
     var_in       : Array
@@ -2064,7 +1962,7 @@ def SpatioSpectral_Merging(cat_in, pfa, cube_cont, cor_in, var_in , deltaz):
     nl,ny,nx = cor_in.shape
 
     # label
-    map_in = Segmentation(cube_cont, pfa) 
+    map_in = Segmentation(segmentation_test, pfa) 
 
     # MAX Spectra for sources with same ID
     _id = []
