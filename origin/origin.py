@@ -1287,10 +1287,10 @@ class ORIGIN(object):
 
         if self.Cat0 is None:
             raise IOError('Run the step 05 to initialize self.Cat0 catalogs')
-        if self.cube_std.var is None:
-            var = self.var
+        if 'expmap' in self.param: 
+            var = self.var * self.expmap
         else:
-            var = self.cube_std.var * self.expmap
+            var = self.var
             
         self.Cat1, Cat_est_line_raw_T, Cat_est_line_var_T, Cat_est_cnt_T = \
         Estimation_Line(self.Cat0, self.cube_raw, var, self.PSF, \
@@ -1341,8 +1341,6 @@ class ORIGIN(object):
 
         Returns
         -------
-        self.segmentation_map : `~mpdaf.obj.Image`
-                                 Segmentation map
         self.Cat2 : astropy.Table
                     Catalogue
                     Columns: ID x_circle y_circle ra_circle dec_circle
@@ -1869,8 +1867,6 @@ class ORIGIN(object):
                  Optional extra keyword/value arguments to be passed to
                  the ``ax.imshow()`` function. 
         """
-        if self.cube_correl is None:
-            raise IOError('Run the step 02 to initialize self.cube_correl')
         if self.wfields is None:
             fwhm = self.FWHM_PSF
         else:
