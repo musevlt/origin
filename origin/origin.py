@@ -445,7 +445,7 @@ class ORIGIN(object):
         else:
             cont_dct = None            
         if os.path.isfile('%s/segmentation_test.fits'%folder):
-            segmentation_test = Cube('%s/segmentation_test.fits'%folder)
+            segmentation_test = Image('%s/segmentation_test.fits'%folder)
         else:
             segmentation_test = None                        
             
@@ -868,7 +868,7 @@ class ORIGIN(object):
                          mask=np.ma.nomask)  
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)
-        self.segmentation_test = Cube(data=segmentation_test, wave=self.wave, 
+        self.segmentation_test = Image(data=segmentation_test, 
                                       wcs=self.wcs, mask=np.ma.nomask)        
         self._log_file.info('01 Done')
 
