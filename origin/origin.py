@@ -314,10 +314,10 @@ class ORIGIN(object):
         self.setx = setx          
         # step3
         self.cube_faint = cube_faint
-        self.mapO2 = mapO2
         self.histO2 = histO2
         self.freqO2 = freqO2
         self.thresO2 = thresO2
+        self.mapO2 = mapO2
         # step4
         self.cube_correl = cube_correl
         self.cube_correl_min = cube_correl_min        
@@ -722,12 +722,8 @@ class ORIGIN(object):
         if self.freqO2 is not None:
             for i in range(self.NbAreas):
                 np.savetxt('%s/freqO2_%d.txt'%(path2, i), self.freqO2[i])           
-                
-                # LAURE HELP
-                
         if self.thresO2 is not None:
-            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)                                            
-                
+            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
         if self.mapO2 is not None:
@@ -1002,7 +998,7 @@ class ORIGIN(object):
                      Projection on the eigenvectors associated to the lower
                      eigenvalues of the data cube
                      (representing the faint signal)
-        self.mapO2 : list(`~mpdaf.obj.Image`)
+        self.mapO2 : `~mpdaf.obj.Image`
                      For each area, the numbers of iterations used by testO2
                      for each spaxel
         self.histO2 : list(array)
@@ -1609,7 +1605,7 @@ class ORIGIN(object):
         iteration: a specific iteration
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
-        iteration : Display the nuisance/bacground pixels at itartion k
+        iteration : Display the nuisance/bacground pixels at iteration k
         """
 
         if self.mapO2 is None:
@@ -1619,26 +1615,23 @@ class ORIGIN(object):
             themap = self.mapO2.data
             title = 'Full map'
         else:
-            y1 = self.sety[area].min()
-            y2 = self.sety[area].max()            
-            x1 = self.setx[area].min()
-            x2 = self.setx[area].max()                        
-            themap = np.zeros((1+y2-y1,1+x2-x1))
-            themap[self.sety[area]-y1,self.setx[area]-x1] = \
-            self.mapO2.data[self.sety[area],self.setx[area]]
+            mask = np.ones_like(self.mapO2._data, dtype=np.bool)
+            mask[self.sety[area], self.setx[area]] = False
+            themap = np.ma.masked_array(self.mapO2._data, mask)
             title = 'zone %d' %area
+            
+        if iteration is not None:
+            themap[themap<iteration] = np.ma.masked
             
         if ax is None:
             ax = plt.gca()
-    
-        if iteration is None:
-            mapO2 = themap
-        else:
-            mapO2 = themap>iteration
-            
-        ax.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
-        plt.title(title)
-   
+  
+        cax = ax.imshow(themap, origin='lower', cmap='jet', interpolation='nearest')
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax)
+        cax2 = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(cax, cax=cax2)
+        ax.set_title(title)
         
     def plot_segmentation(self, pfa=5e-2, ax=None):
         """ Plot the 2D segmentation map associated to a PFA

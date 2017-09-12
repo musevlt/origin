@@ -724,44 +724,32 @@ def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1],cube_std.shape[2]))
     # Spatial segmentation
-    if NbArea>1:
-        histO2_area = [] #1D
-        frecO2_area = [] #1D
-        thresO2_area = [] #scalaire        
-        with ProgressBar(NbArea) as bar:
-            for area_ind in range(NbArea):
-                # limits of each spatial zone
-                yset = set_y[area_ind]
-                xset = set_x[area_ind]
-                
-                # Data in this spatio-spectral zone
-                cube_temp = cube_std[:, yset, xset]
-    
-    
-                # greedy PCA on each subcube
-                cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
-                Compute_GreedyPCA( cube_temp, Noise_population,
-                                  threshold_test[area_ind],itermax, userlist)            
-                mapO2[yset,xset]= mO2
-                histO2_area.append(hO2)
-                frecO2_area.append(fO2)
-                thresO2_area.append(tO2)
-                bar.update()
-    elif NbArea ==1 : 
-                # limits of each spatial zone                
-                # Data in this spatio-spectral zone
-                cube_temp = cube_std[:, set_y[0], set_x[0]]    
-                # greedy PCA on each subcube
-                cube_faint[:, set_y[0], set_x[0]], mO2, hO2, fO2, tO2 = \
-                Compute_GreedyPCA( cube_temp, Noise_population,
-                                  threshold_test,itermax, userlist)            
-                mapO2[set_y[0],set_x[0]]= mO2
-                histO2_area = [hO2]
-                frecO2_area = [fO2]
-                thresO2_area = [tO2]        
+    histO2_area = [] #1D
+    frecO2_area = [] #1D
+    thresO2_area = [] #scalaire        
+    with ProgressBar(NbArea) as bar:
+        for area_ind in range(NbArea):
+            # limits of each spatial zone
+            yset = set_y[area_ind]
+            xset = set_x[area_ind]
+            
+            # Data in this spatio-spectral zone
+            cube_temp = cube_std[:, yset, xset]
+
+
+            # greedy PCA on each subcube
+            cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
+            Compute_GreedyPCA( cube_temp, Noise_population,
+                              threshold_test[area_ind],itermax, userlist)            
+            mapO2[yset,xset]= mO2
+            histO2_area.append(hO2)
+            frecO2_area.append(fO2)
+            thresO2_area.append(tO2)
+            bar.update()       
         
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_faint, mapO2, histO2_area, frecO2_area, thresO2_area
+
 
 def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
                       ,itermax, userlist):
