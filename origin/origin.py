@@ -274,8 +274,9 @@ class ORIGIN(object):
                 raise IOError('PSF are not described in the FITS header of the cube')
 
         else:
-            self.param['PSF'] = PSF
             if type(PSF) is str:
+                self.param['PSF'] = PSF
+                
                 cubePSF = Cube(PSF)
                 if cubePSF.shape[1] != cubePSF.shape[2]:
                     raise IOError('PSF must be a square image.')
@@ -1032,8 +1033,9 @@ class ORIGIN(object):
             self.param['threshold_list'] = threshold_list     
             
         self.param['Noise_population'] = Noise_population                
-     
         self.param['itermax'] = itermax
+        self.param['mixing'] = mixing
+        
         self._log_stdout.info('Step 03 - greedy PCA computation')                
         self._log_stdout.info('Compute greedy PCA on each zone')          
         

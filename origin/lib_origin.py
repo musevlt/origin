@@ -1464,6 +1464,7 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
 
     return threshold[::-1]
 
+
 def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
         - Maximum correlation
@@ -2473,6 +2474,43 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     col_seg_label = Column(name='seg_label', data=seg)
     cat_out.add_columns([col_old_id, col_seg_label])
     return cat_out, map_in
+    
+def estimate_spectrum(nb_lines, wave_pix, num_profil, fwhm_profiles, 
+                      Cat_est_line_data, Cat_est_line_var, corr_line):
+    """
+    """
+    if nb_lines == 1:
+        return Cat_est_line_data[0, :], Cat_est_line_var[0, :], corr_line[0,:]
+    else:
+        nz = Cat_est_line_data[0].shape[0]
+        FWHM = np.asarray([fwhm_profiles[i] for i in num_profil], dtype=np.int)
+        min_pix = wave_pix - FWHM
+        max_pix = wave_pix + FWHM + 1
+        d = -np.minimum(0, min_pix[1:] - max_pix[:-1])
+        min_pix[0] = 0
+        min_pix[1:] += d//2
+        max_pix[:-1] -= (d-d//2)
+        max_pix[-1] = nz
+        coeff = np.arange(min_pix[1]-max_pix[0]) / (min_pix[1]-max_pix[0])
+        spe = np.zeros(nz)
+        var = np.zeros(nz)
+        corr = np.zeros(nz)
+        for j in range(nb_lines):
+            
+            # flux coefficient
+            cz = np.zeros(nz)
+            cz[min_pix[j]:max_pix[j]] = 1
+            if j>0:
+                cz[max_pix[j-1]:min_pix[j]] = coeff
+            if j<(nb_lines-1):
+                coeff = np.arange(min_pix[j+1]-max_pix[j]) / (min_pix[j+1]-max_pix[j])
+                cz[max_pix[j]:min_pix[j+1]] = coeff[::-1]
+            
+            spe += cz * Cat_est_line_data[j, :]
+            var += cz**2 * Cat_est_line_var[j, :]
+            corr += cz * corr_line[j, :]
+            
+        return spe, var, corr
 
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
@@ -2501,26 +2539,73 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 
     src = Source.from_data(i, ra, dec, origin)
-    src.add_attr('x', x_centroid, desc='x position in pixel',
+    src.add_attr('SRC_V', src_vers, desc='Source version')
+    src.add_history('Source created with Origin', author)
+    src.add_attr('OR_X', x_centroid, desc='x position in pixel',
                  unit=u.pix, fmt='d')
-    src.add_attr('y', y_centroid, desc='y position in pixel',
+    src.add_attr('OR_Y', y_centroid, desc='y position in pixel',
                  unit=u.pix, fmt='d')
-    src.add_attr('seglabel', seg_label, desc='label in the segmentation map',
+    src.add_attr('OR_SEG', seg_label, desc='label in the segmentation map',
                  fmt='d')
-
+    src.add_attr('OR_V', origin[1], desc='Orig version')
+    # param
+    if 'nbsubcube' in param.keys(): # To be removed
+        src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes') 
+    if 'profiles' in param.keys():
+        src.OR_PROF = (param['profiles'], 'OR input Spectral profiles') 
+    if 'PSF' in param.keys():
+        src.OR_FSF = (param['PSF'], 'OR input FSF cube')
+    if 'expmap' in param.keys():
+        src.OR_EXP = (param['expmap'], 'OR input Exposure map')
+    if 'dct_order' in param.keys():
+        src.OR_DCT = (param['dct_order'], 'OR input DCT order')
+    if 'mixing' in param.keys():
+        src.OR_MIX = (np.int(param['mixing']), 'OR input Mixing option')
+    if 'Noise_population' in param.keys():
+        src.OR_FBG = (param['Noise_population'], 'OR input Fraction of spectra estimated as background')
+    if 'pfa_test' in param.keys():
+        src.OR_PFAT = (param['pfa_test'], 'OR input PFA test')
+    if 'itermax' in param.keys():
+        src.OR_ITMAX = (param['itermax'], 'OR input Maximum number of iterations')
+    if 'threshold_test' in param.keys(): # To be removed
+        src.OR_THV = (param['threshold_test'], 'OR input Threshold')
+    if 'threshold_list' in param.keys():
+        th = param['threshold_list']
+        for i in range(th.shape[0]):
+            src.header['OR_THL%02d'%i] = (th[i], 'OR input Threshold per area')
+    if 'neighboors' in param.keys():
+        src.OR_NG = (param['neighboors'], 'OR input Neighboors')                                 
+    if 'purity' in param.keys():
+        src.OR_PURI = (param['purity'], 'OR input Purity')
+    if 'threshold_option' in param.keys():
+        src.OR_THP = (param['threshold_option'], 'OR input Threshold option')
+    if 'pfa' in param.keys():
+        src.OR_PFA = (param['pfa'], 'OR input PFA')
+    if 'grid_dxy' in param.keys():
+        src.OR_DXY = (param['grid_dxy'], 'OR input Grid Nxy')
+    if 'deltaz' in param.keys():
+        src.OR_DZ = (param['deltaz'], 'OR input Deltaz')
+    if 'pfa_merging' in param.keys():
+        src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
+    
+    # pval
+    for i in range(ThresholdPval.shape[0]):
+        src.header['OR_TH%02d'%i] = (ThresholdPval[i], 'OR ThresholdPval')
+    
+    # WHITE IMAGE
     src.add_white_image(cube)
+    # MUSE CUBE
     src.add_cube(cube, 'MUSE_CUBE')
-    src.add_image(maxmap_, 'MAXMAP')
+    # MAXMAP
+    src.add_image(maxmap_, 'OR_MAXMAP')
+    # Segmentation map
     if seg_label > 0:
         if type(segmap) is str:
             segmap_ = Image(segmap)
         else:
             segmap_ = segmap
-        src.add_image(segmap_, 'SEG_ORIGIN')
-    src.add_attr('SRC_V', src_vers, desc='Source version')
-
-    src.add_history('Source created with Origin', author)
-
+        src.add_image(segmap_, 'OR_SEG')
+    
     w = cube.wave.coord(wave_pix, unit=u.angstrom)
     names = np.array(['%04d'%w[j] for j in range(nb_lines)])
     if np.unique(names).shape != names.shape:
@@ -2534,21 +2619,11 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     else:
         correl_ = correl
         correl_.mask = cube.mask
+    corr_line = []
 
+    # Loop on lines
     for j in range(nb_lines):
-        sp_est = Spectrum(data=Cat_est_line_data[j, :],
-                          wave=cube.wave)
-        ct_est = Spectrum(data=Cat_est_cont_data[j, :],
-                          wave=cube.wave)
-        ksel = np.where(sp_est._data != 0)
-        z1 = ksel[0][0]
-        z2 = ksel[0][-1] + 1
-        # Estimated line
-        src.spectra['LINE_{:s}'.format(names[j])] = sp_est[z1:z2]
-        # Estimated Continu
-        src.spectra['CONT_{:s}'.format(names[j])] = ct_est[z1:z2]
-        # correl
-        src.spectra['CORR_{:s}'.format(names[j])] = correl_[z1:z2, y[j], x[j]]
+        corr_line.append(correl_[:, y[j], x[j]]._data)               
         # FWHM in arcsec of the profile
         profile_num = num_profil[j]
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
@@ -2563,36 +2638,18 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                                         w[j], width=2 * profil_FWHM,
                                         is_sum=True, subtract_off=True)
         src.add_narrow_band_image_lbdaobs(correl_,
-                                        'NB_CORR_{:s}'.format(names[j]),
+                                        'OR_CORR_{:s}'.format(names[j]),
                                         w[j], width=2 * profil_FWHM,
-                                        is_sum=True, subtract_off=True)
-    # header
-    if 'nbsubcube' in param.keys():
-        src.OP_NS = (param['nbsubcube'], 'Orig nb of subcubes')                                  
-    for i in range(ThresholdPval.shape[0]):
-        src.header['OP_TH%02d'%i] = (ThresholdPval[i], 'ThresholdPval')
-    if 'dct_order' in param.keys():
-        src.OP_DCT = (param['dct_order'], 'Orig dct order')
-    if 'Noise_population' in param.keys():
-        src.OP_FBG = (param['Noise_population'], 'Orig fraction of spectra estimated as background')
-    if 'threshold_test' in param.keys():
-        src.OP_THV = (param['threshold_test'], 'Orig threshold')
-    if 'itermax' in param.keys():
-        src.OP_ITMAX = (param['itermax'], 'Orig maximum number of iterations')
-    if 'neighboors' in param.keys():
-        src.OP_NG = (param['neighboors'], 'Orig Neighboors')    
-    if 'purity' in param.keys():
-        src.OP_PURI = (param['purity'], 'Orig purity')
-    if 'threshold_option' in param.keys():
-        src.OP_THP = (param['threshold_option'], 'Orig threshold option')
-    if 'pfa' in param.keys():
-        src.OP_PFA = (param['pfa'], 'Orig pfa')
-    if 'grid_dxy' in param.keys():
-        src.OP_DXY = (param['grid_dxy'], 'Orig Grid Nxy')
-    if 'deltaz' in param.keys():
-        src.OP_DZ = (param['deltaz'], 'Orig deltaz')
-    if 'PSF' in param.keys():
-        src.OP_FSF = (param['PSF'], 'Orig FSF cube')
+                                        is_sum=True, subtract_off=False)
+                                                            
+    sp, var, corr = estimate_spectrum(nb_lines, wave_pix, num_profil,
+                                      fwhm_profiles, Cat_est_line_data,
+                                      Cat_est_line_var, np.asarray(corr_line))
+    src.spectra['ORIGIN'] = Spectrum(data=sp, var=var, wave=cube.wave)
+    src.spectra['OR_CORR'] = Spectrum(data=corr, wave=cube.wave)
+    # TODO Estimated continuum
+    
+    # write source
     src.write('%s/%s-%05d.fits' % (path, name, src.ID))
 
 
@@ -2665,9 +2722,10 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         y_centroid = E['y_centroid'][0]
         seg_label = E['seg_label'][0]
         # Lines of this group
-        wave_pix = E['z']
+        E.sort('z')
+        wave_pix = E['z'].data
         GLR = E['T_GLR']
-        num_profil = E['profile']
+        num_profil = E['profile'].data
         pvalC = E['pvalC']
         # Number of lines in this group
         nb_lines = E['nb_lines'][0]
