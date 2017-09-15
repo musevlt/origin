@@ -491,7 +491,7 @@ class ORIGIN(object):
             freqO2 = None
             
         if os.path.isfile('%s/thresO2.txt'%(folder)):
-            thresO2 = np.loadtxt('%s/thresO2.txt'%(folder))
+            thresO2 = np.loadtxt('%s/thresO2.txt'%(folder), ndmin=1)
             thresO2 = thresO2.tolist()
         else:
             thresO2 = None
@@ -1115,9 +1115,10 @@ class ORIGIN(object):
         # TGLR computing (normalized correlations)           
         if 'expmap' in self.param: 
             var = self.var/self.expmap
+            # inf * 0 = nan
+            var[self.expmap==0] = np.inf
         else:
             var = self.var
-            var[self.expmap==0] = np.inf
 
         if NbSubcube is None:
             correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
@@ -1287,6 +1288,7 @@ class ORIGIN(object):
             raise IOError('Run the step 05 to initialize self.Cat0 catalogs')
         if 'expmap' in self.param: 
             var = self.var * self.expmap
+            var[np.isnan(var)] = np.inf
         else:
             var = self.var
             
