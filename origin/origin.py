@@ -1010,7 +1010,7 @@ class ORIGIN(object):
         self.freqO2 : list(array)
                       For each area, frequency
         self.thresO2 : list
-                       For each area, Threshold value
+                       For each area, threshold value
         """
         self._log_stdout.info('03 - greedy PCA computation:')
         self._log_file.info('03 - greedy PCA computation')  
@@ -1039,9 +1039,7 @@ class ORIGIN(object):
         self.param['itermax'] = itermax
         self.param['mixing'] = mixing
         
-        self._log_stdout.info('Step 03 - greedy PCA computation')                
         self._log_stdout.info('Compute greedy PCA on each zone')          
-        
         faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_area(self.NbAreas, self.cube_std._data,
                                   self.setx, self.sety, 
@@ -1055,8 +1053,7 @@ class ORIGIN(object):
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
                           mask=np.ma.nomask)
         self._log_stdout.info('Save the numbers of iterations used by the' + \
-                              ' testO2 for each spaxel in the dictionary' + \
-                              ' self.mapO2') 
+                              ' testO2 for each spaxel in self.mapO2') 
 
         self.mapO2 = Image(data=mapO2, wcs=self.wcs) 
             
