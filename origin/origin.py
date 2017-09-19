@@ -1168,7 +1168,11 @@ class ORIGIN(object):
                            Pvalue for the test which performs segmentation
                             
         Returns
-        -------                               
+        -------
+        self.ThresholdPval     : [float, float]
+                                 Background and source threshold values  
+        self.mapThresh         : `~mpdaf.obj.Image`
+                                 Threshold map
         self.cube_pval_correl  : `~mpdaf.obj.Cube`
                                  Cube of thresholded p-values associated
                                  to the local max of T_GLR values
@@ -1176,22 +1180,25 @@ class ORIGIN(object):
                     Catalogue of the referent voxels for each group.
                     Columns: x y z ra dec lbda T_GLR profile pvalC
                     Coordinates are in pixels.
+        self.segmentation_map_threshold : `~mpdaf.obj.Image`
+                                          Segmentation map for threshold
         """
         self._log_stdout.info('Step 05 - p-values Thresholding')
         self._log_file.info('Step 05 - p-values Thresholding')   
         
-        self._log_stdout.info('Threshold the Pvalues')
+        if self.cube_local_max is None:
+            raise IOError('Run the step 04 to initialize self.cube_local_max and self.cube_local_min')
+        
         if threshold_option is None:
             self._log_file.info('   computation of threshold with purity =%.1f'%purity)
         elif threshold_option == 'background' :
             self._log_file.info('   computation of threshold with purity =%.1f (background option)'%purity)
         else: 
-            self._log_file.info('   threshold =%.1f '%threshold_option)            
+            self._log_file.info('   threshold =%.1f '%threshold_option)
+            
         self.param['purity'] = purity
         self.param['threshold_option'] = threshold_option
-        if self.cube_local_max is None:
-            raise IOError('Run the step 04 to initialize self.cube_local_max and self.cube_local_min')
-
+        self.param['pfa'] = pfa
 
         self.ThresholdPval, self.Pval_r, self.index_pval, \
         cube_pval_correl, mapThresh, segmap, self.Det_M, self.Det_m \
@@ -1204,11 +1211,8 @@ class ORIGIN(object):
         self._log_stdout.info('Threshold: %.1f (background) %.1f (sources)'%(self.ThresholdPval[0], self.ThresholdPval[1]))
         self._log_stdout.info('Save the threshold map in self.mapThresh')                                          
         self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
-            
         
-        self.param['pfa'] = pfa
-        
-        self._log_stdout.info('Save self.cube_pval_correl')
+        self._log_stdout.info('Save the thresholded p-values associated to the local max of T_GLR values in self.cube_pval_correl')
         self.cube_pval_correl = Cube(data=cube_pval_correl, \
                                      wave=self.wave,
                                      wcs=self.wcs, mask=np.ma.nomask)      
