@@ -1188,7 +1188,7 @@ class ORIGIN(object):
         Parameters
         ----------
         purity : float
-                 fidelity to automatically compute the threshold        
+                 purity to automatically compute the threshold        
         threshold_option : float, 'background' or None
                            float -> it is a manual threshold.
                            string 'background' -> threshold based on background
@@ -1298,7 +1298,7 @@ class ORIGIN(object):
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
             
-        self._log_stdout.info('Step 06 - estimate fidelity')    
+        self._log_stdout.info('Step 06 - estimate purity')    
         # 0 for background and 1 for sources; to know which self.index_pval 
         # is correponding to the pixel (y,x)
         bck_or_src = self.mapThresh.data == self.ThresholdPval[0]

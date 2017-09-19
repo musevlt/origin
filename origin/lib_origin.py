@@ -1482,7 +1482,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     Returns
     -------
     Confidence : float
-                     the threshold associated to the fidelity
+                     the threshold associated to the purity
     PVal_M : array
              the P Value associated to Maximum Correlation local maxima
     PVal_m : array
@@ -2163,9 +2163,9 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
                  x y z T_GLR profile pvalC
     correl     : array
                  Origin Correlation data
-    fidelity_curves     : array
+    purity_curves     : array
                           purity curves related to area
-    fidelity_index      : array
+    purity_index      : array
                           index of purity curves related to area             
     bck_or_src          : array
                           Map to know which area the source is in
@@ -2177,7 +2177,7 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
                        Columns of the Catalogue Cat2:
                        x y z ra dec lbda, 
                        T_GLR profile pvalC residual flux num_line
-                       fidelity
+                       purity
 
 
     Date  : July, 25 2017
@@ -2199,7 +2199,7 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
             fid_tmp = 1
         else:
             fid_ind = (seuil-value>0).tolist().index(True)
-            # interpolation of correl value on fidelity curve
+            # interpolation of correl value on purity curve
             fidel[fid_ind-1]
             x2 = seuil[fid_ind]
             x1 = seuil[fid_ind-1]
