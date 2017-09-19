@@ -1320,17 +1320,22 @@ class ORIGIN(object):
                     Columns: ID x_circle y_circle ra_circle dec_circle
                     x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
                     z ra dec lbda T_GLR profile pvalC residual flux
-                    num_line
+                    num_line purity ID_old seg_label
+        self.segmentation_map_spatspect : `~mpdaf.obj.Image`
+                                          Segmentation map
         """
-        self._log_file.info('07 spatio spectral merging deltaz=%d'%deltaz)
+        self._log_file.info('07 spatio spectral merging deltaz=%d pfa=%d'%(deltaz, pfa))
         self._log_stdout.info('Step 07 - Spectral merging')
         if self.wfields is None:
             fwhm = self.FWHM_PSF
         else:
             fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved
         self.param['deltaz'] = deltaz
+        self.param['pfa_merging'] = pfa
+        
         if self.Cat1 is None:
             raise IOError('Run the step 06 to initialize self.Cat1')
+
         cat = Spatial_Merging_Circle(self.Cat1, fwhm, self.wcs)
         self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
                                            self.segmentation_test.data, \
@@ -1419,8 +1424,7 @@ class ORIGIN(object):
                                               path_src, self.name, self.param,
                                               src_vers, author,
                                               self.path, self.maxmap,
-                                              self.segmentation_map_threshold, 
-#                                              self.segmentation_map_spatspect,                                               
+                                              self.segmentation_map_spatspect,                                               
                                               self.continuum,
                                               self.ThresholdPval, ncpu)                                            
                                               
