@@ -813,21 +813,22 @@ class ORIGIN(object):
 
         Returns
         -------
-        self.var    : array
-                        new cube of variance                 
-        self.cube_std : `~mpdaf.obj.Cube`
-                        standardized data for PCA
-        self.cont_dct : `~mpdaf.obj.Cube`
-                        DCT continuum
+        self.var               : array
+                                 New cube of variance                 
+        self.cube_std          : `~mpdaf.obj.Cube`
+                                 standardized data for PCA
+        self.cont_dct          : `~mpdaf.obj.Cube`
+                                 DCT continuum
+        self.segmentation_test : `~mpdaf.obj.Image`
+                                 2D map where sources and background are
+                                 separated
         """        
-        self.param['dct_order'] = dct_order
-        self._log_file.info('01 - Preprocessing, dct order=%d'%dct_order)
-
         self._log_stdout.info('01 - Preprocessing')
 
         newvar = False
         # exposures map
         if expmap is not None:
+            self._log_file.info('01 - Preprocessing, expmap=None, dct order=%d'%dct_order)
             _expmap = Cube(expmap)._data
             if not np.array_equal(self.cube_raw.shape, _expmap.shape):
                 raise ValueError('cube and expmap with a different shape')
@@ -835,18 +836,18 @@ class ORIGIN(object):
             self.expmap = _expmap
             self.param['expmap'] = expmap
             newvar = True
+        else:
+            self._log_file.info('01 - Preprocessing, expmap=%s, dct order=%d'%(expmap,dct_order))
         
-        self._log_stdout.info('Step 01 - DCT computation')
-        self._log_stdout.info('reweighted data')
-            
+        self._log_stdout.info('Data reweighting')            
         weighted_cube_raw = self.cube_raw * np.sqrt(self.expmap)
             
-        self._log_stdout.info('Compute the DCT residual')
+        self._log_stdout.info('DCT computation')
+        self.param['dct_order'] = dct_order
         faint_dct, cont_dct = dct_residual(weighted_cube_raw, dct_order)
-        
-        
+         
         # compute standardized data
-        self._log_stdout.info('Standard data')
+        self._log_stdout.info('Data standardizing')
         cube_std, var = Compute_Standardized_data(faint_dct, self.expmap,
                                                   self.var, newvar)
         var[np.isnan(var)] = np.inf
@@ -857,14 +858,16 @@ class ORIGIN(object):
         segmentation_test = Compute_Segmentation_test(cont_dct)
         
         if newvar:        
-            self._log_stdout.info('self.var is computed')   
+            self._log_stdout.info('Variance estimation')   
             self.var = var
         
-        self._log_stdout.info('Save the std signal in self.cube_std')        
+        self._log_stdout.info('Std signal saved in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)  
+        self._log_stdout.info('DCT continuum saved in self.cont_dct')
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)
+        self._log_stdout.info('Segmentation map saved in self.segmentation_test')
         self.segmentation_test = Image(data=segmentation_test, 
                                       wcs=self.wcs, mask=np.ma.nomask)        
         self._log_file.info('01 Done')
