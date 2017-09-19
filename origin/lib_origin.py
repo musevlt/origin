@@ -44,7 +44,7 @@ from joblib import Parallel, delayed
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
-from scipy.spatial import KDTree
+from scipy.spatial import KDTree, ConvexHull
 from scipy.sparse.linalg import svds
 from six.moves import range, zip
 
@@ -227,7 +227,7 @@ def Compute_Segmentation_test(STD_in):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))    
     return Segmentation_test
 
-def Segmentation(Segmentation_test, pfa, clean=True):
+def Segmentation(Segmentation_test, pfa, clean=True, mask=None):
     """Generate from a 3D Cube a 2D map where sources and background are
     separated
 
@@ -236,10 +236,13 @@ def Segmentation(Segmentation_test, pfa, clean=True):
     Segmentation_test   : Array
                           Segmentation test computed in Segmentation_test
 
-    pfa                 : Pvalue for the test which performs segmentation
+    pfa                 :   float
+                            Pvalue for the test which performs segmentation
     
     clean               : Bool
                           if thresholding of test is to clean or not  
+    mask                : array
+                          a mask to convolve the sources with                           
 
     Returns
     -------
@@ -255,11 +258,433 @@ def Segmentation(Segmentation_test, pfa, clean=True):
     if clean:
         sources = binary_erosion(sources,border_value=1,iterations=1)
         sources = binary_dilation(sources,iterations=1)
-
+    if mask is not None: 
+        sources = signal.fftconvolve(sources,mask,mode='same')      
+        sources = sources>1e-9         
     # Label
     map_in = measurements.label(sources)[0]
 
     return map_in
+
+
+def area_segmentation_square_fusion(nexpmap, NbSubcube, Ny, Nx):
+    """Function to create non square area based on continuum test. The full 
+    2D image is first segmented in subcube. The area are fused in case they
+    are too small. Thanks to the continuum test, detected sources are 
+    fused with associated area. The convex enveloppe of the sources inside 
+    each area is then done. Finally all the convex enveloppe growth until
+    using all the pixels
+
+    Parameters
+    ----------
+    nexpmap :   2D array
+                the active pixel of the image                                                
+    NbSubcube : integer
+                Number of subcubes for the spatial segmentation    
+    Nx        : integer
+                Number of columns
+    Ny        : integer
+                Number of rows
+
+
+    Returns
+    -------
+    label :     array
+                label of the fused square
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """        
+    logger = logging.getLogger('origin')
+    t0 = time.time()        
+    
+    # square area index
+    inty, intx = Spatial_Segmentation(Nx, Ny, NbSubcube)
+
+    #% FUSION square AREA
+    label = []
+    for numy in range(NbSubcube):
+        for numx in range(NbSubcube):
+            y1,y2,x1,x2 = inty[numy+1],inty[numy],intx[numx],intx[numx+1]            
+            tmp = nexpmap[y1:y2,x1:x2]
+            if np.mean(tmp) != 0 :             
+                labtest = measurements.label(tmp)[0]
+                labtmax = labtest.max()
+
+                for n in range(labtmax):
+                    label_tmp = np.zeros((Ny,Nx))                
+                    label_tmp[y1:y2,x1:x2] = (labtest==(n+1))
+                    label.append(label_tmp)
+    label = np.array(label)                                 
+    if NbSubcube>1:
+        Maxlen = np.sum(nexpmap) / (NbSubcube**2 -1)    
+    else:
+        Maxlen = np.sum(nexpmap)
+    nlabel = label.shape[0]
+    for n in range(nlabel):
+        # if the label is not empty
+        if np.sum(label[n,:,:])>0 :
+            # search for neighboor
+            labdil = label.copy()
+            labdil[n,:,:] = binary_dilation(labdil[n,:,:],iterations=1)
+            test = np.sum(labdil,axis=0)   
+            if test.max()>1:
+                # it can be a corner or a line of bordure so general process is
+                # to check all pixels bordure
+                yset,xset = np.where(test>1)
+                nset = len(yset)
+                for yxn in range(nset):
+                    y = yset[yxn]
+                    x = xset[yxn]                
+                    candidats = np.where(labdil[:,y,x]>0)[0]
+                    # the 2 first detected, then with the rest
+                    if len(candidats)>1:  
+                        for cand_id in range(1,len(candidats)):
+                            cand = candidats[cand_id]
+                            tmp = label[[candidats[0],cand],:,:]             
+                            if np.sum(tmp)<Maxlen:
+                                label[candidats[0],:,:]=np.sum(tmp,axis=0)>0
+                                label[cand,:,:]=0                 
+    
+    # clean empty area         
+    ind = np.sum(label,axis=(1,2))>0
+    label = label[ind,:,:]     
+
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))            
+    return label   
+       
+
+def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
+    """Function to create non square area based on continuum test. Thanks 
+    to the continuum test, detected sources are fused with associated area. 
+    The convex enveloppe of the sources inside 
+    each area is then done. Finally all the convex enveloppe growth until
+    using all the pixels
+
+    Parameters
+    ----------
+    Segmentation_test : array
+                        continuum test
+    label :     array
+                label of fused square generated in
+                area_segmentation_square_fusion          
+    pfa   :     float
+                Pvalue for the test which performs segmentation                                  
+    NbSubcube : integer
+                Number of subcubes for the spatial segmentation    
+    Nx        : integer
+                Number of columns
+    Ny        : integer
+                Number of rows
+
+
+    Returns
+    -------
+    label_out : array
+                label of the fused square and sources
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+
+    logger = logging.getLogger('origin')
+    t0 = time.time()  
+    
+    # convolution mask definition
+    radius=2        
+    dxy = 2 * radius
+    x = np.linspace(-dxy,dxy,1 + (dxy)*2)
+    y = np.linspace(-dxy,dxy,1 + (dxy)*2)
+    xv, yv = np.meshgrid(x, y)   
+    r = np.sqrt(xv**2 + yv**2)
+    disk = (np.abs(r)<=radius) 
+    
+    # compute the sources label
+    labsrc = Segmentation(Segmentation_test, pfa, mask=disk)
+    nlab = labsrc.max()
+    sources = np.zeros((nlab,Ny,Nx))
+    for n in range(1,nlab+1):
+        sources[n-1,:,:] = (labsrc==n)>0
+
+    nlabel = label.shape[0]      
+    
+    # source fusion with area     
+    areasrc = np.concatenate((label,sources),axis=0)
+    
+    # for each fused area search the sources
+    label_out = np.zeros((nlabel,Ny,Nx))
+    for n in range(nlabel):
+        ind = np.delete(np.arange(nlabel),n)
+        ind = np.delete(np.arange(nlab+nlabel),ind)
+        test = np.sum(areasrc[ind,:,:],axis=0)      
+    
+        # it can be a corner or a line of bordure so general process is
+        # to check all pixels bordure
+        if test.max()>1:
+            yset,xset = np.where(test==2)
+            nset = len(yset)
+            for yxn in range(nset):
+                y = yset[yxn]
+                x = xset[yxn]  
+                spec = areasrc[:,y,x]>0
+                if np.sum(spec)>1: 
+                    candidats = np.where(spec)[0]
+                    # the 2 first detected, then with the rest
+                    if len(candidats)>1:  
+                        for cand_id in range(1,len(candidats)):
+                            cand = candidats[cand_id]
+                            tmp = areasrc[[candidats[0],cand],:,:]             
+                            
+                            srcs = areasrc[cand,:,:]             
+                            labs = areasrc[:nlabel,:,:] 
+                            product = labs*srcs[np.newaxis,:,:]
+                            ind = np.argmax(np.sum(product,axis=(1,2)))
+                            if candidats[0] == ind:                    
+                                areasrc[candidats[0],:,:]=np.sum(tmp,axis=0)>0
+                                areasrc[cand,:,:]=0     
+                            else:
+                                areasrc[candidats[0],:,:]*=(1-areasrc[cand,:,:])
+        ind = np.delete(np.arange(nlabel),n)
+        areasrc[ind,:,:] *= (1-areasrc[n,:,:])[np.newaxis,:,:]
+        label_out[n,:,:] = areasrc[candidats[0],:,:]    
+        areasrc[n,:,:] = 0    
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))            
+    return label_out, np.sum(sources,axis=0)
+    
+
+
+def area_segmentation_convex_fusion(label, src):
+    """Function to compute the convex enveloppe of the sources inside 
+    each area is then done. Finally all the convex enveloppe growth until
+    using all the pixels
+
+    Parameters
+    ----------
+    label :     array
+                label containing the fusion of fused squares and sources
+                generated in area_segmentation_sources_fusion
+    src :       array
+                label of estimated sources from segmentation map
+
+    Returns
+    -------
+    label_out : array
+                label of the convex
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    
+    label_fin = []
+    # for each label
+    for lab_n in range(label.shape[0]):
+        
+        # keep only the sources inside the label
+        lab = label[lab_n,:,:]
+        data = src*lab
+        if np.sum(data>0):
+            points = np.array(np.where(data>0)).T
+            
+            y_0 = points[:,0].min()
+            x_0 = points[:,1].min()
+            
+            points[:,0] -= y_0
+            points[:,1] -= x_0
+        
+            sny,snx = points[:,0].max()+1,points[:,1].max()+1
+            # compute the convex enveloppe of a sub part of the label
+            lab_temp = Convexline(points, snx, sny)
+    
+            # in full size
+            label_out = np.zeros((label.shape[1],label.shape[2]))
+            label_out[y_0:y_0+sny,x_0:x_0+snx] = lab_temp
+            label_out*=lab      
+            label_fin.append(label_out)
+        
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))            
+    return np.array(label_fin)
+
+
+def Convexline(points, snx, sny):
+    """Function to compute the convex enveloppe of the sources inside 
+    each area is then done and full the polygone
+
+    Parameters
+    ----------
+    data :      array
+                contain the position of source for one of the label
+    snx,sny:    int,int
+                the effective size of area in the label
+
+    Returns
+    -------
+    lab_out :   array
+                The filled convex enveloppe corresponding the sub label
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+    
+    # convex enveloppe vertices
+    hull = ConvexHull(points)  
+    
+    xs=hull.points[hull.simplices[:,1]]
+    xt=hull.points[hull.simplices[:,0]]
+    
+    sny,snx = points[:,0].max()+1,points[:,1].max()+1
+    tmp = np.zeros((sny,snx)) 
+    
+    # create le line between vertices
+    for n in range(hull.simplices.shape[0]):
+        x0, x1, y0, y1 = xs[n,1], xt[n,1], xs[n,0], xt[n,0]
+        
+        nx = np.abs(x1-x0)
+        ny = np.abs(y1-y0)    
+        if ny>nx: 
+            xa,xb,ya,yb = y0,y1,x0,x1
+        else: 
+            xa,xb,ya,yb = x0,x1,y0,y1        
+        if xa>xb:
+            xb,xa,yb,ya = xa,xb,ya,yb            
+        
+        indx = np.arange(xa,xb,dtype=int)
+        N = len(indx)
+        indy = np.array( ya + (indx-xa)*(yb-ya)/N ,dtype=int)
+    
+        if ny>nx: 
+            tmpx,tmpy = indx,indy
+            indy,indx = tmpx,tmpy    
+        
+        tmp[indy,indx] = 1 
+    
+    radius=1
+    dxy = 2 * radius
+    x = np.linspace(-dxy,dxy,1 + (dxy)*2)
+    y = np.linspace(-dxy,dxy,1 + (dxy)*2)
+    xv, yv = np.meshgrid(x, y)   
+    r = np.sqrt(xv**2 + yv**2)
+    mask = (np.abs(r)<=radius)   
+    
+    # to close the lines
+    conv_lab = signal.fftconvolve(tmp,mask,mode='same')>1e-9 
+    
+    lab_out = conv_lab.copy()
+    for n in range(conv_lab.shape[0]):
+        ind = np.where(conv_lab[n,:]==1)[0]
+        lab_out[n,ind[0]:ind[-1]] = 1
+        
+    return lab_out      
+
+
+def area_growing(label,mask):
+    """Growing and merging of all areas
+
+    Parameters
+    ----------
+    label :     array
+                label containing convex enveloppe of each area
+    mask :      array
+                mask of positive pixels
+
+    Returns
+    -------
+    label_out : array
+                label of the convex envelop grown to the max number of pixels
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    
+    # start by smaller    
+    set_ind = np.argsort(np.sum(label,axis=(1,2)))
+    # closure horizon    
+    niter = 20
+    
+    label_out = label.copy()    
+    nlab = label_out.shape[0]            
+    while True:          
+        for n in set_ind:
+            cu_lab = label_out[n,:,:]
+            ind = np.delete(np.arange(nlab),n)
+            ot_lab = label_out[ind,:,:]        
+            border = (1- (np.sum(ot_lab,axis=0)>0))*mask
+            # closure in all case + 1 dilation
+            cu_lab = binary_dilation(cu_lab,iterations=niter+1)
+            cu_lab = binary_erosion(cu_lab,border_value=1,iterations=niter)    
+            label_out[n,:,:] = cu_lab*border    
+        if np.sum(label_out) == np.sum(mask):
+            break
+
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))   
+     
+    return label_out
+
+
+def area_segmentation_final(label, minsize):
+    """Merging of small areas and give index
+
+    Parameters
+    ----------
+    label :   array
+              label containing convex enveloppe of each area
+    minsize : int
+              Minimum size in pixels^2 for a label
+              if label is less than minsize the label is merged with the 
+              first found one ---- To Improve 
+
+    Returns
+    -------
+    sety,setx : array
+                list of index of each label
+
+    Date  : Sept,13 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+    logger = logging.getLogger('origin')
+    t0 = time.time()
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))   
+    # if an area is too small
+    tmp = np.zeros(label.shape)    
+    while True:
+        sizelab = np.sum(label,axis=(1,2)) 
+        lab = np.where(sizelab<minsize)[0]
+        # if too small
+        if np.sum(lab)>0:        
+            for n in lab:
+                # find the neighboors
+                labdil = label.copy()
+                labdil[n,:,:] = binary_dilation(labdil[n,:,:],iterations=1)
+                test = np.sum(labdil,axis=0)   
+                if test.max()>1:   
+                    yset,xset = np.where(test>1)                    
+                    candidats = np.where(labdil[:,yset[0],xset[0]]>0)[0]
+                    label[candidats[0],:,:] = np.sum(label[candidats,:,:],axis=0)
+                    label[candidats[1:],:,:] = 0
+                    tmp[candidats[1:],:,:] = 0                
+                                        
+            # clean empty area         
+            ind = np.sum(label,axis=(1,2))>0
+            label = label[ind,:,:] 
+            tmp = tmp[ind,:,:] 
+        else:
+            break
+        if np.sum(label-tmp)==0:
+            break
+        else:
+            tmp = label.copy() 
+        
+    # create index list
+    sety = []
+    setx = []    
+    for lab in label:
+        _sety,_setx = np.where(lab>0)
+        sety.append(_sety)
+        setx.append(_setx)        
+    return sety, setx
 
 def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
                               Noise_population, threshold_test,itermax,
@@ -297,42 +722,46 @@ def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
     t0 = time.time()
 #    cube_faint = np.zeros(cube_std.shape)
     cube_faint = cube_std.copy()
-    mapO2_area = [] #2D
-    mapO2_full = np.zeros((cube_std.shape[1],cube_std.shape[2]))
-    histO2_area = [] #1D
-    frecO2_area = [] #1D
-    thresO2_area = [] #scalaire
-
+    mapO2 = np.zeros((cube_std.shape[1],cube_std.shape[2]))
     # Spatial segmentation
-    with ProgressBar(NbArea) as bar:
-        for area_ind in range(NbArea):
-            # limits of each spatial zone
-            yset = set_y[area_ind]
-            xset = set_x[area_ind]
-            
-            # Data in this spatio-spectral zone
-            cube_temp = cube_std[:, yset, xset]
-
-
-            # greedy PCA on each subcube
-            cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
-            Compute_GreedyPCA( cube_temp, Noise_population,
-                              threshold_test[area_ind],itermax, userlist)            
-            mapO2_full[yset,xset]= mO2
-            yM = yset.max()
-            ym = yset.min()
-            xM = xset.max()
-            xm = xset.min()            
-            tmp = np.zeros((1+yM-ym,1+xM-xm))
-            tmp[yset-ym,xset-xm] = mO2
-            mapO2_area.append(tmp)
-            histO2_area.append(hO2)
-            frecO2_area.append(fO2)
-            thresO2_area.append(tO2)
-            bar.update()
-
+    if NbArea>1:
+        histO2_area = [] #1D
+        frecO2_area = [] #1D
+        thresO2_area = [] #scalaire        
+        with ProgressBar(NbArea) as bar:
+            for area_ind in range(NbArea):
+                # limits of each spatial zone
+                yset = set_y[area_ind]
+                xset = set_x[area_ind]
+                
+                # Data in this spatio-spectral zone
+                cube_temp = cube_std[:, yset, xset]
+    
+    
+                # greedy PCA on each subcube
+                cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
+                Compute_GreedyPCA( cube_temp, Noise_population,
+                                  threshold_test[area_ind],itermax, userlist)            
+                mapO2[yset,xset]= mO2
+                histO2_area.append(hO2)
+                frecO2_area.append(fO2)
+                thresO2_area.append(tO2)
+                bar.update()
+    elif NbArea ==1 : 
+                # limits of each spatial zone                
+                # Data in this spatio-spectral zone
+                cube_temp = cube_std[:, set_y[0], set_x[0]]    
+                # greedy PCA on each subcube
+                cube_faint[:, set_y[0], set_x[0]], mO2, hO2, fO2, tO2 = \
+                Compute_GreedyPCA( cube_temp, Noise_population,
+                                  threshold_test,itermax, userlist)            
+                mapO2[set_y[0],set_x[0]]= mO2
+                histO2_area = [hO2]
+                frecO2_area = [fO2]
+                thresO2_area = [tO2]        
+        
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, mapO2_area, histO2_area, frecO2_area, thresO2_area, mapO2_full
+    return cube_faint, mapO2, histO2_area, frecO2_area, thresO2_area
 
 def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
                       ,itermax, userlist):
@@ -896,8 +1325,11 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     """
 
     # Label
-    map_in = Segmentation(segmentation_test, pfa, clean=False)
-
+#    map_in = Segmentation(segmentation_test, pfa, clean=False)
+    gamma =  stats.chi2.ppf(1-pfa, 1)
+    map_in = (segmentation_test>gamma)*1.
+    yy,xx = np.where(segmentation_test**2 == 0)
+    map_in[yy,xx] = -1
     # initialization
     cube_pval_correl = np.zeros(cube_local_max.shape)
     mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))
@@ -914,7 +1346,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     bck_y, bck_x = np.where(map_in==0)
     ind_y.append(bck_y)
     ind_x.append(bck_x)
-    src_y, src_x = np.where(map_in>0)
+    src_y, src_x = np.where(map_in==1)
     ind_y.append(src_y)
     ind_x.append(src_x)
 
@@ -994,12 +1426,7 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
     Lc_M = cube_local_max_2[:,ind]
     Lc_M = Lc_M[np.nonzero(Lc_M)]
     Lc_m = cube_local_min_2[:,ind]
-    Lc_m = Lc_m[np.nonzero(Lc_m)]
-    mini = np.minimum( Lc_m.min() , Lc_M.min() )
-    maxi = np.maximum( Lc_m.max() , Lc_M.max() )   
-    
-    dx = (maxi-mini)/N
-    index = np.arange(mini,maxi,dx)         
+    Lc_m = Lc_m[np.nonzero(Lc_m)]      
     
     # initialization
     threshold = []    
@@ -1022,6 +1449,13 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
     
         datamax = np.hstack((datamax,Maxlist))
         datamin = np.hstack((datamin,Minlist))    
+
+
+        mini = np.minimum( datamin.min() , datamax.min() )
+        maxi = np.maximum( datamin.max() , datamax.max() )   
+        
+        dx = (maxi-mini)/N
+        index = np.arange(mini,maxi,dx)    
     
         PVal_M = [np.mean( (datamax>seuil) ) for seuil in index ]
         PVal_m = [np.mean( (datamin>seuil) ) for seuil in index ]
@@ -1041,6 +1475,7 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
         threshold.append( (purity-y1)/tan_theta + x1)
 
     return threshold[::-1]
+
 def Compute_threshold(purity, cube_local_max, cube_local_min):
     """Function to compute the threshold from the local maxima of:
         - Maximum correlation
@@ -1074,15 +1509,12 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     """
     N = 100
 
-    Lc_max = cube_local_max
-    Lc_min = cube_local_min
+    Lc_M = cube_local_max
+    Lc_m = cube_local_min
 
-    ind = (Lc_max)==0
-    Lc_M = Lc_max[~ind]
-
-    ind = (Lc_min)==0
-    Lc_m = Lc_min[~ind]
-
+    Lc_M = Lc_M[np.nonzero(Lc_M)]
+    Lc_m = Lc_m[np.nonzero(Lc_m)]
+    
     mini = np.minimum( Lc_m.min() , Lc_M.min() )
     maxi = np.maximum( Lc_m.max() , Lc_M.max() )
 
@@ -1097,21 +1529,19 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
 
     Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
 
-    PVal_r = [(1-np.mean(Lc_m>=seuil)/np.mean(Lc_M>=seuil))>=purity for seuil in index]
-
-    fid_ind = PVal_r.index(True)
-
+    fid_ind = np.where(Pval_r>=purity)[0][0] 
+  
     x2 = index[fid_ind]
     x1 = index[fid_ind-1]
     y2 = Pval_r[fid_ind]
     y1 = Pval_r[fid_ind-1]
-
+        
     b = y2-y1
     a = x2-x1
 
     tan_theta = b/a
     threshold = (purity-y1)/tan_theta + x1
-
+    
     return threshold, Pval_r, index, Det_M, Det_m
 
 

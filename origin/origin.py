@@ -51,7 +51,13 @@ from .lib_origin import Spatial_Segmentation, \
     Compute_threshold_segmentation, \
     Purity_Estimation, \
     thresholdVsPFA_purity, \
-    __version__
+    area_segmentation_square_fusion, \
+    area_segmentation_sources_fusion, \
+    area_segmentation_convex_fusion, \
+    area_growing, \
+    area_segmentation_final, \
+    __version__    
+     
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -157,7 +163,7 @@ class ORIGIN(object):
                  cube_pval_correl, cube_local_max, cont_dct, segmentation_test,
                  segmentation_map_threshold, segmentation_map_spatspect,
                  cube_local_min, cube_correl_min, continuum, mapThresh, setx, 
-                 sety, mapO2_full):
+                 sety):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -312,7 +318,6 @@ class ORIGIN(object):
         self.histO2 = histO2
         self.freqO2 = freqO2
         self.thresO2 = thresO2
-        self.mapO2_full = mapO2_full
         # step4
         self.cube_correl = cube_correl
         self.cube_correl_min = cube_correl_min        
@@ -380,7 +385,7 @@ class ORIGIN(object):
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
                    cube_correl_min=None, continuum=None, mapThresh=None,
-                   setx=None, sety=None, mapO2_full=None)
+                   setx=None, sety=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -466,15 +471,6 @@ class ORIGIN(object):
         else:
             cube_faint = None
             
-        if os.path.isfile('%s/mapO2_0.fits'%folder):
-            mapO2 = []
-            i = 0
-            while(os.path.isfile('%s/mapO2_%d.fits'%(folder,i))):   
-                mapO2.append(Image('%s/mapO2_%d.fits'%(folder,i)))
-                i = i + 1                
-        else:
-            mapO2 = None
-            
         if os.path.isfile('%s/histO2_0.txt'%folder):
             histO2 = []
             i = 0
@@ -495,13 +491,14 @@ class ORIGIN(object):
             
         if os.path.isfile('%s/thresO2.txt'%(folder)):
             thresO2 = np.loadtxt('%s/thresO2.txt'%(folder))
+            thresO2 = thresO2.tolist()
         else:
             thresO2 = None
             
-        if os.path.isfile('%s/mapO2_full.fits'%folder):
-            mapO2_full = Cube('%s/mapO2_full.fits'%folder)
+        if os.path.isfile('%s/mapO2.fits'%folder):
+            mapO2 = Cube('%s/mapO2.fits'%folder)
         else:
-            mapO2_full = None            
+            mapO2 = None            
             
         # step4
         if os.path.isfile('%s/cube_correl.fits'%folder):
@@ -630,7 +627,7 @@ class ORIGIN(object):
                 
         return cls(path=path,  name=name, filename=param['cubename'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   cube_std=cube_std, var=var, mapO2_full=mapO2_full,
+                   cube_std=cube_std, var=var,
                    cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
                    freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
                    maxmap=maxmap, NbAreas=NbAreas, cube_profile=cube_profile, 
@@ -725,15 +722,16 @@ class ORIGIN(object):
         if self.freqO2 is not None:
             for i in range(self.NbAreas):
                 np.savetxt('%s/freqO2_%d.txt'%(path2, i), self.freqO2[i])           
+                
+                # LAURE HELP
+                
         if self.thresO2 is not None:
-            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
-        if self.mapO2 is not None:
-            for i in range(self.NbAreas):
-                self.mapO2[i].write('%s/mapO2_%d.fits'%(path2, i))
+            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)                                            
+                
         if self.cube_faint is not None:
             self.cube_faint.write('%s/cube_faint.fits'%path2)
-        if self.mapO2_full is not None:
-            self.mapO2_full.write('%s/mapO2_full.fits'%path2)            
+        if self.mapO2 is not None:
+            self.mapO2.write('%s/mapO2.fits'%path2)            
 
         # step4
         if self.cube_correl is not None:
@@ -875,43 +873,84 @@ class ORIGIN(object):
         self._log_file.info('01 Done')
 
 # become step 02
-    def step02_areas(self, area_option=None):
+    def step02_areas(self,  pfa=.2, Size=120, minsize=None):
+        """ Creation of automatic area         
         
-        self.inty, self.intx = Spatial_Segmentation(self.Nx, self.Ny, 2)        
+        Parameters
+        ----------
+        pfa      :  float
+                    PFA of the segmentation test to estimates sources with
+                    strong continuum
+        Size   :    int
+                    Lenght in pixel of the side of typical square wanted                        
+                        enough big area to satisfy the PCA
+        minsize :   int
+                      Minimum size in pixels^2 for a label
+                      if label is less than minsize the label is merged with  
+                      the first found one ---- To Improve 
+                            
+
+        Returns
+        -------
+     
+        self.NbAreas    :   int
+                            number of areas
+        self.sety : list
+                    list of y index for all areas
+        self.setx : list
+                    list of x index for all areas                    
+        self.areas : `~mpdaf.obj.Image`
+                     The map of areas
+        """           
+        self._log_stdout.info('02 - Areas Creation:')
+        self._log_file.info('02 - Areas Creation')  
         
-        setx = []
-        sety = []
+        if self.segmentation_test is None:
+            raise IOError('Run the step 01 to initialize self.segmentation_test')
+            
+        # nexpmap 3D to 2D 
+        nexpmap = np.zeros((self.Ny,self.Nx))
+        nexpmap[np.sum(self.expmap,axis=0)>0]=1        
         
-        Setx1 = np.arange(self.intx[0],self.intx[1])
-        Setx2 = np.arange(self.intx[1],self.intx[2])
+        self._log_file.info('   - pfa of the test=%0.2f'%pfa)            
+        self.param['pfa_areas'] = pfa                           
         
-        Sety2 = np.arange(self.inty[2],self.inty[1])
-        Sety1 = np.arange(self.inty[1],self.inty[0])
+        NbSubcube = 1+int( self.Nx*self.Ny / (Size**2) )
         
-        xset11 = np.repeat(Setx1[:,np.newaxis],len(Sety1),axis=1)
-        xset12 = np.repeat(Setx2[:,np.newaxis],len(Sety1),axis=1)
-        xset21 = np.repeat(Setx1[:,np.newaxis],len(Sety2),axis=1)
-        xset22 = np.repeat(Setx2[:,np.newaxis],len(Sety2),axis=1)
+        if NbSubcube > 1:
         
-        yset11 = np.repeat(Sety1[:,np.newaxis],len(Setx1),axis=1)
-        yset12 = np.repeat(Sety1[:,np.newaxis],len(Setx2),axis=1)
-        yset21 = np.repeat(Sety2[:,np.newaxis],len(Setx1),axis=1)
-        yset22 = np.repeat(Sety2[:,np.newaxis],len(Setx2),axis=1)
-                
-        setx.append(np.ravel(xset11.T))
-        setx.append(np.ravel(xset12.T))
-        setx.append(np.ravel(xset21.T))
-        setx.append(np.ravel(xset22.T))
-        
-        sety.append(np.ravel(yset11))
-        sety.append(np.ravel(yset12))
-        sety.append(np.ravel(yset21))
-        sety.append(np.ravel(yset22)) 
-        
+            self._log_file.info('   - First segmentation of %d^2 square'%NbSubcube)
+            self._log_file.info('   - side size %d pixels'%Size)                
+            self._log_stdout.info('Squares segmentation and fusion') 
+            square_cut_fus = area_segmentation_square_fusion(nexpmap, \
+                                                NbSubcube, self.Ny, self.Nx)
+            self._log_stdout.info('Sources fusion')         
+            square_src_fus, src = \
+            area_segmentation_sources_fusion(self.segmentation_test.data, \
+                                             square_cut_fus, pfa, \
+                                             self.Ny, self.Nx)        
+            self._log_stdout.info('Convex envelope')                 
+            convex_lab = area_segmentation_convex_fusion(square_src_fus,src)
+            self._log_stdout.info('Areas dilation')                 
+            Grown_label = area_growing(convex_lab, nexpmap)        
+            
+            if minsize is None:
+                minsize = int(self.Ny*self.Nx/(NbSubcube**2))
+            sety,setx = area_segmentation_final(Grown_label, minsize)
+        elif NbSubcube ==1:
+            sety = []
+            setx = []
+            _sety,_setx = np.where(nexpmap>0)    
+            sety.append(_sety)
+            setx.append(_setx)            
+            
         self.NbAreas = len(sety)
+        self._log_file.info('   - %d areas generated'%self.NbAreas)        
         self.param['nbareas'] = self.NbAreas
         self.sety = sety
         self.setx = setx
+        
+        self._log_file.info('02 Done') 
         
 # become step 03 
     def step03_compute_greedy_PCA(self, mixing=False,
@@ -1002,7 +1041,7 @@ class ORIGIN(object):
         self._log_stdout.info('Step 03 - greedy PCA computation')                
         self._log_stdout.info('Compute greedy PCA on each zone')          
         
-        faint, mapO2, self.histO2, self.freqO2, self.thresO2, mapO2_full = \
+        faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_area(self.NbAreas, self.cube_std._data,
                                   self.setx, self.sety, 
                                   Noise_population, pfa_test,itermax, userlist)
@@ -1018,10 +1057,7 @@ class ORIGIN(object):
                               ' testO2 for each spaxel in the dictionary' + \
                               ' self.mapO2') 
 
-        self.mapO2 = []
-        for area in range(self.NbAreas):
-            self.mapO2.append( Image(data=mapO2[area], wcs=self.wcs) )   
-        self.mapO2_full = Image(data=mapO2_full, wcs=self.wcs) 
+        self.mapO2 = Image(data=mapO2, wcs=self.wcs) 
             
         self._log_file.info('03 Done')              
 
@@ -1535,8 +1571,8 @@ class ORIGIN(object):
             raise IOError('Run the step 01 to initialize self.cube_std')         
             
         if ax is None:
-            ax = plt.gca()
-
+            ax = plt.gca()        
+    
         bins = self.freqO2[i]
         hist = self.histO2[i]
         thre = self.thresO2[i]
@@ -1565,12 +1601,14 @@ class ORIGIN(object):
         ax.set_title('zone %d - threshold %f' %(i,thre))        
         
     def plot_mapPCA(self, area=None, ax=None, iteration=None):
-        """ Plot the histogram and the threshold for the starting point of the PCA
+        """ Plot at a given iteration (or at the end) the number of times
+        a spaxel got cleaned byt the PCA
         
         Parameters
         ----------
         area: integer in [0, NbAreas[
                 if None draw the full map for all areas
+        iteration: a specific iteration
         ax : matplotlib.Axes
                 the Axes instance in which the image is drawn
         iteration : Display the nuisance/bacground pixels at itartion k
@@ -1580,26 +1618,29 @@ class ORIGIN(object):
             raise IOError('Run the step 03 to initialize self.mapO2')
 
         if area is None:
-            themap = self.mapO2_full
+            themap = self.mapO2.data
             title = 'Full map'
         else:
-            themap = self.mapO2
+            y1 = self.sety[area].min()
+            y2 = self.sety[area].max()            
+            x1 = self.setx[area].min()
+            x2 = self.setx[area].max()                        
+            themap = np.zeros((1+y2-y1,1+x2-x1))
+            themap[self.sety[area]-y1,self.setx[area]-x1] = \
+            self.mapO2.data[self.sety[area],self.setx[area]]
             title = 'zone %d' %area
             
         if ax is None:
             ax = plt.gca()
     
         if iteration is None:
-            mapO2 = themap[area].data
+            mapO2 = themap
         else:
-            mapO2 = themap[area].data>iteration
+            mapO2 = themap>iteration
             
-        cax = ax.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
-        divider = make_axes_locatable(ax)
-        cax2 = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(cax, cax=cax2)
-        ax.set_title(title)        
+        ax.imshow(mapO2,origin='lower',cmap='jet',interpolation='nearest')
+        plt.title(title)
+   
         
     def plot_segmentation(self, pfa=5e-2, ax=None):
         """ Plot the 2D segmentation map associated to a PFA
@@ -1626,7 +1667,7 @@ class ORIGIN(object):
         ax.imshow(map_in, origin='lower', cmap='jet', interpolation='nearest')
         ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
 
-    def plot_thresholdVsPFA_step05(self, purity=.9, 
+    def plot_thresholdVsPFA_background(self, purity=.9, 
                                    pfaset=np.linspace(1e-3,0.5,41), ax=None):
         """Draw threshold of local maxima as a function of the segmentation
         map using PFA to create source/background mask of step05.
@@ -1649,7 +1690,7 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()  
         
-        ax.plot(pfaset,threshold)      
+        ax.plot(pfaset,threshold,'-o')              
         ax.set_xlabel('PFA')
         ax.set_ylabel('Threshold')        
         ax.set_title('Purity %f' %purity)
