@@ -132,9 +132,6 @@ class ORIGIN(object):
                              Cube of thresholded p-values associated to the
                              local maxima of T_GLR values. 
                              Result of step04_compute_TGLR.                                                          
-        cube_correl_min    : `~mpdaf.obj.Cube`
-                             Cube of T_GLR values. Result of
-                             step04_compute_TGLR. From Min correlations                            
         cube_local_max     : `~mpdaf.obj.Cube`
                              Cube of Local maxima of T_GLR values. Result of                             
                              step04_compute_TGLR. From Max correlations
@@ -162,8 +159,7 @@ class ORIGIN(object):
                  Cat1, spectra, Cat2, param, cube_std, var, expmap,
                  cube_pval_correl, cube_local_max, cont_dct, segmentation_test,
                  segmentation_map_threshold, segmentation_map_spatspect,
-                 cube_local_min, cube_correl_min, continuum, mapThresh, setx, 
-                 sety):
+                 cube_local_min, continuum, mapThresh, setx, sety):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -321,7 +317,6 @@ class ORIGIN(object):
         self.mapO2 = mapO2
         # step4
         self.cube_correl = cube_correl
-        self.cube_correl_min = cube_correl_min        
         self.cube_local_max = cube_local_max     
         self.cube_local_min = cube_local_min             
         self.cube_profile = cube_profile
@@ -385,7 +380,7 @@ class ORIGIN(object):
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
-                   cube_correl_min=None, continuum=None, mapThresh=None,
+                   continuum=None, mapThresh=None,
                    setx=None, sety=None)
         
     @classmethod
@@ -506,10 +501,6 @@ class ORIGIN(object):
             cube_correl = Cube('%s/cube_correl.fits'%folder)
         else:
             cube_correl = None
-        if os.path.isfile('%s/cube_correl_min.fits'%folder):
-            cube_correl_min = Cube('%s/cube_correl_min.fits'%folder)
-        else:
-            cube_correl_min = None            
         if os.path.isfile('%s/cube_local_max.fits'%folder):
             cube_local_max = Cube('%s/cube_local_max.fits'%folder)
         else:
@@ -641,8 +632,7 @@ class ORIGIN(object):
                    segmentation_test=segmentation_test,
                    segmentation_map_threshold=segmentation_map_threshold,
                    segmentation_map_spatspect=segmentation_map_spatspect,
-                   cube_local_min=cube_local_min, 
-                   cube_correl_min=cube_correl_min, continuum=continuum,
+                   cube_local_min=cube_local_min, continuum=continuum,
                    mapThresh=mapThresh, setx=setx, sety=sety)
                    
     def write(self, path=None, overwrite=False):
@@ -733,8 +723,6 @@ class ORIGIN(object):
         # step4
         if self.cube_correl is not None:
             self.cube_correl.write('%s/cube_correl.fits'%path2)
-        if self.cube_correl_min is not None:
-            self.cube_correl_min.write('%s/cube_correl_min.fits'%path2)            
         if self.cube_profile is not None:
             self.cube_profile.write('%s/cube_profile.fits'%path2)
         if self.maxmap is not None:
@@ -1135,9 +1123,6 @@ class ORIGIN(object):
         correl[mask] = 0
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
-        
-        self.cube_correl_min = Cube(data=cm, wave=self.wave, wcs=self.wcs,
-                      mask=np.ma.nomask)  
                       
         self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         profile[mask] = 0       
@@ -1149,9 +1134,7 @@ class ORIGIN(object):
         self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)               
                        
         self._log_stdout.info('Compute p-values of local maximum of correlation values')
-        cube_local_max, cube_local_min = Compute_local_max_zone(
-                                                    self.cube_correl._data,
-                                                    self.cube_correl_min._data,
+        cube_local_max, cube_local_min = Compute_local_max_zone(correl, cm,
                                                     self.expmap==0,
                                                     intx, inty, NbSubcube,
                                                     neighboors)
