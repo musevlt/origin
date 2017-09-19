@@ -1248,7 +1248,7 @@ class ORIGIN(object):
         self.Cat1    : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns: x y z ra dec lbda T_GLR profile pvalC
-                                residual flux num_line
+                                residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         self.continuum : list of `~mpdaf.obj.Spectrum`
@@ -1272,7 +1272,7 @@ class ORIGIN(object):
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
             
-        self._log_stdout.info('Step 06 - estimate purity')    
+        self._log_stdout.info('Purity estimation')    
         # 0 for background and 1 for sources; to know which self.index_pval 
         # is correponding to the pixel (y,x)
         bck_or_src = self.mapThresh.data == self.ThresholdPval[0]
@@ -1282,8 +1282,8 @@ class ORIGIN(object):
                    
         
         self._log_stdout.info('Save the updated catalogue in self.Cat1 (%d lines)'%len(self.Cat1))
+        
         self.spectra = [] 
-   
         for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
             spe = Spectrum(data=data, var=vari, wave=self.wave,
                            mask=np.ma.nomask)
@@ -1294,9 +1294,9 @@ class ORIGIN(object):
         for data, vari in zip(Cat_est_cnt_T, Cat_est_line_var_T): 
             cnt = Spectrum(data=data, var=vari, wave=self.wave,
                            mask=np.ma.nomask)
-            self.continuum.append(cnt)         
-            
+            self.continuum.append(cnt)          
         self._log_stdout.info('Save the estimated continuum of each line in self.continuum, CAUTION: rough estimate!')
+        
         self._log_file.info('06 Done')       
 
     def step07_spatiospectral_merging(self, deltaz=20, pfa=0.05):
