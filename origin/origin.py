@@ -1060,8 +1060,7 @@ class ORIGIN(object):
         self._log_file.info('03 Done')              
 
 
-# become 04
-    def step04_compute_TGLR(self, NbSubcube=None, neighboors=26):
+    def step04_compute_TGLR(self, NbSubcube=1, neighboors=26):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
@@ -1077,18 +1076,14 @@ class ORIGIN(object):
           to the T_GLR values divided by twice the pvalues associated to the
           number of thresholded p-values of the correlations per spectral
           channel.
-
-        Note
-        ----
-        area       :    If NbSubcube is given as a parameter 
-                        the correlation and local maximas and minimas are 
-                        performed on smaller subcube and combined after. 
-                        Useful to avoid swapp             
           
         Parameters
         ----------                    
         NbSubcube   :   integer
                         Number of sub-cubes for the spatial segmentation
+                        If NbSubcube>1 the correlation and local maximas and
+                        minimas are performed on smaller subcube and combined
+                        after. Useful to avoid swapp
         neighboors  :   integer
                         Connectivity of contiguous voxels                                                       
                                 
@@ -1108,9 +1103,12 @@ class ORIGIN(object):
         """
         self._log_file.info('04 GLR test')
         self._log_stdout.info('Step 04 - GLR test')
+        
         if self.cube_faint is None:
-            raise IOError('Run the step 02 to initialize self.cube_faint')
+            raise IOError('Run the step 03 to initialize self.cube_faint')
+            
         self.param['neighboors'] = neighboors
+        self.param['NbSubcube'] = NbSubcube
 
         # TGLR computing (normalized correlations)           
         if 'expmap' in self.param: 
@@ -1119,36 +1117,29 @@ class ORIGIN(object):
             var[self.expmap==0] = np.inf
         else:
             var = self.var
-
-        if NbSubcube is None:
+            
+        self._log_stdout.info('Correlation')
+        inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
+        if NbSubcube == 1:
             correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
                                             var, self.PSF, self.wfields,
                                                self.profiles)  
-            NbSubcube = 1
-            inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
         else:              
-            self._log_stdout.info('Spatial segmentation')
-            self._log_file.info('Spatial segmentation')
-            inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)            
-            self._log_stdout.info('segmented Correlation')
-            self._log_file.info('segmented Correlation')            
             correl, profile, cm = Correlation_GLR_test_zone( \
                     self.cube_faint._data, var, self.PSF, self.wfields,
                     self.profiles, intx, inty, NbSubcube)  
                                                                          
         
         self._log_stdout.info('Save the TGLR value in self.cube_correl')
-        
         mask = (self.expmap == 0)        
-        
         correl[mask] = 0
-        
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
-        self.cube_correl_min = Cube(data=cm, wave=self.wave, wcs=self.wcs,
-                      mask=np.ma.nomask)        
-        self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         
+        self.cube_correl_min = Cube(data=cm, wave=self.wave, wcs=self.wcs,
+                      mask=np.ma.nomask)  
+                      
+        self._log_stdout.info('Save the number of profile associated to the TGLR in self.cube_profile')
         profile[mask] = 0       
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
@@ -1157,11 +1148,7 @@ class ORIGIN(object):
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)               
                        
-        self._log_file.info('04 - Correlation done')
-
-        self._log_stdout.info('Step 04 - Local maximum and p-values computation')
         self._log_stdout.info('Compute p-values of local maximum of correlation values')
-
         cube_local_max, cube_local_min = Compute_local_max_zone(
                                                     self.cube_correl._data,
                                                     self.cube_correl_min._data,

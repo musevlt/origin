@@ -2589,8 +2589,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
     
     # pval
-    for i in range(ThresholdPval.shape[0]):
-        src.header['OR_TH%02d'%i] = (ThresholdPval[i], 'OR ThresholdPval')
+    src.header['OR_THB'%i] = (ThresholdPval[0], 'OR Background threshold')
+    src.header['OR_THS'%i] = (ThresholdPval[0], 'OR Source threshold')
     
     # WHITE IMAGE
     src.add_white_image(cube)
