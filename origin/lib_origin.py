@@ -653,7 +653,7 @@ def area_segmentation_final(label, minsize):
         sizelab = np.sum(label,axis=(1,2)) 
         lab = np.where(sizelab<minsize)[0]
         # if too small
-        if np.sum(lab)>0:        
+        if np.sum(lab)>-1:        
             for n in lab:
                 # find the neighboors
                 labdil = label.copy()
