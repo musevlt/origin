@@ -2549,12 +2549,18 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                  fmt='d')
     src.add_attr('OR_V', origin[1], desc='Orig version')
     # param
-    if 'nbsubcube' in param.keys(): # To be removed
-        src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes') 
     if 'profiles' in param.keys():
         src.OR_PROF = (param['profiles'], 'OR input Spectral profiles') 
     if 'PSF' in param.keys():
         src.OR_FSF = (param['PSF'], 'OR input FSF cube')
+    if 'pfa_areas' in param.keys():
+        src.OR_PFAA = (param['pfa_areas'], 'OR input PFA uses to create the area map') 
+    if 'size_areas' in param.keys():
+        src.OR_SIZA = (param['size_areas'], 'OR input Side size in pixels') 
+    if 'minsize_areas' in param.keys():
+        src.OR_MSIZA = (param['minsize_areas'], 'OR input Minimum area size in pixels') 
+    if 'nbareas' in param.keys():
+        src.OR_NA = (param['nbareas'], 'OR Nb of areas') 
     if 'expmap' in param.keys():
         src.OR_EXP = (param['expmap'], 'OR input Exposure map')
     if 'dct_order' in param.keys():
@@ -2574,7 +2580,9 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         for i in range(th.shape[0]):
             src.header['OR_THL%02d'%i] = (th[i], 'OR input Threshold per area')
     if 'neighboors' in param.keys():
-        src.OR_NG = (param['neighboors'], 'OR input Neighboors')                                 
+        src.OR_NG = (param['neighboors'], 'OR input Neighboors')          
+    if 'nbsubcube' in param.keys():
+        src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes for the spatial segmentation')                        
     if 'purity' in param.keys():
         src.OR_PURI = (param['purity'], 'OR input Purity')
     if 'threshold_option' in param.keys():

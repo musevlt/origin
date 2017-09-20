@@ -385,7 +385,6 @@ class ORIGIN(object):
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
-        # sauver les PSFs ?
         """Load a previous session of ORIGIN
         
         Parameters
@@ -860,8 +859,7 @@ class ORIGIN(object):
                                       wcs=self.wcs, mask=np.ma.nomask)        
         self._log_file.info('01 Done')
 
-# become step 02
-    def step02_areas(self,  pfa=.2, Size=120, minsize=None):
+    def step02_areas(self,  pfa=.2, size=120, minsize=None):
         """ Creation of automatic area         
         
         Parameters
@@ -869,7 +867,7 @@ class ORIGIN(object):
         pfa      :  float
                     PFA of the segmentation test to estimates sources with
                     strong continuum
-        Size   :    int
+        size   :    int
                     Lenght in pixel of the side of typical square wanted                        
                         enough big area to satisfy the PCA
         minsize :   int
@@ -901,14 +899,16 @@ class ORIGIN(object):
         nexpmap[np.sum(self.expmap,axis=0)>0]=1        
         
         self._log_file.info('   - pfa of the test=%0.2f'%pfa)            
-        self.param['pfa_areas'] = pfa                           
+        self.param['pfa_areas'] = pfa
+        self.param['size_areas'] = size
+        self.param['minsize_areas'] = minsize
         
-        NbSubcube = 1+int( self.Nx*self.Ny / (Size**2) )
+        NbSubcube = 1 + int( self.Nx*self.Ny / (size**2) )
         
         if NbSubcube > 1:
         
             self._log_file.info('   - First segmentation of %d^2 square'%NbSubcube)
-            self._log_file.info('   - side size %d pixels'%Size)                
+            self._log_file.info('   - side size %d pixels'%size)                
             self._log_stdout.info('Squares segmentation and fusion') 
             square_cut_fus = area_segmentation_square_fusion(nexpmap, \
                                                 NbSubcube, self.Ny, self.Nx)
@@ -925,7 +925,7 @@ class ORIGIN(object):
             if minsize is None:
                 minsize = int(self.Ny*self.Nx/(NbSubcube**2))
             sety,setx = area_segmentation_final(Grown_label, minsize)
-        elif NbSubcube ==1:
+        elif NbSubcube == 1:
             sety = []
             setx = []
             _sety,_setx = np.where(nexpmap>0)    
@@ -940,7 +940,6 @@ class ORIGIN(object):
         
         self._log_file.info('02 Done') 
         
-# become step 03 
     def step03_compute_greedy_PCA(self, mixing=False,
                               Noise_population=50, pfa_test=.01,
                               itermax=100, threshold_list=None):
