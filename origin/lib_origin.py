@@ -684,26 +684,29 @@ def area_segmentation_final(label, minsize):
     return areamap
 
 def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
-                           threshold_test,itermax, userlist):
+                           threshold_test, pfa_test, itermax):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
     ----------
-    NbArea    : integer
-                Number of area
-    cube_std  : array
-                Cube data weighted by the standard deviation
-    areamap   : map
-                Map of areas
-    nuisance_test   :   function used to estimate the nuisance degree of a
-                        spectrum (default is O2_test)
-    Noise_population:   proportion of estimated noise part used to
-                        define the background spectra
-    threshold       :   threshold of nuisance_test
-    itermax         :   max iteration
-    userlist        :   Boolean
-                        to know if the threshold is based on one PFA, or
-                        if the threshold of each area is given by user
+    NbArea           : integer
+                       Number of area
+    cube_std         : array
+                       Cube data weighted by the standard deviation
+    areamap          : array
+                       Map of areas
+    Noise_population : float
+                       Proportion of estimated noise part used to define the
+                       background spectra
+    threshold_test   : list
+                       User given list of threshold (not pfa) to apply
+                       on each area, the list is of lenght NbAreas
+                       or of lenght 1. 
+    pfa_test         : float
+                       Threshold of the test                                 
+    itermax          : integer
+                       Maximum number of iterations
+    
     Returns
     -------
     cube_faint : array
@@ -718,9 +721,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1],cube_std.shape[2]))
     # Spatial segmentation
-    histO2_area = [] #1D
-    frecO2_area = [] #1D
-    thresO2_area = [] #scalaire        
+    thresO2_area = []     
     with ProgressBar(NbArea) as bar:
         for area_ind in range(1, NbArea+1):
             # limits of each spatial zone
@@ -729,23 +730,23 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
             # Data in this spatio-spectral zone
             cube_temp = cube_std[:, ksel]
 
-
             # greedy PCA on each subcube
-            cube_faint[:, ksel], mO2, hO2, fO2, tO2 = \
-            Compute_GreedyPCA( cube_temp, Noise_population,
-                              threshold_test[area_ind],itermax, userlist)            
+            if threshold_test is None:
+                thr = None
+            else:
+                thr = threshold_test[area_ind-1]
+            cube_faint[:, ksel], mO2, tO2 = Compute_GreedyPCA(cube_temp,
+                                      Noise_population, thr, pfa_test, itermax)            
             mapO2[ksel]= mO2
-            histO2_area.append(hO2)
-            frecO2_area.append(fO2)
             thresO2_area.append(tO2)
             bar.update()       
         
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, mapO2, histO2_area, frecO2_area, thresO2_area
+    return cube_faint, mapO2, thresO2_area
 
 
-def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
-                      ,itermax, userlist):
+def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
+                      itermax):
     """Function to compute greedy svd. thanks to the test (test_fun) and
     according to a defined threshold (threshold_test) the cube is segmented
     in nuisance and background part. A part of the background part
@@ -768,29 +769,22 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
     test_fun:   function
                 the test to be performed on data
 
-    Noise_population    : float
-                          the fraction of spectra estimated as background
-
-    threshold_test      : float
-                          the pfa of the test (default=.05)
-                          or the threshold of one area if userlist is True
-                          
-    itermax             : max iterations
+    Noise_population : float
+                       Fraction of spectra estimated as background
+    pfa_test         : float
+                       PFA of the test
+    threshold_test   : float
+                       Threshold value                          
+    itermax          : integer
+                       Maximum number of iterations
     
-    userlist            : Boolean
-                          to know if the threshold is based on one PFA, or
-                          if the threshold of each area is given by user
     Returns
     -------
     faint   :   array
                 cleaned cube
-
     mapO2   :   array
                 2D MAP filled with the number of iteration per spectra
-
-    histO2  :   histogram value of the test
-    frecO2  :   frequencies of the histogram
-    thresO2 :   automatic threshold for the O2 test
+    thresO2 :   Threshold for the O2 test
 
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
@@ -800,10 +794,12 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
     nl,nynx = cube_in.shape
     test = O2test(faint)
 
-    # automatic threshold computation
-    histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, threshold_test)
-    if userlist:
+    if threshold_test is not None:
         thresO2 = threshold_test
+    else:
+        # automatic threshold computation
+        histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, pfa_test)
+        
     # nuisance part
     pypx = np.where(test>thresO2)[0]
 
@@ -871,7 +867,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test\
             pypx = np.where(test>thresO2)[0]
             bar.update(npix-len(pypx))
 
-    return faint, mapO2, histO2, frecO2, thresO2  
+    return faint, mapO2, thresO2  
 
 def O2test(Cube_in):
     """Function to compute the test on data. The test estimate the background

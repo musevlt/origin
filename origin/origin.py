@@ -150,14 +150,14 @@ class ORIGIN(object):
                              Catalog returned by step07_spatiospectral_merging.
     """
     
-    def __init__(self, path, name, filename, profiles, PSF,
-                 FWHM_PSF, cube_faint, mapO2, histO2, freqO2,
-                 thresO2, cube_correl, maxmap, NbAreas, cube_profile, Cat0, 
-                 Pval_r, index_pval, Det_M, Det_m, ThresholdPval,
-                 Cat1, spectra, Cat2, param, cube_std, var, expmap,
-                 cube_pval_correl, cube_local_max, cont_dct, segmentation_test,
-                 segmentation_map_threshold, segmentation_map_spatspect,
-                 cube_local_min, continuum, mapThresh, areamap):
+    def __init__(self, path, name, filename, profiles, PSF, FWHM_PSF,
+                 cube_faint, mapO2, thresO2, cube_correl, maxmap, NbAreas,
+                 cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
+                 ThresholdPval, Cat1, spectra, Cat2, param, cube_std, var,
+                 expmap, cube_pval_correl, cube_local_max, cont_dct,
+                 segmentation_test, segmentation_map_threshold,
+                 segmentation_map_spatspect, cube_local_min, continuum,
+                 mapThresh, areamap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -308,8 +308,6 @@ class ORIGIN(object):
         self.areamap = areamap
         # step3
         self.cube_faint = cube_faint
-        self.histO2 = histO2
-        self.freqO2 = freqO2
         self.thresO2 = thresO2
         self.mapO2 = mapO2
         # step4
@@ -368,9 +366,8 @@ class ORIGIN(object):
         """
         return cls(path='.',  name=name, filename=cube, 
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, 
-                   cube_faint=None, mapO2=None, histO2=None,
-                   freqO2=None, thresO2=None, cube_correl=None, maxmap=None,
-                   NbAreas=None, cube_profile=None, Cat0=None, 
+                   cube_faint=None, mapO2=None, thresO2=None, cube_correl=None,
+                   maxmap=None, NbAreas=None, cube_profile=None, Cat0=None, 
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
                    param=None, cube_std=None, var=None, expmap=None,
@@ -451,24 +448,6 @@ class ORIGIN(object):
             cube_faint = Cube('%s/cube_faint.fits'%folder)
         else:
             cube_faint = None
-            
-        if os.path.isfile('%s/histO2_0.txt'%folder):
-            histO2 = []
-            i = 0
-            while(os.path.isfile('%s/histO2_%d.txt'%(folder,i))):                
-                histO2.append(np.loadtxt('%s/histO2_%d.txt'%(folder, i)))
-                i = i + 1
-        else:
-            histO2 = None
-            
-        if os.path.isfile('%s/freqO2_0.txt'%folder):
-            freqO2 = []
-            i = 0
-            while(os.path.isfile('%s/freqO2_%d.txt'%(folder,i))):                
-                freqO2.append(np.loadtxt('%s/freqO2_%d.txt'%(folder,i)))
-                i = i + 1
-        else:
-            freqO2 = None
             
         if os.path.isfile('%s/thresO2.txt'%(folder)):
             thresO2 = np.loadtxt('%s/thresO2.txt'%(folder), ndmin=1)
@@ -605,8 +584,8 @@ class ORIGIN(object):
         return cls(path=path,  name=name, filename=param['cubename'],
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    cube_std=cube_std, var=var,
-                   cube_faint=cube_faint, mapO2=mapO2, histO2=histO2,
-                   freqO2=freqO2, thresO2=thresO2, cube_correl=cube_correl,
+                   cube_faint=cube_faint, mapO2=mapO2, thresO2=thresO2,
+                   cube_correl=cube_correl,
                    maxmap=maxmap, NbAreas=NbAreas, cube_profile=cube_profile, 
                    Cat0=Cat0, Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
@@ -688,12 +667,6 @@ class ORIGIN(object):
             self.areamap.write('%s/areamap.fits'%path2)
                 
         #step3
-        if self.histO2 is not None:
-            for i in range(self.NbAreas):
-                np.savetxt('%s/histO2_%d.txt'%(path2, i), self.histO2[i])
-        if self.freqO2 is not None:
-            for i in range(self.NbAreas):
-                np.savetxt('%s/freqO2_%d.txt'%(path2, i), self.freqO2[i])           
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
         if self.cube_faint is not None:
@@ -941,19 +914,19 @@ class ORIGIN(object):
         ----------
                     
         mixing              :   bool
-                                if True the output of PCA is mixed with its
+                                If True the output of PCA is mixed with its
                                 input according to the pvalue of a test based
                                 on the continuum of the faint (output PCA)
         
         Noise_population    :   float                
-                                the fraction of spectra used to estimate 
+                                Fraction of spectra used to estimate 
                                 the background signature
                                 
         pfa_test            :   float
-                                the threshold of the test (default=0.01)  
+                                Threshold of the test (default=0.01)  
                                 
         itermax             :   integer
-                                maximum iterations
+                                Maximum number of iterations
 
         threshold_list      :   list
                                 User given list of threshold (not pfa) to apply
@@ -972,10 +945,6 @@ class ORIGIN(object):
         self.mapO2 : `~mpdaf.obj.Image`
                      For each area, the numbers of iterations used by testO2
                      for each spaxel
-        self.histO2 : list(array)
-                      For each area, histogram
-        self.freqO2 : list(array)
-                      For each area, frequency
         self.thresO2 : list
                        For each area, threshold value
         """
@@ -992,14 +961,8 @@ class ORIGIN(object):
         if threshold_list is None:
             self._log_file.info('   - pfa of the test=%0.2f'%pfa_test)            
             self.param['pfa_test'] = pfa_test   
-            userlist=False
-            pfa_test = np.repeat(pfa_test, self.NbAreas)
         else: 
             self._log_file.info('   - User given list of threshold')     
-            userlist=True            
-            pfa_test = threshold_list
-            if len(pfa_test)==1:
-                pfa_test = pfa_test*self.NbAreas
             self.param['threshold_list'] = threshold_list     
             
         self.param['Noise_population'] = Noise_population                
@@ -1007,10 +970,10 @@ class ORIGIN(object):
         self.param['mixing'] = mixing
         
         self._log_stdout.info('Compute greedy PCA on each zone')          
-        faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
+        faint, mapO2, self.thresO2 = \
         Compute_GreedyPCA_area(self.NbAreas, self.cube_std._data,
-                               self.areamap._data, Noise_population, pfa_test,
-                               itermax, userlist)
+                               self.areamap._data, Noise_population,
+                               threshold_list, pfa_test, itermax)
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
             pval = 1 - stats.chi2.cdf(continuum, 2) 
@@ -1444,116 +1407,73 @@ class ORIGIN(object):
             ax.text(meany[n-1],meanx[n-1], str(n) ,color='w',fontweight='bold')
         ax.set_title('continuum test with areas')        
         
-    def plot_PCA_threshold_before(self, i, pfa_test=.01, ax=None, 
-                           log10=True, threshold_list=None):
+    def plot_PCA_threshold(self, i, pfa_test=None, threshold=None, log10=True,
+                           ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
         Parameters
         ----------
-        i: integer in [1, NbAreas]           
-        pfa_test :   float
-                     the pfa of the test (default=.01) 
-                            
-        ax : matplotlib.Axes
-                the Axes instance in which the image is drawn
-        log10 : To draw histogram in logarithmic scale or not
+        i         : integer in [1, NbAreas] 
+                    Area ID          
+        pfa_test  : float
+                    PFA of the test (if None, the value set during step03 is used)
+        threshold : float
+                    Threshold value (estimated if None)
+        log10     : bool
+                    Draw histogram in logarithmic scale or not                    
+        ax        : matplotlib.Axes
+                    Axes instance in which the image is drawn
         """
         if self.cube_std is None:
             raise IOError('Run the step 01 to initialize self.cube_std')
             
         if self.NbAreas is None:
-            raise IOError('Run the step 02 to initialize self.NbAreas')            
+            raise IOError('Run the step 02 to initialize self.NbAreas')
+            
+        if pfa_test is None:
+            if 'pfa_test' in self.param:
+                pfa_test = self.param['pfa_test']
+            else:
+                raise IOError('pfa_test param is None: set a value or run the Step03')
+            
             
         if ax is None:
             ax = plt.gca()
-
-        if threshold_list is None:
-            userlist=False
-            pfa_test = np.repeat(pfa_test, self.NbAreas)
-        else: 
-            userlist=True            
-            pfa_test = threshold_list
-            if len(pfa_test)==1:
-                pfa_test = pfa_test*self.NbAreas    
                 
         # Data in this spatio-spectral area
         test = O2test(self.cube_std.data[:, self.areamap._data==i])
         
         # automatic threshold computation     
-        hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test[i-1])    
-        if userlist:
-            thre = pfa_test[i-1]
-        
-        ind = np.argmax(hist)
-        mod = bins[ind]
-        ind2 = np.argmin(( hist[ind]/2 - hist[:ind] )**2)
-        fwhm = mod - bins[ind2]
-        sigma = fwhm/np.sqrt(2*np.log(2))
-        
+        hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test)
         center = (bins[:-1] + bins[1:]) / 2
-        gauss = stats.norm.pdf(center,loc=mod,scale=sigma)
-
+        
+        if threshold is not None:
+            thre = threshold
+        else:
+            ind = np.argmax(hist)
+            mod = bins[ind]
+            ind2 = np.argmin(( hist[ind]/2 - hist[:ind] )**2)
+            fwhm = mod - bins[ind2]
+            sigma = fwhm/np.sqrt(2*np.log(2))           
+            gauss = stats.norm.pdf(center, loc=mod, scale=sigma)
+            if log10:
+                gauss = np.log10(gauss)
+                
         if log10:
             hist = np.log10(hist)
-            gauss = np.log10(gauss)
             
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')
         ym,yM = ax.get_ylim()
-        ax.plot(center, gauss,'-b',alpha=.5)
+        if threshold is None:
+            ax.plot(center, gauss,'-b',alpha=.5)
         ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
         ax.set_ylim((ym,yM))
         ax.set_title('zone %d - threshold %f' %(i,thre))  
-        
-    def plot_PCA_threshold(self, i, ax=None, log10=True):
-        """ Plot the histogram and the threshold for the starting point of the 
-        PCA, this version of the plot is to do before doing the PCA
-        
-        Parameters
-        ----------
-        i: integer in [1, NbAreas]           
-        pfa_test :   float
-                     the pfa of the test (default=.01) 
-                            
-        ax : matplotlib.Axes
-                the Axes instance in which the image is drawn
-        log10 : To draw histogram in logarithmic scale or not
-        """
-        if self.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')         
             
-        if ax is None:
-            ax = plt.gca()        
-    
-        bins = self.freqO2[i-1]
-        hist = self.histO2[i-1]
-        thre = self.thresO2[i-1]
-        
-        ind = np.argmax(hist)
-        mod = bins[ind]
-        ind2 = np.argmin(( hist[ind]/2 - hist[:ind] )**2)
-        fwhm = mod - bins[ind2]
-        sigma = fwhm/np.sqrt(2*np.log(2))
-
-        center = (bins[:-1] + bins[1:]) / 2
-        gauss = stats.norm.pdf(center,loc=mod,scale=sigma)
-
-        if log10:
-            hist = np.log10(hist)
-            gauss = np.log10(gauss)
-
-        ax.plot(center, hist,'-k')
-        ax.plot(center, hist,'.r')
-        ym,yM = ax.get_ylim()
-        ax.plot(center, gauss,'-b',alpha=.5)
-        ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
-        ax.grid()
-        ax.set_xlim((center.min(),center.max()))
-        ax.set_ylim((ym,yM))
-        ax.set_title('zone %d - threshold %f' %(i,thre))        
         
     def plot_mapPCA(self, area=None, ax=None, iteration=None):
         """ Plot at a given iteration (or at the end) the number of times
