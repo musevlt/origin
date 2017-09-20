@@ -114,10 +114,8 @@ class ORIGIN(object):
         FWHM_PSF           : float or list of float
                              Mean of the fwhm of the PSF in pixel (one per
                              field).                
-        setx               : array
-                             Limits in pixels of the columns for each area.
-        sety               : array
-                             Limits in pixels of the rows for each area.                             
+        areamap            : `~mpdaf.obj.Image`
+                             PCA area
         cube_faint         : `~mpdaf.obj.Cube`
                              Projection on the eigenvectors associated to the
                              lower eigenvalues of the data cube (representing
@@ -159,7 +157,7 @@ class ORIGIN(object):
                  Cat1, spectra, Cat2, param, cube_std, var, expmap,
                  cube_pval_correl, cube_local_max, cont_dct, segmentation_test,
                  segmentation_map_threshold, segmentation_map_spatspect,
-                 cube_local_min, continuum, mapThresh, setx, sety):
+                 cube_local_min, continuum, mapThresh, areamap):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -307,8 +305,7 @@ class ORIGIN(object):
         self.segmentation_test = segmentation_test      
         # step 2 
         self.NbAreas = NbAreas
-        self.sety = sety
-        self.setx = setx          
+        self.areamap = areamap
         # step3
         self.cube_faint = cube_faint
         self.histO2 = histO2
@@ -380,8 +377,7 @@ class ORIGIN(object):
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
-                   continuum=None, mapThresh=None,
-                   setx=None, sety=None)
+                   continuum=None, mapThresh=None, areamap=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -445,20 +441,10 @@ class ORIGIN(object):
             segmentation_test = None                        
             
         # step2
-        setx = None
-        if os.path.isfile('%s/setx_0.txt'%folder):
-            setx = []
-            i = 0
-            while(os.path.isfile('%s/setx_%d.txt'%(folder,i))):
-                setx.append(np.loadtxt('%s/setx_%d.txt'%(folder,i)).astype(np.int))
-                i = i + 1
-        sety = None
-        if os.path.isfile('%s/sety_0.txt'%folder):
-            sety = []
-            i = 0
-            while(os.path.isfile('%s/sety_%d.txt'%(folder,i))):
-                sety.append(np.loadtxt('%s/sety_%d.txt'%(folder,i)).astype(np.int))
-                i = i + 1
+        if os.path.isfile('%s/areamap.fits'%folder):
+            areamap = Image('%s/areamap.fits'%folder, dtype=np.int)
+        else:
+            areamap = None
         
         # step3
         if os.path.isfile('%s/cube_faint.fits'%folder):
@@ -632,7 +618,7 @@ class ORIGIN(object):
                    segmentation_map_threshold=segmentation_map_threshold,
                    segmentation_map_spatspect=segmentation_map_spatspect,
                    cube_local_min=cube_local_min, continuum=continuum,
-                   mapThresh=mapThresh, setx=setx, sety=sety)
+                   mapThresh=mapThresh, areamap = areamap)
                    
     def write(self, path=None, overwrite=False):
         """Save the current session in a folder
@@ -698,12 +684,8 @@ class ORIGIN(object):
 
 
         #step2
-        if self.setx is not None:
-            for i in range(self.NbAreas):
-                np.savetxt('%s/setx_%d.txt'%(path2, i), self.setx[i])
-        if self.sety is not None:
-            for i in range(self.NbAreas):
-                np.savetxt('%s/sety_%d.txt'%(path2, i), self.sety[i])           
+        if self.areamap is not None:
+            self.areamap.write('%s/areamap.fits'%path2)
                 
         #step3
         if self.histO2 is not None:
@@ -880,13 +862,9 @@ class ORIGIN(object):
         -------
      
         self.NbAreas    :   int
-                            number of areas
-        self.sety : list
-                    list of y index for all areas
-        self.setx : list
-                    list of x index for all areas                    
-        self.areas : `~mpdaf.obj.Image`
-                     The map of areas
+                            number of areas                    
+        self.areamap : `~mpdaf.obj.Image`
+                       The map of areas
         """           
         self._log_stdout.info('02 - Areas Creation:')
         self._log_file.info('02 - Areas Creation')  
@@ -924,19 +902,21 @@ class ORIGIN(object):
             
             if minsize is None:
                 minsize = int(self.Ny*self.Nx/(NbSubcube**2))
-            sety,setx = area_segmentation_final(Grown_label, minsize)
+            areamap = area_segmentation_final(Grown_label, minsize)
         elif NbSubcube == 1:
-            sety = []
-            setx = []
-            _sety,_setx = np.where(nexpmap>0)    
-            sety.append(_sety)
-            setx.append(_setx)            
+            areamap = (nexpmap>0).astype(np.int)
             
-        self.NbAreas = len(sety)
+        self._log_stdout.info('Save the map of areas in self.areamap') 
+
+        self.areamap = Image(data=areamap, wcs=self.wcs, dtype=np.int)
+            
+        labels = np.unique(areamap)
+        if 0 in labels: #expmap=0
+            self.NbAreas = len(labels) - 1
+        else:
+            self.NbAreas = len(labels)
         self._log_file.info('   - %d areas generated'%self.NbAreas)        
         self.param['nbareas'] = self.NbAreas
-        self.sety = sety
-        self.setx = setx
         
         self._log_file.info('02 Done') 
         
@@ -1004,8 +984,8 @@ class ORIGIN(object):
         
         if self.cube_std is None:
             raise IOError('Run the step 01 to initialize self.cube_std')
-        if self.sety is None:
-            raise IOError('Run the step 02 to initialize self.sety/setx ')
+        if self.areamap is None:
+            raise IOError('Run the step 02 to initialize self.areamap ')
             
         self._log_file.info('   - Noise_population=%0.2f'%Noise_population)
 
@@ -1013,7 +993,7 @@ class ORIGIN(object):
             self._log_file.info('   - pfa of the test=%0.2f'%pfa_test)            
             self.param['pfa_test'] = pfa_test   
             userlist=False
-            pfa_test = np.repeat(pfa_test,self.NbAreas)
+            pfa_test = np.repeat(pfa_test, self.NbAreas)
         else: 
             self._log_file.info('   - User given list of threshold')     
             userlist=True            
@@ -1029,8 +1009,8 @@ class ORIGIN(object):
         self._log_stdout.info('Compute greedy PCA on each zone')          
         faint, mapO2, self.histO2, self.freqO2, self.thresO2 = \
         Compute_GreedyPCA_area(self.NbAreas, self.cube_std._data,
-                                  self.setx, self.sety, 
-                                  Noise_population, pfa_test,itermax, userlist)
+                               self.areamap._data, Noise_population, pfa_test,
+                               itermax, userlist)
         if mixing:
             continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
             pval = 1 - stats.chi2.cdf(continuum, 2) 
@@ -1452,16 +1432,16 @@ class ORIGIN(object):
         
         meanx=[]
         meany=[]        
-        for n in range(self.NbAreas):
-            tmp[self.sety[n],self.setx[n]] = n+1
-            
-            meanx.append( np.mean(self.setx[n]) )
-            meany.append( np.mean(self.sety[n]) )            
+        for n in range(1, self.NbAreas+1):
+            ksel = np.where(self.areamap._data == n)
+            tmp[ksel] = n
+            meanx.append( np.mean(ksel[0]) )
+            meany.append( np.mean(ksel[1]) )            
         
         ax.imshow(test, origin='lower', cmap='jet', interpolation='nearest')
         ax.imshow(tmp, origin='lower', cmap='jet', interpolation='nearest',alpha=.7)
-        for n in range(self.NbAreas):
-            ax.text(meanx[n],meany[n],str(n),color='w',fontweight='bold')
+        for n in range(1, self.NbAreas+1):
+            ax.text(meany[n-1],meanx[n-1], str(n) ,color='w',fontweight='bold')
         ax.set_title('continuum test with areas')        
         
     def plot_PCA_threshold_before(self, i, pfa_test=.01, ax=None, 
@@ -1471,7 +1451,7 @@ class ORIGIN(object):
         
         Parameters
         ----------
-        i: integer in [0, NbAreas[           
+        i: integer in [1, NbAreas]           
         pfa_test :   float
                      the pfa of the test (default=.01) 
                             
@@ -1490,7 +1470,7 @@ class ORIGIN(object):
 
         if threshold_list is None:
             userlist=False
-            pfa_test = np.repeat(pfa_test,self.NbAreas)
+            pfa_test = np.repeat(pfa_test, self.NbAreas)
         else: 
             userlist=True            
             pfa_test = threshold_list
@@ -1498,12 +1478,12 @@ class ORIGIN(object):
                 pfa_test = pfa_test*self.NbAreas    
                 
         # Data in this spatio-spectral area
-        test = O2test(self.cube_std.data[:, self.sety[i], self.setx[i]])
+        test = O2test(self.cube_std.data[:, self.areamap._data==i])
         
         # automatic threshold computation     
-        hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test[i])    
+        hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test[i-1])    
         if userlist:
-            thre = pfa_test[i]
+            thre = pfa_test[i-1]
         
         ind = np.argmax(hist)
         mod = bins[ind]
@@ -1534,7 +1514,7 @@ class ORIGIN(object):
         
         Parameters
         ----------
-        i: integer in [0, NbAreas[           
+        i: integer in [1, NbAreas]           
         pfa_test :   float
                      the pfa of the test (default=.01) 
                             
@@ -1548,9 +1528,9 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()        
     
-        bins = self.freqO2[i]
-        hist = self.histO2[i]
-        thre = self.thresO2[i]
+        bins = self.freqO2[i-1]
+        hist = self.histO2[i-1]
+        thre = self.thresO2[i-1]
         
         ind = np.argmax(hist)
         mod = bins[ind]
@@ -1581,7 +1561,7 @@ class ORIGIN(object):
         
         Parameters
         ----------
-        area: integer in [0, NbAreas[
+        area: integer in [1, NbAreas]
                 if None draw the full map for all areas
         iteration: a specific iteration
         ax : matplotlib.Axes
@@ -1597,7 +1577,7 @@ class ORIGIN(object):
             title = 'Full map'
         else:
             mask = np.ones_like(self.mapO2._data, dtype=np.bool)
-            mask[self.sety[area], self.setx[area]] = False
+            mask[self.areamap._data == area] = False
             themap = np.ma.masked_array(self.mapO2._data, mask)
             title = 'zone %d' %area
             

@@ -676,19 +676,15 @@ def area_segmentation_final(label, minsize):
             break
         else:
             tmp = label.copy() 
-        
-    # create index list
-    sety = []
-    setx = []    
-    for lab in label:
-        _sety,_setx = np.where(lab>0)
-        sety.append(_sety)
-        setx.append(_setx)        
-    return sety, setx
+    
+    # create label map
+    areamap = np.zeros(label.shape[1:])
+    for i in range(label.shape[0]):
+        areamap[label[i,:,:]>0] = i+1
+    return areamap
 
-def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
-                              Noise_population, threshold_test,itermax,
-                              userlist):
+def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
+                           threshold_test,itermax, userlist):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
@@ -697,10 +693,8 @@ def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
                 Number of area
     cube_std  : array
                 Cube data weighted by the standard deviation
-    set_x      : integer
-                pixels for each area
-    inty      : integer
-                pixels for each area
+    areamap   : map
+                Map of areas
     nuisance_test   :   function used to estimate the nuisance degree of a
                         spectrum (default is O2_test)
     Noise_population:   proportion of estimated noise part used to
@@ -728,20 +722,19 @@ def Compute_GreedyPCA_area(NbArea, cube_std, set_x, set_y,
     frecO2_area = [] #1D
     thresO2_area = [] #scalaire        
     with ProgressBar(NbArea) as bar:
-        for area_ind in range(NbArea):
+        for area_ind in range(1, NbArea+1):
             # limits of each spatial zone
-            yset = set_y[area_ind]
-            xset = set_x[area_ind]
+            ksel = (areamap == area_ind)
             
             # Data in this spatio-spectral zone
-            cube_temp = cube_std[:, yset, xset]
+            cube_temp = cube_std[:, ksel]
 
 
             # greedy PCA on each subcube
-            cube_faint[:, yset, xset], mO2, hO2, fO2, tO2 = \
+            cube_faint[:, ksel], mO2, hO2, fO2, tO2 = \
             Compute_GreedyPCA( cube_temp, Noise_population,
                               threshold_test[area_ind],itermax, userlist)            
-            mapO2[yset,xset]= mO2
+            mapO2[ksel]= mO2
             histO2_area.append(hO2)
             frecO2_area.append(fO2)
             thresO2_area.append(tO2)
