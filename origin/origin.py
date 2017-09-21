@@ -1410,14 +1410,14 @@ class ORIGIN(object):
             ax.text(meany[n-1],meanx[n-1], str(n) ,color='w',fontweight='bold')
         ax.set_title('continuum test with areas')        
         
-    def plot_PCA_threshold(self, i, pfa_test=None, threshold=None, log10=True,
+    def plot_PCA_threshold(self, area, pfa_test=None, threshold=None, log10=True,
                            ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
         Parameters
         ----------
-        i         : integer in [1, NbAreas] 
+        area      : integer in [1, NbAreas] 
                     Area ID          
         pfa_test  : float
                     PFA of the test (if None, the value set during step03 is used)
@@ -1445,7 +1445,7 @@ class ORIGIN(object):
             ax = plt.gca()
                 
         # Data in this spatio-spectral area
-        test = O2test(self.cube_std.data[:, self.areamap._data==i])
+        test = O2test(self.cube_std.data[:, self.areamap._data==area])
         
         # automatic threshold computation     
         hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test)
@@ -1477,7 +1477,7 @@ class ORIGIN(object):
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
         ax.set_ylim((ym,yM))
-        ax.set_title('zone %d - threshold %f' %(i,thre))  
+        ax.set_title('zone %d - threshold %f' %(area,thre))  
             
         
     def plot_mapPCA(self, area=None, ax=None, iteration=None):
@@ -1572,27 +1572,29 @@ class ORIGIN(object):
         ax.set_ylabel('Threshold')        
         ax.set_title('Purity %f' %purity)
         
-    def plot_purity(self, i, ax=None, log10=True):
-        """Draw number of sources per threshold computed in step04
+    def plot_purity(self, thr_type, ax=None, log10=True):
+        """Draw number of sources per threshold computed in step05
         
         Parameters
         ----------
-        i  : integer
-             Pvalue for the test which performs segmentation
-             i = 0 : background
-             i = 1 : source
+        thr_type  : str
+                     Pvalue for the test which performs segmentation
+                     'background'/'sources'
         ax : matplotlib.Axes
              The Axes instance in which the image is drawn
         log10 : To draw histogram in logarithmic scale or not
         """
                 
-        if i == 0: 
-            i_titre = 'background'
-        else: 
-            i_titre = 'sources'
+        if thr_type == 'background':
+            i = 0
+        elif thr_type == 'sources':
+            i = 1
+        else:
+            raise IOError('thr_type must be "background" or "sources"')
+        
             
-        if self.cube_correl is None:
-            raise IOError('Run the step 04 to initialize self.cube_correl')
+        if self.Det_M is None:
+            raise IOError('Run the step 05')
             
         if ax is None:
             ax = plt.gca()        
@@ -1607,8 +1609,10 @@ class ORIGIN(object):
         ax2 = ax.twinx()
         if log10:
             ax2.semilogy(index_pval, Pval_r, 'y.-', label = 'purity' )
-            ax.semilogy( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)' )
-            ax.semilogy( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)' )
+            ax.semilogy( index_pval, Det_M, 'b.-',
+                        label = 'n detections (+DATA)' )
+            ax.semilogy( index_pval, Det_m, 'g.-',
+                        label = 'n detections (-DATA)' )
             ax2.semilogy(threshold, purity,'xr') 
             
         else:
@@ -1625,23 +1629,24 @@ class ORIGIN(object):
         ax.set_xlabel('Threshold')
         ax2.set_ylabel('Purity')
         ax.set_ylabel('Number of detections')
-        ax.set_title('%s - threshold %f' %(i_titre,threshold))
+        ax.set_title('%s - threshold %f' %(thr_type, threshold))
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
         ax.legend(h1+h2, l1+l2, loc=2)                      
         
-    def plot_NB(self, i, ax1=None, ax2=None, ax3=None):
+    def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
         
-        i : integer
-            index of the object in self.Cat0
-        ax1 : matplotlib.Axes
-              The Axes instance in which the NB image
-              around the source is drawn
-        ax2 : matplotlib.Axes
-              The Axes instance in which a other NB image for check is drawn
-        ax3 : matplotlib.Axes
-              The Axes instance in which the difference is drawn
+        src_ind : integer
+                  Index of the object in self.Cat0
+        ax1     : matplotlib.Axes
+                  The Axes instance in which the NB image around the source is
+                  drawn
+        ax2     : matplotlib.Axes
+                  The Axes instance in which a other NB image for check is
+                  drawn
+        ax3     : matplotlib.Axes
+                  The Axes instance in which the difference is drawn
         """
         if self.Cat0 is None:
             raise IOError('Run the step 04 to initialize self.Cat0')
@@ -1652,9 +1657,9 @@ class ORIGIN(object):
             ax3 = plt.subplot(1,3,3)
             
         # Coordinates of the source
-        x0 = self.Cat0[i]['x']
-        y0 = self.Cat0[i]['y']
-        z0 = self.Cat0[i]['z']
+        x0 = self.Cat0[src_ind]['x']
+        y0 = self.Cat0[src_ind]['y']
+        z0 = self.Cat0[src_ind]['z']
         # Larger spatial ranges for the plots
         longxy0 = 20
         y01 = max(0, y0 - longxy0)
@@ -1665,7 +1670,7 @@ class ORIGIN(object):
         y00 = y0 - y01
         x00 = x0 - x01
         # spectral profile
-        num_prof = self.Cat0[i]['profile']
+        num_prof = self.Cat0[src_ind]['profile']
         profil0 = self.profiles[num_prof]
         # length of the spectral profile
         profil1 = profil0[profil0 > 1e-13]
