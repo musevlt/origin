@@ -26,7 +26,6 @@ from scipy import stats
 import os.path
 import shutil
 import sys
-import warnings
 import yaml
 
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
@@ -1138,21 +1137,19 @@ class ORIGIN(object):
             self._log_file.info('   computation of threshold with purity =%.1f (background option)'%purity)
         else: 
             self._log_file.info('   threshold =%.1f '%threshold_option)
+            
         self.param['purity'] = purity
         self.param['threshold_option'] = threshold_option
         self.param['pfa'] = pfa
 
         self.ThresholdPval, self.Pval_r, self.index_pval, \
-        cube_pval_correl, mapThresh, segmap, self.Det_M, self.Det_m, purity \
+        cube_pval_correl, mapThresh, segmap, self.Det_M, self.Det_m \
                                          = Compute_threshold_segmentation(
                                            purity, 
                                            self.cube_local_max.data,
                                            self.cube_local_min.data,
                                            threshold_option, 
                                            self.segmentation_test.data, pfa)
-        if self.param['purity'] != purity:
-            self.param['purity'] = purity
-            self._log_stdout.info('Purity value has been estimated to %.2f'%purity)
         self._log_stdout.info('Threshold: %.1f (background) %.1f (sources)'%(self.ThresholdPval[0], self.ThresholdPval[1]))
         self._log_stdout.info('Save the threshold map in self.mapThresh')                                          
         self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
@@ -1466,9 +1463,7 @@ class ORIGIN(object):
                 gauss = np.log10(gauss)
                 
         if log10:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                hist = np.log10(hist)
+            hist = np.log10(hist)
             
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')

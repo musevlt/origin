@@ -1331,7 +1331,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         cube_local_max_edge = cube_local_max[:, ind_y[ind_n], ind_x[ind_n]]
         cube_local_min_edge = cube_local_min[:, ind_y[ind_n], ind_x[ind_n]]
 
-        _threshold, _Pval_r, _index_pval, _det_m, _det_M, purity \
+        _threshold, _Pval_r, _index_pval, _det_m, _det_M \
         = Compute_threshold( purity, cube_local_max_edge, \
                                            cube_local_min_edge)
         threshold.append(_threshold)
@@ -1356,7 +1356,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         mapThresh[ind_y[ind_n], ind_x[ind_n]] = threshold[ind_n]
 
     return np.asarray(threshold), Pval_r, index_pval,  \
-            cube_pval_correl, mapThresh, map_in, det_m, det_M, purity
+            cube_pval_correl, mapThresh, map_in, det_m, det_M
             
             
             
@@ -1423,10 +1423,11 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
         Minlist = mini_min[np.nonzero(mini_min)]         
     
         datamax = np.hstack((datamax,Maxlist))
-        datamin = np.hstack((datamin,Minlist))
+        datamin = np.hstack((datamin,Minlist))    
+
 
         mini = np.minimum( datamin.min() , datamax.min() )
-        maxi = np.minimum( datamin.max() , datamax.max() )   
+        maxi = np.maximum( datamin.max() , datamax.max() )   
         
         dx = (maxi-mini)/N
         index = np.arange(mini,maxi,dx)    
@@ -1435,11 +1436,7 @@ def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):
         PVal_m = [np.mean( (datamin>seuil) ) for seuil in index ]
         Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
     
-        try:
-            fid_ind = np.where(Pval_r>=purity)[0][0]
-        except:
-            purity = np.max(Pval_r)
-            fid_ind = np.where(Pval_r>=purity)[0][0]
+        fid_ind = np.where(Pval_r>=purity)[0][0] 
       
         x2 = index[fid_ind]
         x1 = index[fid_ind-1]
@@ -1488,11 +1485,14 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     """
     N = 100
 
-    Lc_M = cube_local_max[np.nonzero(cube_local_max)]
-    Lc_m = cube_local_min[np.nonzero(cube_local_min)]
+    Lc_M = cube_local_max
+    Lc_m = cube_local_min
+
+    Lc_M = Lc_M[np.nonzero(Lc_M)]
+    Lc_m = Lc_m[np.nonzero(Lc_m)]
     
     mini = np.minimum( Lc_m.min() , Lc_M.min() )
-    maxi = np.minimum( Lc_m.max() , Lc_M.max() )
+    maxi = np.maximum( Lc_m.max() , Lc_M.max() )
 
     dx = (maxi-mini)/N
     index = np.arange(mini,maxi,dx)
@@ -1505,11 +1505,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
 
     Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
 
-    try:
-        fid_ind = np.where(Pval_r>=purity)[0][0]
-    except:
-        purity = np.max(Pval_r)
-        fid_ind = np.where(Pval_r>=purity)[0][0]
+    fid_ind = np.where(Pval_r>=purity)[0][0] 
   
     x2 = index[fid_ind]
     x1 = index[fid_ind-1]
@@ -1522,7 +1518,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     tan_theta = b/a
     threshold = (purity-y1)/tan_theta + x1
     
-    return threshold, Pval_r, index, Det_M, Det_m, purity
+    return threshold, Pval_r, index, Det_M, Det_m
 
 
 def Threshold_pval(cube_local_max, threshold):
