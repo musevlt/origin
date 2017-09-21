@@ -1205,8 +1205,10 @@ class ORIGIN(object):
 
         if self.Cat0 is None:
             raise IOError('Run the step 05 to initialize self.Cat0 catalogs')
-        if 'expmap' in self.param: 
-            var = self.var * self.expmap
+        if 'expmap' in self.param:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                var = self.var * self.expmap
             var[np.isnan(var)] = np.inf
         else:
             var = self.var
