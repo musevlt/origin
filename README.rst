@@ -32,11 +32,11 @@ Usage
 
  > my_origin.step01_preprocessing(EXPMAP)
     
- >  my_origin.step02_compute_greedy_PCA()
+ >  my_origin.step02_areas()
     
- >  my_origin.step03_compute_TGLR()
+ >  my_origin.step03_compute_greedy_PCA()
     
- >  my_origin.step04_compute_local_max(neighboors)
+ >  my_origin.step04_compute_TGLR()
  
  >  my_origin.step05_threshold_pval()
     
