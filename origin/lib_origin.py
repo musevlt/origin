@@ -1305,8 +1305,7 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
 #    map_in = Segmentation(segmentation_test, pfa, clean=False)
     gamma =  stats.chi2.ppf(1-pfa, 1)
     map_in = (segmentation_test>gamma)*1.
-    yy,xx = np.where(segmentation_test**2 == 0)
-    map_in[yy,xx] = -1
+    map_in[segmentation_test**2 == 0] = -1
     # initialization
     cube_pval_correl = np.zeros(cube_local_max.shape)
     mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))
@@ -1315,7 +1314,6 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     index_pval = []
     det_m = []
     det_M = []
-
 
     # index of segmentation
     ind_y = []
