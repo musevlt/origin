@@ -457,7 +457,7 @@ class ORIGIN(object):
             thresO2 = None
             
         if os.path.isfile('%s/mapO2.fits'%folder):
-            mapO2 = Cube('%s/mapO2.fits'%folder)
+            mapO2 = Image('%s/mapO2.fits'%folder)
         else:
             mapO2 = None            
             
@@ -1393,8 +1393,7 @@ class ORIGIN(object):
         """
         if ax is None:
             ax = plt.gca()
-        test = self.segmentation_test.data
-        tmp = np.zeros(test.shape)
+        tmp = np.zeros(self.segmentation_test.shape)
         
         meanx=[]
         meany=[]        
@@ -1404,7 +1403,7 @@ class ORIGIN(object):
             meanx.append( np.mean(ksel[0]) )
             meany.append( np.mean(ksel[1]) )            
         
-        ax.imshow(test, origin='lower', cmap='jet', interpolation='nearest')
+        self.segmentation_test.plot(ax=ax)
         ax.imshow(tmp, origin='lower', cmap='jet', interpolation='nearest',alpha=.7)
         for n in range(1, self.NbAreas+1):
             ax.text(meany[n-1],meanx[n-1], str(n) ,color='w',fontweight='bold')
@@ -1477,46 +1476,48 @@ class ORIGIN(object):
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
         ax.set_ylim((ym,yM))
-        ax.set_title('zone %d - threshold %f' %(area,thre))  
+        ax.set_xlabel('frequency')
+        ax.set_ylabel('value')
+        ax.set_title('PCA histogram - zone %d - threshold %f' %(area,thre))  
             
         
-    def plot_mapPCA(self, area=None, ax=None, iteration=None):
+    def plot_mapPCA(self, area=None, iteration=None, ax=None):
         """ Plot at a given iteration (or at the end) the number of times
-        a spaxel got cleaned byt the PCA
+        a spaxel got cleaned by the PCA
         
         Parameters
         ----------
         area: integer in [1, NbAreas]
                 if None draw the full map for all areas
-        iteration: a specific iteration
-        ax : matplotlib.Axes
-                the Axes instance in which the image is drawn
-        iteration : Display the nuisance/bacground pixels at iteration k
+        iteration : integer
+                    Display the nuisance/bacground pixels at iteration k
+        ax        : matplotlib.Axes
+                    The Axes instance in which the image is drawn
         """
 
         if self.mapO2 is None:
             raise IOError('Run the step 03 to initialize self.mapO2')
 
+        themap = self.mapO2.copy()
+        title = 'Number of times the spaxel got cleaned by the PCA'
+        if iteration is not None:
+            title += '\n%d iterations'%iteration
         if area is None:
-            themap = self.mapO2.data
-            title = 'Full map'
+            title += ' (Full map)'
         else:
             mask = np.ones_like(self.mapO2._data, dtype=np.bool)
             mask[self.areamap._data == area] = False
-            themap = np.ma.masked_array(self.mapO2._data, mask)
-            title = 'zone %d' %area
+            themap._mask = mask
+            title += ' (zone %d)' %area
             
         if iteration is not None:
-            themap[themap<iteration] = np.ma.masked
+            themap[themap._data<iteration] = np.ma.masked
             
         if ax is None:
             ax = plt.gca()
+            
+        themap.plot(title=title, colorbar='v', ax=ax, cmap='jet')
   
-        cax = ax.imshow(themap, origin='lower', cmap='jet', interpolation='nearest')
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
-        divider = make_axes_locatable(ax)
-        cax2 = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(cax, cax=cax2)
         ax.set_title(title)
         
     def plot_segmentation(self, pfa=5e-2, ax=None):
