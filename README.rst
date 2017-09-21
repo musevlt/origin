@@ -30,23 +30,21 @@ Usage
  
 2- we run the different steps
 
- > my_origin.step00_preprocessing()
-
- > my_origin.step01_compute_greedy_PCA()
+ > my_origin.step01_preprocessing(EXPMAP)
+    
+ >  my_origin.step02_compute_greedy_PCA()
+    
+ >  my_origin.step03_compute_TGLR()
+    
+ >  my_origin.step04_compute_local_max(neighboors)
  
- > my_origin.step02_compute_TGLR()
- 
- > my_origin.step03_compute_pvalues(threshold)
- 
- > my_origin.step04_compute_ref_pix()
- 
- > my_origin.step07_compute_spectra()
- 
- > my_origin.step08_spatial_merging()
- 
- > my_origin.step09_spectral_merging(deltaz)
- 
- > nsources = my_origin.step10_write_sources()
+ >  my_origin.step05_threshold_pval()
+    
+ >  my_origin.step06_compute_spectra()
+    
+ >  my_origin.step07_spatiospectral_merging(deltaz)
+    
+ >  nsources = my_origin.step08_write_sources(ncpu=1)
  
  
 3- Resulted detected sources can be load by using mpdaf
