@@ -1520,30 +1520,54 @@ class ORIGIN(object):
   
         ax.set_title(title)
         
-    def plot_segmentation(self, pfa=5e-2, ax=None):
-        """ Plot the 2D segmentation map associated to a PFA
-        This function draw the segmentation map which is used, not with the 
-        same pfa, in self.step05_threshold_pval() to compute the threshold 
-        of the local maxima of correlations and in 
-        self.step07_spatiospectral_merging() to merge the detected lines.
-        
-        Parameters
-        ----------
-        pfa : float
-              Pvalue for the test which performs segmentation
-        ax  : matplotlib.Axes
-              The Axes instance in which the image is drawn
-        """
-        if self.cont_dct is None:
-            raise IOError('Run the step 01 to initialize self.cont_dct')        
+    def plot_segmentation(self, pfa = 5e-2, step = 7, ax = None):
+            """ Plot the 2D segmentation map associated to a PFA
+            This function draw the labels od the segmentation map which is used, 
+            not with the same pfa, in :
+                - self.step02_areas() to compute the automatic areas splitting for 
+                    the PCA
+                - self.step05_threshold_pval() to compute the threshold of the 
+                    local maxima of correlations
+                - self.step07_spatiospectral_merging() to merge the detected lines
+                    from the same sources.
             
-        if ax is None:
-            ax = plt.gca()
-            
-        map_in = Segmentation(self.cont_dct.data, pfa)            
-        
-        ax.imshow(map_in, origin='lower', cmap='jet', interpolation='nearest')
-        ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
+            Parameters
+            ----------
+            pfa : float
+                  Pvalue for the test which performs segmentation
+            ax  : matplotlib.Axes
+                  The Axes instance in which the image is drawn
+            step:   int
+                    The Segmentation map as used in this step: (2 -5 -7)
+            """
+            if self.cont_dct is None:
+                raise IOError('Run the step 01 to initialize self.cont_dct')        
+                
+            if ax is None:
+                ax = plt.gca()
+                
+            if step == 2: 
+                radius=2        
+                dxy = 2 * radius
+                x = np.linspace(-dxy,dxy,1 + (dxy)*2)
+                y = np.linspace(-dxy,dxy,1 + (dxy)*2)
+                xv, yv = np.meshgrid(x, y)   
+                r = np.sqrt(xv**2 + yv**2)
+                disk = (np.abs(r)<=radius)  
+                mask = disk 
+                clean = True 
+            elif step == 5:
+                mask = None 
+                clean = False 
+            elif step == 7:
+                mask = None 
+                clean = True             
+                
+            map_in = Segmentation(self.segmentation_test.data, pfa, \
+                                  clean=clean, mask=mask)            
+            ax.imshow(map_in, origin='lower', cmap='jet', \
+                      interpolation='nearest')
+            ax.set_title('Labels of segmentation, pfa: %f' %(pfa))
 
     def plot_thresholdVsPFA_background(self, purity=.9, 
                                    pfaset=np.linspace(1e-3,0.5,41), ax=None):
