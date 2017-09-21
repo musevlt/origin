@@ -26,6 +26,7 @@ from scipy import stats
 import os.path
 import shutil
 import sys
+import warnings
 import yaml
 
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
@@ -1463,7 +1464,9 @@ class ORIGIN(object):
                 gauss = np.log10(gauss)
                 
         if log10:
-            hist = np.log10(hist)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                hist = np.log10(hist)
             
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')
