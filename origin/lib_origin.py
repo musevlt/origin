@@ -51,7 +51,7 @@ from six.moves import range, zip
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
 
-__version__ = '2.0'
+__version__ = '2.0 beta'
 
 def Spatial_Segmentation(Nx, Ny, NbSubcube):
     """Function to compute the limits in pixels for each zone.
