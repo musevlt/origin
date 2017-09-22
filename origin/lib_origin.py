@@ -2364,6 +2364,8 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     Date  : June, 23 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
+    logger = logging.getLogger('origin')
+    t0 = time.time()
 
     nl,ny,nx = cor_in.shape
 
@@ -2460,6 +2462,11 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     #save the label of the segmentation map
     col_seg_label = Column(name='seg_label', data=seg)
     cat_out.add_columns([col_old_id, col_seg_label])
+    
+    nid = len(np.unique(cat_out['ID']))
+    logger.info('%d sources identified in catalog after spectral merging', nid)
+    logger.debug('%s executed in %1.1fs' % (whoami(), time.time() - t0))
+    
     return cat_out, map_in
     
 def estimate_spectrum(nb_lines, wave_pix, num_profil, fwhm_profiles, 
