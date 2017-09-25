@@ -141,7 +141,7 @@ def dct_residual(w_raw, order):
     return Faint, cont
 
 
-def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
+def Compute_Standardized_data(cube_dct ,mask, var):
     """Function to compute the standardized data.
 
     Parameters
@@ -149,8 +149,8 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     cube_dct:   array
                 output of dct_residual
 
-    expmap  :   array
-                exposure map
+    mask  :   array
+             Mask array (expmap==0)
 
     var     : array
               variance array
@@ -174,24 +174,17 @@ def Compute_Standardized_data(cube_dct ,expmap, var, newvar):
     
     nl,ny,nx = cube_dct.shape
 
-    mask = expmap==0
-
     cube_dct[mask] = np.nan
 
     mean_lambda = np.nanmean(cube_dct, axis=(1,2))
     mean_lambda = mean_lambda[:, np.newaxis, np.newaxis]* np.ones((nl,ny,nx))
-    if newvar:
-        var = np.nanvar(cube_dct, axis=(1,2))
-        var = var[:, np.newaxis, np.newaxis] * np.ones((nl,ny,nx))
-        var[mask] = np.inf
-    else:
-        print('expmap unknown')
-        var[mask] = np.inf
+
+    var[mask] = np.inf
 
     STD = (cube_dct - mean_lambda) / np.sqrt(var)
     STD[mask] = 0
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return STD, var
+    return STD
 
 def Compute_Segmentation_test(STD_in):
     """Generate from a 3D Cube a 2D map where sources and background are

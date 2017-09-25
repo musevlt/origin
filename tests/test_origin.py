@@ -11,8 +11,6 @@ from origin import ORIGIN
 
 MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)), 
                         'minicube.fits')
-EXPMAP = os.path.join(os.path.abspath(os.path.dirname(__file__)), 
-                        'miniexpmap.fits')
 
 def test_origin():
     """test ORIGIN"""
@@ -22,8 +20,7 @@ def test_origin():
     my_origin.write()
 
     my_origin = ORIGIN.load('tmp')
-    my_origin.step01_preprocessing(EXPMAP)
-    #my_origin.step01_preprocessing()
+    my_origin.step01_preprocessing()
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
@@ -59,9 +56,9 @@ def test_origin():
     my_origin = ORIGIN.load('tmp2')
     cat = my_origin.step08_write_sources(ncpu=1)
     cat = my_origin.step08_write_sources(ncpu=2, overwrite=True)
-    assert (len(cat) == 9) 
+    assert (len(cat) == 5) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 9)
+    assert (len(cat) == 5)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')

@@ -157,7 +157,7 @@ class ORIGIN(object):
                  cube_faint, mapO2, thresO2, cube_correl, maxmap, NbAreas,
                  cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
                  ThresholdPval, Cat1, spectra, Cat2, param, cube_std, var,
-                 expmap, cube_pval_correl, cube_local_max, cont_dct,
+                 cube_pval_correl, cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
                  segmentation_map_spatspect, cube_local_min, continuum,
                  mapThresh, areamap):
@@ -198,11 +198,7 @@ class ORIGIN(object):
         
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
-        # exposures map
-        if expmap is None:
-            self.expmap = (~cub.mask).astype(np.int)
-        else:
-            self.expmap = Cube(expmap)._data
+        self.mask = cub._mask
         
         # variance - set to Inf the Nan
         if var is None:
@@ -385,7 +381,7 @@ class ORIGIN(object):
                    maxmap=None, NbAreas=None, cube_profile=None, Cat0=None, 
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
-                   param=None, cube_std=None, var=None, expmap=None,
+                   param=None, cube_std=None, var=None,
                    cube_pval_correl=None,cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
@@ -412,11 +408,6 @@ class ORIGIN(object):
         stream = open('%s/%s.yaml'%(folder, name), 'r')
         param = yaml.load(stream)
         stream.close()
-        
-        if 'expmap' in param:
-            expmap = param['expmap']
-        else:
-            expmap = None
             
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -612,7 +603,7 @@ class ORIGIN(object):
                    Cat0=Cat0, Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
                    ThresholdPval= ThresholdPval, Cat1=Cat1, spectra=spectra,
-                   Cat2=Cat2, param=param,expmap=expmap,
+                   Cat2=Cat2, param=param,
                    cube_pval_correl=cube_pval_correl,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_test=segmentation_test,
@@ -775,20 +766,16 @@ class ORIGIN(object):
       
            
         
-    def step01_preprocessing(self, expmap=None, dct_order=10):
+    def step01_preprocessing(self, dct_order=10):
         """ Preprocessing of data, dct, standardization and noise compensation         
         
         Parameters
         ----------
-        expmap      : string
-                      Exposures map FITS file name
         dct_order   : integer
                       The number of atom to keep for the dct decomposition
 
         Returns
         -------
-        self.var               : array
-                                 New cube of variance                 
         self.cube_std          : `~mpdaf.obj.Cube`
                                  standardized data for PCA
         self.cont_dct          : `~mpdaf.obj.Cube`
@@ -797,43 +784,20 @@ class ORIGIN(object):
                                  2D map where sources and background are
                                  separated
         """
-        newvar = False
-        # exposures map
-        if expmap is not None:
-            self._loginfo('Step 01 - Preprocessing, expmap=%s, '%expmap + \
-            'dct order=%d'%dct_order)
-            _expmap = Cube(expmap)._data
-            if not np.array_equal(self.cube_raw.shape, _expmap.shape):
-                raise ValueError('Cube and expmap with a different shape')
-            _expmap[self.expmap==0] = 0                         
-            self.expmap = _expmap
-            self.param['expmap'] = expmap
-            newvar = True
-        else:
-            self._loginfo('Step 01 - Preprocessing, expmap=None, ' + \
-            'dct order=%d'%dct_order)
-        
-        self._loginfo('Data reweighting')            
-        weighted_cube_raw = self.cube_raw * np.sqrt(self.expmap)
+        self._loginfo('Step 01 - Preprocessing, dct order=%d'%dct_order)
             
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
-        faint_dct, cont_dct = dct_residual(weighted_cube_raw, dct_order)
+        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order)
          
         # compute standardized data
         self._loginfo('Data standardizing')
-        cube_std, var = Compute_Standardized_data(faint_dct, self.expmap,
-                                                  self.var, newvar)
-        var[np.isnan(var)] = np.inf
-        cont_dct = cont_dct / np.sqrt(var)
+        cube_std  = Compute_Standardized_data(faint_dct, self.mask, self.var)
+        cont_dct = cont_dct / np.sqrt(self.var)
         
         # compute test for segmentation map 
         self._loginfo('Segmentation test')
         segmentation_test = Compute_Segmentation_test(cont_dct)
-        
-        if newvar:        
-            self._loginfo('Variance estimation')   
-            self.var = var
         
         self._loginfo('Std signal saved in self.cube_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
@@ -876,10 +840,6 @@ class ORIGIN(object):
         if self.segmentation_test is None:
             raise IOError('Run the step 01 to initialize ' + \
             'self.segmentation_test')
-            
-        # nexpmap 3D to 2D 
-        nexpmap = np.zeros((self.Ny,self.Nx))
-        nexpmap[np.sum(self.expmap,axis=0)>0]=1        
         
         self._loginfo('   - pfa of the test = %0.2f'%pfa)
         self._loginfo('   - side size = %d pixels'%size)
@@ -891,6 +851,8 @@ class ORIGIN(object):
         self.param['pfa_areas'] = pfa
         self.param['size_areas'] = size
         self.param['minsize_areas'] = minsize
+        
+        nexpmap = (np.sum(~self.mask, axis=0) >0).astype(np.int)
         
         NbSubcube = 1 + int( self.Nx*self.Ny / (size**2) )
         
@@ -914,7 +876,7 @@ class ORIGIN(object):
                 minsize = int(self.Ny*self.Nx/(NbSubcube**2))
             areamap = area_segmentation_final(Grown_label, minsize)
         elif NbSubcube == 1:
-            areamap = (nexpmap>0).astype(np.int)
+            areamap = nexpmap
             
         self._loginfo('Save the map of areas in self.areamap') 
 
@@ -1081,33 +1043,25 @@ class ORIGIN(object):
         self.param['NbSubcube'] = NbSubcube
 
         # TGLR computing (normalized correlations)           
-        if 'expmap' in self.param: 
-            var = self.var/self.expmap
-            # inf * 0 = nan
-            var[self.expmap==0] = np.inf
-        else:
-            var = self.var
-            
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
         if NbSubcube == 1:
             correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
-                                            var, self.PSF, self.wfields,
+                                            self.var, self.PSF, self.wfields,
                                                self.profiles)  
         else:              
             correl, profile, cm = Correlation_GLR_test_zone( \
-                    self.cube_faint._data, var, self.PSF, self.wfields,
+                    self.cube_faint._data, self.var, self.PSF, self.wfields,
                     self.profiles, intx, inty, NbSubcube)  
                                                                          
         
         self._loginfo('Save the TGLR value in self.cube_correl')
-        mask = (self.expmap == 0)        
-        correl[mask] = 0
+        correl[self.mask] = 0
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                       mask=np.ma.nomask)
                       
         self._loginfo('Save the number of profile associated to the TGLR in self.cube_profile')
-        profile[mask] = 0       
+        profile[self.mask] = 0       
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
                        mask=np.ma.nomask, dtype=int)
         
@@ -1117,7 +1071,7 @@ class ORIGIN(object):
                        
         self._loginfo('Compute p-values of local maximum of correlation values')
         cube_local_max, cube_local_min = Compute_local_max_zone(correl, cm,
-                                                    self.expmap==0,
+                                                    self.mask,
                                                     intx, inty, NbSubcube,
                                                     neighboors)
         self._loginfo('Save self.cube_local_max from max correlations')
@@ -1247,16 +1201,9 @@ class ORIGIN(object):
 
         if self.Cat0 is None:
             raise IOError('Run the step 05 to initialize self.Cat0 catalogs')
-        if 'expmap' in self.param:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                var = self.var * self.expmap
-            var[np.isnan(var)] = np.inf
-        else:
-            var = self.var
             
         self.Cat1, Cat_est_line_raw_T, Cat_est_line_var_T, Cat_est_cnt_T = \
-        Estimation_Line(self.Cat0, self.cube_raw, var, self.PSF, \
+        Estimation_Line(self.Cat0, self.cube_raw, self.var, self.PSF, \
                      self.wfields, self.wcs, self.wave, size_grid = grid_dxy, \
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
