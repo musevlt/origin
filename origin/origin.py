@@ -21,6 +21,8 @@ import astropy.units as u
 import glob
 import logging
 import matplotlib.pyplot as plt
+from matplotlib.colors import BoundaryNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from scipy import stats
 import os.path
@@ -1429,7 +1431,7 @@ class ORIGIN(object):
 
         return catF
 
-    def plot_areas(self, ax=None):
+    def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()
             on the test used to perform this segmentation
         
@@ -1437,24 +1439,39 @@ class ORIGIN(object):
         ----------
         ax  : matplotlib.Axes
               The Axes instance in which the image is drawn
+        kwargs : matplotlib.artist.Artist
+                 Optional extra keyword/value arguments to be passed to
+                 the ``ax.imshow()`` function.
         """
         if ax is None:
-            ax = plt.gca()
-        tmp = np.zeros(self.segmentation_test.shape)
-        
-        meanx=[]
-        meany=[]        
-        for n in range(1, self.NbAreas+1):
-            ksel = np.where(self.areamap._data == n)
-            tmp[ksel] = n
-            meanx.append( np.mean(ksel[0]) )
-            meany.append( np.mean(ksel[1]) )            
+            ax = plt.gca()       
         
         self.segmentation_test.plot(ax=ax)
-        ax.imshow(tmp, origin='lower', cmap='jet', interpolation='nearest',alpha=.7)
-        for n in range(1, self.NbAreas+1):
-            ax.text(meany[n-1],meanx[n-1], str(n) ,color='w',fontweight='bold')
-        ax.set_title('continuum test with areas')        
+        
+        if 'cmap' not in kwargs:
+            kwargs['cmap'] = 'jet'
+        if 'alpha' not in kwargs:
+            kwargs['alpha'] = 0.7
+        if 'interpolation' not in kwargs:
+            kwargs['interpolation'] = 'nearest'
+        kwargs['origin'] = 'lower'
+        
+        cax = ax.imshow(self.areamap._data, **kwargs)
+        
+        i0 = np.min(self.areamap._data)
+        i1 = np.max(self.areamap._data)
+        if i0 != i1:
+            n = i1 - i0 + 1
+            bounds = np.linspace(i0, i1+1, n+1) - 0.5
+            norm = BoundaryNorm(bounds, n+1)
+            divider = make_axes_locatable(ax)
+            cax2 = divider.append_axes("right", size="5%", pad=1)
+            plt.colorbar(cax, cax=cax2, cmap=kwargs['cmap'], norm=norm,
+                         spacing='proportional', ticks=bounds+0.5,
+                         boundaries=bounds, format='%1i')
+            ax.set_title('continuum test with areas')
+        else:
+            ax.set_title('continuum test (1 area)')
         
     def plot_PCA_threshold(self, area, pfa_test=None, threshold=None, log10=True,
                            ax=None):
