@@ -1419,9 +1419,64 @@ class ORIGIN(object):
             ax.set_title('continuum test with areas')
         else:
             ax.set_title('continuum test (1 area)')
+    
+    def plot_step03(self, log10=True, fig=None, **fig_kw):
+        """ Plot the histogram and the threshold for the starting point of the 
+        PCA, this version of the plot is to do before doing the PCA
         
-    def plot_PCA_threshold(self, area, pfa_test=None, threshold=None, log10=True,
-                           ax=None):
+        Parameters
+        ----------
+        log10     : bool
+                    Draw histogram in logarithmic scale or not
+        **fig_kw : 
+        All additional keyword arguments are passed to the figure() call.
+
+        """
+        if self.cube_std is None:
+            raise IOError('Run the step 01 to initialize self.cube_std')
+            
+        if self.NbAreas is None:
+            raise IOError('Run the step 02 to initialize self.NbAreas')
+            
+        if 'pfa_test' in self.param:
+            pfa_test = self.param['pfa_test']
+        else:
+            raise IOError('pfa_test param is None: set a value or run' + \
+            ' the Step03')
+         
+        if 'threshold_list' is self.param:
+            threshold_list = self.param['threshold_list']
+        else:
+            threshold_list = None
+                       
+        if fig is None:
+            fig = plt.figure()
+            
+        if self.NbAreas<= 3:
+            n = 1
+            m = self.NbAreas
+        else:
+            n = self.NbAreas//3
+            m = 3
+            if (n*m)<self.NbAreas:
+                n = n + 1
+
+        for area in range(1, self.NbAreas+1):
+            if threshold_list is None:
+                threshold = None
+            else:
+                threshold = threshold_list[area]
+            ax = fig.add_subplot(n, m, area, **fig_kw)
+            self.plot_PCA_threshold(area, pfa_test, threshold, log10, ax)
+           
+        # Fine-tune figure; hide x ticks for top plots and y ticks for right plots
+        for a in fig.axes[:-1]:
+            a.set_xlabel("")
+        for a in fig.axes[1:]:
+            a.set_ylabel("")
+        
+    def plot_PCA_threshold(self, area, pfa_test=None, threshold=None,
+                           log10=True, ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
@@ -1430,7 +1485,8 @@ class ORIGIN(object):
         area      : integer in [1, NbAreas] 
                     Area ID          
         pfa_test  : float
-                    PFA of the test (if None, the value set during step03 is used)
+                    PFA of the test (if None, the value set during step03 is
+                    used)
         threshold : float
                     Threshold value (estimated if None)
         log10     : bool
@@ -1448,7 +1504,8 @@ class ORIGIN(object):
             if 'pfa_test' in self.param:
                 pfa_test = self.param['pfa_test']
             else:
-                raise IOError('pfa_test param is None: set a value or run the Step03')
+                raise IOError('pfa_test param is None: set a value or run' + \
+                ' the Step03')
             
             
         if ax is None:
@@ -1482,17 +1539,18 @@ class ORIGIN(object):
         ax.plot(center, hist,'.r')
         ym,yM = ax.get_ylim()
         if threshold is None:
-            ax.plot(center, gauss,'-b',alpha=.5)
-        ax.plot([thre,thre],[ym,yM],'b',lw=2,alpha=.5)
+            ax.plot(center, gauss,'-b', alpha=.5)
+        ax.plot([thre,thre],[ym,yM],'b', lw=2, alpha=.5)
         ax.grid()
         ax.set_xlim((center.min(),center.max()))
         ax.set_ylim((ym,yM))
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
-        ax.set_title('PCA histogram - zone %d - threshold %f' %(area,thre))  
+        ax.text(0.7, 0.8 ,'zone %d\nthreshold %.2f'%(area, thre),
+                transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5)) 
             
         
-    def plot_mapPCA(self, area=None, iteration=None, ax=None):
+    def plot_mapPCA(self, area=None, iteration=None, ax=None, **kwargs):
         """ Plot at a given iteration (or at the end) the number of times
         a spaxel got cleaned by the PCA
         
@@ -1504,6 +1562,9 @@ class ORIGIN(object):
                     Display the nuisance/bacground pixels at iteration k
         ax        : matplotlib.Axes
                     The Axes instance in which the image is drawn
+        kwargs : matplotlib.artist.Artist
+                 Optional extra keyword/value arguments to be passed to
+                 the ``ax.imshow()`` function
         """
 
         if self.mapO2 is None:
@@ -1527,11 +1588,14 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()
             
-        themap.plot(title=title, colorbar='v', ax=ax, cmap='jet')
+        if 'cmap' not in kwargs:
+            kwargs['cmap'] = 'jet'
+            
+        themap.plot(title=title, colorbar='v', ax=ax, **kwargs)
   
-        ax.set_title(title)
+    
         
-    def plot_segmentation(self, pfa=5e-2, step=7, ax = None):
+    def plot_segmentation(self, pfa=5e-2, step=7, maxmap=True, ax=None, **kwargs):
         """ Plot the 2D segmentation map associated to a PFA
         This function draw the labels od the segmentation map which is used, 
         not with the same pfa, in :
@@ -1548,11 +1612,18 @@ class ORIGIN(object):
                Pvalue for the test which performs segmentation
         step : int
                The Segmentation map as used in this step: (2/5/7)
+        maxmap : bool
+                 If true, segmentation map is plotted as contours on the maxmap
         ax   : matplotlib.Axes
                The Axes instance in which the image is drawn
+        kwargs : matplotlib.artist.Artist
+                 Optional extra keyword/value arguments to be passed to
+                 the ``ax.imshow()`` function
         """
         if self.cont_dct is None:
-            raise IOError('Run the step 01 to initialize self.cont_dct')        
+            raise IOError('Run the step 01 to initialize self.cont_dct') 
+        if maxmap and self.maxmap is None:
+            raise IOError('Run the step 04 to initialize self.maxmap')
             
         if ax is None:
             ax = plt.gca()
@@ -1577,11 +1648,23 @@ class ORIGIN(object):
             raise IOError('sept must be equal to 2 or 5 or 7')
             
         map_in = Segmentation(self.segmentation_test.data, pfa, \
-                              clean=clean, mask=mask)   
+                              clean=clean, mask=mask)
                               
-        ima = Image(data=map_in, wcs=self.wcs)
-        ima.plot(title='Labels of segmentation, pfa: %f' %(pfa), ax=ax,
-             cmap='jet')
+        if maxmap:
+            self.maxmap[self.maxmap._data == 0] = np.ma.masked
+            self.maxmap.plot(ax=ax)
+            if 'cmap' not in kwargs:
+                kwargs['cmap'] = 'Greys'
+            if 'interpolation' not in kwargs:
+                kwargs['interpolation'] = 'nearest'
+            kwargs['origin'] = 'lower'
+            ax.contour(map_in, [0], **kwargs)
+        else:
+            ima = Image(data=map_in, wcs=self.wcs)
+            if 'cmap' not in kwargs:
+                kwargs['cmap'] = 'jet'
+            ima.plot(title='Labels of segmentation, pfa: %f' %(pfa), ax=ax,
+                     **kwargs)
 
 
     def plot_thresholdVsPFA_background(self, purity=.9, 
