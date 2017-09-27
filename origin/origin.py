@@ -374,6 +374,10 @@ class ORIGIN(object):
         self.continuum = continuum
         # step7
         self.Cat2 = Cat2
+        if self.Cat2 is not None:
+            self.Cat2b = self._Cat2b()
+        else:
+            self.Cat2b = None
         
         self._loginfo('00 Done')
         
@@ -1333,10 +1337,46 @@ class ORIGIN(object):
         'merging in self.segmentation_map_spatspect')  
         
         _format_cat(self.Cat2, 2)
-        self._loginfo('Save the updated catalogue in self.Cat2 ' + \
+        self._loginfo('Save the updated catalogue in self.Cat2' + \
+        ' and self.Cat2b' + \
         '(%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0],
           len(self.Cat2)))
+          
+        self.Cat2b = self._Cat2b()
         self._loginfo('07 Done')
+        
+    def _Cat2b(self):
+        from astropy.table import MaskedColumn
+        cat = self.Cat2.group_by('ID')
+        lmax = max([len(g['lbda']) for g in cat.groups])
+        ncat = Table(names=['ID','RA','DEC','NLINE','SEG'],
+                     dtype=['i4','f4','f4','i4','i4'], masked=True)
+        for l in range(lmax):
+            ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
+                                         format='.2f'))
+            ncat.add_column(MaskedColumn(name='FLUX{}'.format(l), dtype='f4',
+                                         format='.1f'))
+            ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l), dtype='f4',
+                                         format='.2f'))
+            ncat.add_column(MaskedColumn(name='TGLR{}'.format(l), dtype='f4',
+                                         format='.2f'))
+            ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
+                                         format='.2f'))
+        for key, group in zip(cat.groups.keys,cat.groups):
+            dic = {'ID':key['ID'], 'RA':group['ra_centroid'].mean(),
+            'DEC':group['dec_centroid'].mean(), 'NLINE':len(group['lbda']),
+            'SEG':group['seg_label'][0]}
+            ksort = group['T_GLR'].argsort()[::-1]
+            for k, (lbda, flux, tglr, eflux, purity) in \
+            enumerate(group['lbda','flux','T_GLR','residual','purity'][ksort]):
+                dic['LBDA{}'.format(k)] = lbda
+                dic['FLUX{}'.format(k)] = flux
+                dic['EFLUX{}'.format(k)] = eflux
+                dic['PURI{}'.format(k)] = purity
+                dic['TGLR{}'.format(k)] = tglr
+            ncat.add_row(dic)
+        ncat.sort('SEG')
+        return ncat
 
     def step08_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
