@@ -129,10 +129,6 @@ class ORIGIN(object):
         cube_profile       : `~mpdaf.obj.Cube` (type int)
                              Number of the profile associated to the T_GLR.
                              Result of step04_compute_TGLR.
-        cube_pval_correl: `~mpdaf.obj.Cube`
-                             Cube of thresholded p-values associated to the
-                             local maxima of T_GLR values. 
-                             Result of step04_compute_TGLR.                                                          
         cube_local_max     : `~mpdaf.obj.Cube`
                              Cube of Local maxima of T_GLR values. Result of                             
                              step04_compute_TGLR. From Max correlations
@@ -157,7 +153,7 @@ class ORIGIN(object):
                  cube_faint, mapO2, thresO2, cube_correl, maxmap, NbAreas,
                  cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
                  ThresholdPval, Cat1, spectra, Cat2, param, cube_std, var,
-                 cube_pval_correl, cube_local_max, cont_dct,
+                 cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
                  segmentation_map_spatspect, cube_local_min, continuum,
                  mapThresh, areamap):
@@ -328,7 +324,6 @@ class ORIGIN(object):
         self.cube_profile = cube_profile
         self.maxmap = maxmap
         # step5
-        self.cube_pval_correl = cube_pval_correl
         self.segmentation_map_threshold = segmentation_map_threshold
         self.segmentation_map_spatspect = segmentation_map_spatspect        
         self.mapThresh = mapThresh        
@@ -382,7 +377,7 @@ class ORIGIN(object):
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
                    param=None, cube_std=None, var=None,
-                   cube_pval_correl=None,cube_local_max=None,cont_dct=None,
+                   cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
                    continuum=None, mapThresh=None, areamap=None)
@@ -489,11 +484,6 @@ class ORIGIN(object):
             cube_profile = None
 
         # step5
-        if os.path.isfile('%s/cube_pval_correl.fits'%folder):
-            cube_pval_correl = Cube('%s/cube_pval_correl.fits'%folder,
-                                    mask=np.ma.nomask, dtype=np.float64)            
-        else:
-            cube_pval_correl = None
         if os.path.isfile('%s/Cat0.fits'%folder):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
         else:
@@ -604,7 +594,6 @@ class ORIGIN(object):
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
                    ThresholdPval= ThresholdPval, Cat1=Cat1, spectra=spectra,
                    Cat2=Cat2, param=param,
-                   cube_pval_correl=cube_pval_correl,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_test=segmentation_test,
                    segmentation_map_threshold=segmentation_map_threshold,
@@ -706,8 +695,6 @@ class ORIGIN(object):
             self.cube_local_max.write('%s/cube_local_max.fits'%path2)    
         if self.cube_local_min is not None:
             self.cube_local_min.write('%s/cube_local_min.fits'%path2)                                
-        if self.cube_pval_correl is not None:
-            self.cube_pval_correl.write('%s/cube_pval_correl.fits'%path2)
         if self.segmentation_map_threshold is not None:
             self.segmentation_map_threshold.write('%s'%path2 + \
             '/segmentation_map_threshold.fits')  
@@ -1109,12 +1096,9 @@ class ORIGIN(object):
                                  Background and source threshold values  
         self.mapThresh         : `~mpdaf.obj.Image`
                                  Threshold map
-        self.cube_pval_correl  : `~mpdaf.obj.Cube`
-                                 Cube of thresholded p-values associated
-                                 to the local max of T_GLR values
         self.Cat0 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: x y z ra dec lbda T_GLR profile pvalC
+                    Columns: x y z ra dec lbda T_GLR profile
                     Coordinates are in pixels.
         self.segmentation_map_threshold : `~mpdaf.obj.Image`
                                           Segmentation map for threshold
@@ -1152,15 +1136,9 @@ class ORIGIN(object):
         self._loginfo('Save the threshold map in self.mapThresh')                                          
         self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)                
         
-        self._loginfo('Save the thresholded p-values associated to the ' + \
-        'local max of T_GLR values in self.cube_pval_correl')
-        self.cube_pval_correl = Cube(data=cube_pval_correl, \
-                                     wave=self.wave,
-                                     wcs=self.wcs, mask=np.ma.nomask)      
-        
         self.Cat0 = Create_local_max_cat(self.cube_correl._data,
                                          self.cube_profile._data,
-                                         self.cube_pval_correl._data,
+                                         cube_pval_correl,
                                          self.wcs, self.wave)
         self._loginfo('Save a first version of the catalogue of ' + \
                               'emission lines in self.Cat0 (%d lines)' \
@@ -1189,7 +1167,7 @@ class ORIGIN(object):
         -------
         self.Cat1    : astropy.Table
                        Catalogue of parameters of detected emission lines.
-                       Columns: x y z ra dec lbda T_GLR profile pvalC
+                       Columns: x y z ra dec lbda T_GLR profile
                                 residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
@@ -1258,7 +1236,7 @@ class ORIGIN(object):
                     Catalogue
                     Columns: ID x_circle y_circle ra_circle dec_circle
                     x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
-                    z ra dec lbda T_GLR profile pvalC residual flux
+                    z ra dec lbda T_GLR profile residual flux
                     num_line purity ID_old seg_label
         self.segmentation_map_spatspect : `~mpdaf.obj.Image`
                                           Segmentation map

@@ -1569,8 +1569,7 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     -------
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : x y z ra dec lba,
-                                   T_GLR profile pvalC
+              Columns of Cat_ref : x y z ra dec lba T_GLR profile
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1582,7 +1581,6 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     zpixRef,ypixRef,xpixRef = np.where(cube_pval_lm_correl>0)
     correl_max = correl[zpixRef,ypixRef,xpixRef]
     profile_max = profile[zpixRef, ypixRef, xpixRef]
-    pvalC = cube_pval_lm_correl[zpixRef, ypixRef, xpixRef]
 
     # add real coordinates
     pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
@@ -1592,9 +1590,9 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
     Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
-                     profile_max, pvalC],
+                     profile_max],
                     names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
-                           'profile', 'pvalC'))
+                           'profile'))
     # Catalogue sorted along the Z axis
     Cat_ref.sort('z')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
@@ -2029,7 +2027,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
                  Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile pvalC
+                 x y z T_GLR profile
     DATA       : array
                  RAW data
     VAR        : array
@@ -2059,7 +2057,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2             : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
-                       x y z ra dec lbda, T_GLR profile pvalC residual flux num_line
+                       x y z ra dec lbda, T_GLR profile residual flux num_line
     Cat_est_line_raw : list of arrays
                        Estimated lines in data space
     Cat_est_line_std : list of arrays
@@ -2140,7 +2138,7 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
                  Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile pvalC
+                 x y z T_GLR profile
     correl     : array
                  Origin Correlation data
     purity_curves     : array
@@ -2156,7 +2154,7 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
                        x y z ra dec lbda, 
-                       T_GLR profile pvalC residual flux num_line
+                       T_GLR profile residual flux num_line
                        purity
 
 
@@ -2203,8 +2201,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     Cat0     : astropy.Table
                catalogue
                Columns of Cat0:
-               x y z ra dec lbda T_GLR profile pvalC
-               residual flux num_line
+               x y z ra dec lbda T_GLR profile residual flux num_line
     fwhm_fsf : float
                The mean over the wavelengths of the FWHM of the FSF
     wcs      : `mpdaf.obj.WCS`
@@ -2216,7 +2213,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
            Columns of CatF:
            ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
            ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           pvalC residual flux num_line
+           residual flux num_line
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
@@ -2330,7 +2327,7 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
                    Columns of Cat:
                    ID x_circle y_circle ra_circle dec_circle
                    x_centroid y_centroid ra_centroid, dec_centroid nb_lines
-                   x y z ra dec lbda T_GLR profile pvalC
+                   x y z ra dec lbda T_GLR profile
                    residual flux num_line
     pfa          : Pvalue for the test which performs segmentation
     segmentation_test : array
@@ -2350,7 +2347,7 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
            Columns of CatF:
            ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
            ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           pvalC residual flux num_line
+           residual flux num_line
     map_in       : Array
                    segmentation map           
 
@@ -2503,7 +2500,7 @@ def estimate_spectrum(nb_lines, wave_pix, num_profil, fwhm_profiles,
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, segmap, correl, fwhm_profiles, 
                      param, path, name, ThresholdPval, i, ra, dec, x_centroid,
-                     y_centroid, seg_label, wave_pix, GLR, num_profil, pvalC,
+                     y_centroid, seg_label, wave_pix, GLR, num_profil,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
                      Cat_est_cont_data, Cat_est_cont_var,
                      y, x, flux, purity, src_vers, author):
@@ -2625,7 +2622,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         #profile_dico = Dico[profile_num]
         fl = flux[j]
         pu = purity[j]
-        vals = [w[j], profil_FWHM, fl, GLR[j], pvalC[j], profile_num,pu]
+        vals = [w[j], profil_FWHM, fl, GLR[j], profile_num,pu]
         src.add_line(cols, vals, units, desc, fmt)
 
         src.add_narrow_band_image_lbdaobs(cube,
@@ -2658,7 +2655,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     ----------
     Cat              : Catalogue of parameters of detected emission lines:
                        ID x_circle y_circle x_centroid y_centroid nb_lines
-                       x y z T_GLR profile pvalCresidual
+                       x y z T_GLR profile residual
                        flux num_line RA DEC
     Cat_est_line     : list of spectra
                        Catalogue of estimated lines
@@ -2680,7 +2677,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
 
-    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PVALC', 'PROF','PURITY']
+    cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PROF','PURITY']
     units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone]
     fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', 'd', '.2f']
     desc = None
@@ -2721,7 +2718,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         wave_pix = E['z'].data
         GLR = E['T_GLR']
         num_profil = E['profile'].data
-        pvalC = E['pvalC']
         # Number of lines in this group
         nb_lines = E['nb_lines'][0]
         Cat_est_line_data = np.empty((nb_lines, wave.shape))
@@ -2738,7 +2734,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         flux = E['flux']
         purity = E['purity']
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
-                          wave_pix, GLR, num_profil, pvalC, nb_lines,
+                          wave_pix, GLR, num_profil, nb_lines,
                           Cat_est_line_data, Cat_est_line_var,
                           Cat_est_cont_data, Cat_est_cont_var,
                           y, x, flux, purity,
