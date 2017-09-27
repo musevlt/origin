@@ -869,7 +869,7 @@ class ORIGIN(object):
                                       wcs=self.wcs, mask=np.ma.nomask)        
         self._loginfo('01 Done')
 
-    def step02_areas(self,  pfa=.2, size=120, minsize=None):
+    def step02_areas(self,  pfa=.2, minsize=100, maxsize=None):
         """ Creation of automatic area         
         
         Parameters
@@ -877,13 +877,11 @@ class ORIGIN(object):
         pfa      :  float
                     PFA of the segmentation test to estimates sources with
                     strong continuum
-        size   :    int
-                    Lenght in pixel of the side of typical square wanted                        
-                        enough big area to satisfy the PCA
-        minsize :   int
-                      Minimum size in pixels^2 for a label
-                      if label is less than minsize the label is merged with  
-                      the first found one ---- To Improve 
+        minsize  :  int
+                    Lenght in pixel of the side of typical surface wanted                        
+                    enough big area to satisfy the PCA
+        maxsize :   int
+                    Lenght in pixel of the side of maximum surface wanted                        
                             
 
         Returns
@@ -901,39 +899,49 @@ class ORIGIN(object):
             'self.segmentation_test')
         
         self._loginfo('   - pfa of the test = %0.2f'%pfa)
-        self._loginfo('   - side size = %d pixels'%size)
+        self._loginfo('   - side size = %d pixels'%minsize)
         if minsize is None:
             self._loginfo('   - minimum size = None')
         else:
             self._loginfo('   - minimum size = %d pixels**2'%minsize)
         
         self.param['pfa_areas'] = pfa
-        self.param['size_areas'] = size
         self.param['minsize_areas'] = minsize
+        self.param['maxsize_areas'] = maxsize
         
         nexpmap = (np.sum(~self.mask, axis=0) >0).astype(np.int)
         
-        NbSubcube = 1 + int( self.Nx*self.Ny / (size**2) )
-        
-        if NbSubcube > 1:
-        
+        NbSubcube = np.maximum(1,int( np.sqrt( np.sum(nexpmap)/(minsize**2) )))
+        print(NbSubcube)
+        if NbSubcube > 1:          
+            if maxsize is None:
+                maxsize = minsize*2
+                
+            MinSize = minsize**2 
+            MaxSize = maxsize**2                
+                
             self._loginfo('First segmentation of %d^2 square'%NbSubcube)
             self._loginfo('Squares segmentation and fusion') 
             square_cut_fus = area_segmentation_square_fusion(nexpmap, \
-                                                NbSubcube, self.Ny, self.Nx)
+                            MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
+            
             self._loginfo('Sources fusion')         
             square_src_fus, src = \
             area_segmentation_sources_fusion(self.segmentation_test.data, \
                                              square_cut_fus, pfa, \
                                              self.Ny, self.Nx)        
+            
             self._loginfo('Convex envelope')                 
-            convex_lab = area_segmentation_convex_fusion(square_src_fus,src)
+            convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
+            
             self._loginfo('Areas dilation')                 
             Grown_label = area_growing(convex_lab, nexpmap)        
             
-            if minsize is None:
-                minsize = int(self.Ny*self.Nx/(NbSubcube**2))
-            areamap = area_segmentation_final(Grown_label, minsize)
+            self._loginfo('Fusion of small area')
+            self._loginfo('Minimum Size: %d px'%MinSize)
+            self._loginfo('Maximum Size: %d px'%MaxSize)
+            areamap = area_segmentation_final(Grown_label, MinSize, MaxSize)
+            
         elif NbSubcube == 1:
             areamap = nexpmap
             
@@ -950,6 +958,7 @@ class ORIGIN(object):
         self.param['nbareas'] = self.NbAreas
         
         self._loginfo('02 Done') 
+        
         
     def step03_compute_greedy_PCA(self, mixing=False,
                               Noise_population=50, pfa_test=.01,

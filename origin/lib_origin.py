@@ -53,7 +53,7 @@ from mpdaf.sdetect import Source
 
 __version__ = '2.0 beta'
 
-def Spatial_Segmentation(Nx, Ny, NbSubcube):
+def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     """Function to compute the limits in pixels for each zone.
     Each zone is computed from the left to the right and the top to the bottom
     First pixel of the first zone has coordinates : (row,col) = (Nx,1).
@@ -66,7 +66,8 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
                 Number of rows
     NbSubcube : integer
                 Number of subcubes for the spatial segmentation
-
+    start     : tuple
+                if not None, the tupe is the (y,x) starting point
     Returns
     -------
     intx, inty : integer, integer
@@ -83,6 +84,11 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube):
     # Segmentation of the columns vector in Nbsubcube parts from the left to
     # the right
     intx = np.linspace(0, Nx, NbSubcube + 1, dtype=np.int)
+    
+    if start is not None:
+        inty+=start[0]
+        intx+=start[1]
+    
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return inty, intx
 
@@ -259,8 +265,111 @@ def Segmentation(Segmentation_test, pfa, clean=True, mask=None):
 
     return map_in
 
+def createradvar(cu,ot):
+    """Function to compute the compactness of areas using variance of
+    position. The variance is computed on the position given by 
+    adding one of the 'ot' to 'cu'
 
-def area_segmentation_square_fusion(nexpmap, NbSubcube, Ny, Nx):
+    Parameters
+    ----------
+    cu :   2D array
+           The current array
+    ot :   3D array
+           The other array
+
+    Returns
+    -------
+    var :     array
+              The radial variances
+
+    Date  : Sept,27 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """      
+    N = ot.shape[0]
+    out = np.zeros(N)
+    for n in range(N):
+        tmp = cu + ot[n,:,:]
+        y,x = np.where(tmp>0)
+        r = np.sqrt( (y-y.mean())**2 + (x-x.mean())**2 )
+        out[n] = np.var(r)
+    return out
+
+def fusion_areas(label, MinSize, MaxSize, option=None):        
+    """Function which merge areas which have a surface less than 
+    MinSize if the size after merging is less than MaxSize. 
+    The criteria of neighboor can be related to the minimum surface
+    or to the compactness of the output area
+
+    Parameters
+    ----------
+    label   :   area
+                The labels of areas
+    MinSize :   number
+                The size of areas under which they need to merge
+    MaxSize :   number
+                The size of areas above which they cant merge
+    option  :   string
+                if 'var' the compactness criteria is used
+                if None the minimum surface criteria is used                
+                
+    Returns
+    -------
+    label :     array
+                The labels of merged areas
+
+    Date  : Sept,27 2017
+    Author: Antony Schutz (antonyschutz@gmail.com)
+    """ 
+    while True:
+        indlabl = np.argsort(np.sum(label,axis=(1,2)))                          
+        tampon = label.copy()
+        for n in indlabl:
+            # if the label is not empty
+            cu = label[n,:,:]
+            cu_size = np.sum(cu)
+            
+            if cu_size>0 and cu_size<MinSize:
+                # search for neighboor
+                labdil = label[n,:,:].copy()
+                labdil = binary_dilation(labdil,iterations=1)
+                
+                # only neighboor
+                test = np.sum(label*labdil[np.newaxis,:,:],axis=(1,2))>0                  
+                             
+                indice = np.where(test==1)[0]
+                ind = np.where(indice!=n)[0]
+                indice = indice[ind]            
+    
+                ## BOUCLER SUR LES CANDIDATS                         
+                ot = label[indice,:,:]
+                
+                # test size of current with neighboor
+                if option is None:
+                    test = np.sum( ot ,axis=(1,2))
+                elif option == 'var':
+                    test = createradvar(cu,ot)
+                else:
+                    raise IOError('bad o^ption')
+       
+    
+                if len(test)>0:          
+                    # keep the min-size                                    
+                    ind = np.argmin(test)    
+                    cand = indice[ind]
+                    if (np.sum(label[n,:,:])+test[ind])<MaxSize:
+                        label[n,:,:]+=label[cand,:,:]
+                        label[cand,:,:] = 0
+                
+        # clean empty area
+        ind = np.sum(label,axis=(1,2))>0
+        label = label[ind,:,:] 
+        tampon = tampon[ind,:,:] 
+        
+        if np.sum(tampon-label)==0:
+            break
+    return label
+
+def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     """Function to create non square area based on continuum test. The full 
     2D image is first segmented in subcube. The area are fused in case they
     are too small. Thanks to the continuum test, detected sources are 
@@ -271,7 +380,11 @@ def area_segmentation_square_fusion(nexpmap, NbSubcube, Ny, Nx):
     Parameters
     ----------
     nexpmap :   2D array
-                the active pixel of the image                                                
+                the active pixel of the image      
+    MinS    :   number
+                The size of areas under which they need to merge
+    MaxS    :   number
+                The size of areas above which they cant merge                                       
     NbSubcube : integer
                 Number of subcubes for the spatial segmentation    
     Nx        : integer
@@ -291,8 +404,15 @@ def area_segmentation_square_fusion(nexpmap, NbSubcube, Ny, Nx):
     logger = logging.getLogger('origin')
     t0 = time.time()        
     
-    # square area index
-    inty, intx = Spatial_Segmentation(Nx, Ny, NbSubcube)
+    # square area index with borders
+    Vert = np.sum(nexpmap,axis=1)
+    Hori = np.sum(nexpmap,axis=0)   
+    y1 = np.where(Vert>0)[0][0]
+    x1 = np.where(Hori>0)[0][0]    
+    y2 = Ny-np.where(Vert[::-1]>0)[0][0]
+    x2 = Nx-np.where(Hori[::-1]>0)[0][0]        
+    start=(y1,x1)
+    inty, intx = Spatial_Segmentation(Nx, Ny, NbSubcube, start=start)
 
     #% FUSION square AREA
     label = []
@@ -308,40 +428,12 @@ def area_segmentation_square_fusion(nexpmap, NbSubcube, Ny, Nx):
                     label_tmp = np.zeros((Ny,Nx))                
                     label_tmp[y1:y2,x1:x2] = (labtest==(n+1))
                     label.append(label_tmp)
+                    
     label = np.array(label)                                 
-    if NbSubcube>1:
-        Maxlen = np.sum(nexpmap) / (NbSubcube**2 -1)    
-    else:
-        Maxlen = np.sum(nexpmap)
-    nlabel = label.shape[0]
-    for n in range(nlabel):
-        # if the label is not empty
-        if np.sum(label[n,:,:])>0 :
-            # search for neighboor
-            labdil = label.copy()
-            labdil[n,:,:] = binary_dilation(labdil[n,:,:],iterations=1)
-            test = np.sum(labdil,axis=0)   
-            if test.max()>1:
-                # it can be a corner or a line of bordure so general process is
-                # to check all pixels bordure
-                yset,xset = np.where(test>1)
-                nset = len(yset)
-                for yxn in range(nset):
-                    y = yset[yxn]
-                    x = xset[yxn]                
-                    candidats = np.where(labdil[:,y,x]>0)[0]
-                    # the 2 first detected, then with the rest
-                    if len(candidats)>1:  
-                        for cand_id in range(1,len(candidats)):
-                            cand = candidats[cand_id]
-                            tmp = label[[candidats[0],cand],:,:]             
-                            if np.sum(tmp)<Maxlen:
-                                label[candidats[0],:,:]=np.sum(tmp,axis=0)>0
-                                label[cand,:,:]=0                 
     
-    # clean empty area         
-    ind = np.sum(label,axis=(1,2))>0
-    label = label[ind,:,:]     
+
+    
+    label = fusion_areas(label, MinS, MaxS)   
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))            
     return label   
@@ -398,51 +490,29 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
     sources = np.zeros((nlab,Ny,Nx))
     for n in range(1,nlab+1):
         sources[n-1,:,:] = (labsrc==n)>0
-
+    sources_save = sources.copy() 
+    
     nlabel = label.shape[0]      
-    
-    # source fusion with area     
-    areasrc = np.concatenate((label,sources),axis=0)
-    
-    # for each fused area search the sources
-    label_out = np.zeros((nlabel,Ny,Nx))
-    for n in range(nlabel):
-        ind = np.delete(np.arange(nlabel),n)
-        ind = np.delete(np.arange(nlab+nlabel),ind)
-        test = np.sum(areasrc[ind,:,:],axis=0)      
-    
-        # it can be a corner or a line of bordure so general process is
-        # to check all pixels bordure
-        if test.max()>1:
-            yset,xset = np.where(test==2)
-            nset = len(yset)
-            for yxn in range(nset):
-                y = yset[yxn]
-                x = xset[yxn]  
-                spec = areasrc[:,y,x]>0
-                if np.sum(spec)>1: 
-                    candidats = np.where(spec)[0]
-                    # the 2 first detected, then with the rest
-                    if len(candidats)>1:  
-                        for cand_id in range(1,len(candidats)):
-                            cand = candidats[cand_id]
-                            tmp = areasrc[[candidats[0],cand],:,:]             
-                            
-                            srcs = areasrc[cand,:,:]             
-                            labs = areasrc[:nlabel,:,:] 
-                            product = labs*srcs[np.newaxis,:,:]
-                            ind = np.argmax(np.sum(product,axis=(1,2)))
-                            if candidats[0] == ind:                    
-                                areasrc[candidats[0],:,:]=np.sum(tmp,axis=0)>0
-                                areasrc[cand,:,:]=0     
-                            else:
-                                areasrc[candidats[0],:,:]*=(1-areasrc[cand,:,:])
-        ind = np.delete(np.arange(nlabel),n)
-        areasrc[ind,:,:] *= (1-areasrc[n,:,:])[np.newaxis,:,:]
-        label_out[n,:,:] = areasrc[candidats[0],:,:]    
-        areasrc[n,:,:] = 0    
+    nsrc = sources.shape[0]
+    for n in range(nsrc):
+        cu_src = sources[n,:,:]
+        # find the area in which the current source 
+        # has bigger probability to be
+        
+        test = np.sum( cu_src[np.newaxis,:,:] * label , axis = (1,2) )
+        if len(test)>0:
+            ind = np.argmax(test)
+            # associate the source to the label
+            label[ind,:,:] = (label[ind,:,:] + cu_src)>0
+            # mask other labels from this sources 
+            mask = (1-label[ind,:,:])[np.newaxis,:,:]
+            ot_lab = np.delete(np.arange(nlabel),ind)
+            label[ot_lab,:,:]*=mask
+            # delete the source
+            sources[n,:,:] = 0    
+  
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))            
-    return label_out, np.sum(sources,axis=0)
+    return label, np.sum(sources_save,axis=0)
     
 
 
@@ -617,17 +687,17 @@ def area_growing(label,mask):
     return label_out
 
 
-def area_segmentation_final(label, minsize):
+def area_segmentation_final(label, MinS, MaxS):
     """Merging of small areas and give index
 
     Parameters
     ----------
     label :   array
               label containing convex enveloppe of each area
-    minsize : int
-              Minimum size in pixels^2 for a label
-              if label is less than minsize the label is merged with the 
-              first found one ---- To Improve 
+    MinS    :   number
+                The size of areas under which they need to merge
+    MaxS    :   number
+                The size of areas above which they cant merge 
 
     Returns
     -------
@@ -641,34 +711,7 @@ def area_segmentation_final(label, minsize):
     t0 = time.time()
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))   
     # if an area is too small
-    tmp = np.zeros(label.shape)    
-    while True:
-        sizelab = np.sum(label,axis=(1,2)) 
-        lab = np.where(sizelab<minsize)[0]
-        # if too small
-        if np.sum(lab)>-1:        
-            for n in lab:
-                # find the neighboors
-                labdil = label.copy()
-                labdil[n,:,:] = binary_dilation(labdil[n,:,:],iterations=1)
-                test = np.sum(labdil,axis=0)   
-                if test.max()>1:   
-                    yset,xset = np.where(test>1)                    
-                    candidats = np.where(labdil[:,yset[0],xset[0]]>0)[0]
-                    label[candidats[0],:,:] = np.sum(label[candidats,:,:],axis=0)
-                    label[candidats[1:],:,:] = 0
-                    tmp[candidats[1:],:,:] = 0                
-                                        
-            # clean empty area         
-            ind = np.sum(label,axis=(1,2))>0
-            label = label[ind,:,:] 
-            tmp = tmp[ind,:,:] 
-        else:
-            break
-        if np.sum(label-tmp)==0:
-            break
-        else:
-            tmp = label.copy() 
+    label = fusion_areas(label, MinS, MaxS, option='var')
     
     # create label map
     areamap = np.zeros(label.shape[1:])
