@@ -176,7 +176,7 @@ class ORIGIN(object):
                  cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
                  segmentation_map_spatspect, cube_local_min, continuum,
-                 mapThresh, areamap):
+                 mapThresh, areamap, imawhite, imadct, imastd):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -222,6 +222,7 @@ class ORIGIN(object):
             self.var[np.isnan(self.var)] = np.inf
         else:
             self.var = var
+    
         # RA-DEC coordinates
         self.wcs = cub.wcs
         # spectral coordinates
@@ -323,13 +324,27 @@ class ORIGIN(object):
             self.FWHM_PSF = np.mean(FWHM_PSF)
             self.param['FWHM PSF'] = FWHM_PSF.tolist()
             self._loginfo('mean FWHM of the FSFs = %.2f pixels'%self.FWHM_PSF)
+            
+        # additional images
+        if imawhite is None:
+            self.ima_white = cub.mean(axis=0)
+        else:
+            self.ima_white =  imawhite
         
-        del cub        
+        del cub
         
         # step1
         self.cube_std = cube_std
         self.cont_dct = cont_dct       
-        self.segmentation_test = segmentation_test      
+        self.segmentation_test = segmentation_test     
+        if imadct is None and self.cont_dct is not None:
+                self.ima_dct = self.cont_dct.mean(axis=0)
+        else:
+            self.ima_dct = imadct
+        if imastd is None and self.cube_std is not None:
+            self.ima_std = self.cube_std.mean(axis=0)
+        else:
+            self.ima_std = imastd
         # step 2 
         self.NbAreas = NbAreas
         self.areamap = areamap
@@ -400,7 +415,8 @@ class ORIGIN(object):
                    cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    segmentation_map_spatspect=None, cube_local_min=None,
-                   continuum=None, mapThresh=None, areamap=None)
+                   continuum=None, mapThresh=None, areamap=None, imawhite=None,
+                   imadct=None, imastd=None)
         
     @classmethod
     def load(cls, folder, newpath=None, newname=None):
@@ -441,6 +457,12 @@ class ORIGIN(object):
                 PSF = sorted(PSF_files)
 
         NbAreas = param['nbareas']
+        # step0
+        if os.path.isfile('%s/ima_white.fits'%folder):
+            ima_white = Image('%s/ima_white.fits'%folder)
+        else:
+            ima_white = None
+            
         # step1
         if os.path.isfile('%s/cube_std.fits'%folder):
             cube_std = Cube('%s/cube_std.fits'%folder)
@@ -449,10 +471,18 @@ class ORIGIN(object):
         else:
             cube_std = None
             var = None
+        if os.path.isfile('%s/ima_std.fits'%folder):
+            ima_std = Image('%s/ima_std.fits'%folder)
+        else:
+            ima_std = None
         if os.path.isfile('%s/cont_dct.fits'%folder):
             cont_dct = Cube('%s/cont_dct.fits'%folder)
         else:
-            cont_dct = None            
+            cont_dct = None     
+        if os.path.isfile('%s/ima_dct.fits'%folder):
+            ima_dct = Image('%s/ima_dct.fits'%folder)
+        else:
+            ima_dct = None
         if os.path.isfile('%s/segmentation_test.fits'%folder):
             segmentation_test = Image('%s/segmentation_test.fits'%folder)
         else:
@@ -622,7 +652,8 @@ class ORIGIN(object):
                    segmentation_map_threshold=segmentation_map_threshold,
                    segmentation_map_spatspect=segmentation_map_spatspect,
                    cube_local_min=cube_local_min, continuum=continuum,
-                   mapThresh=mapThresh, areamap = areamap)
+                   mapThresh=mapThresh, areamap=areamap, imawhite=ima_white,
+                   imadct=ima_dct, imastd=ima_std)
                    
     def _loginfo(self, logstr):
         self._log_file.info(logstr) 
@@ -682,6 +713,9 @@ class ORIGIN(object):
             Cube(data=self.PSF, mask=np.ma.nomask).write('%s'%path2 + \
             '/cube_psf.fits')
             
+        if self.ima_white is not None:
+            self.ima_white.write('%s/ima_white.fits'%path2)
+            
         #step1
         if self.cube_std is not None:
             if self.var is not None:
@@ -691,7 +725,10 @@ class ORIGIN(object):
             self.cont_dct.write('%s/cont_dct.fits'%path2)
         if self.segmentation_test is not None:
             self.segmentation_test.write('%s/segmentation_test.fits'%path2)
-
+        if self.ima_std is not None:
+            self.ima_std.write('%s/ima_std.fits'%path2)
+        if self.ima_dct is not None:
+            self.ima_dct.write('%s/ima_dct.fits'%path2)
 
         #step2
         if self.areamap is not None:
@@ -790,6 +827,12 @@ class ORIGIN(object):
                                  standardized data for PCA
         self.cont_dct          : `~mpdaf.obj.Cube`
                                  DCT continuum
+        self.ima_std          : `~mpdaf.obj.Image`
+                                 Mean of standardized data for PCA along the
+                                 wavelength axis
+        self.ima_dct          : `~mpdaf.obj.Image`
+                                 Mean of DCT continuum cube along the
+                                 wavelength axis
         self.segmentation_test : `~mpdaf.obj.Image`
                                  2D map where sources and background are
                                  separated
@@ -809,12 +852,14 @@ class ORIGIN(object):
         self._loginfo('Segmentation test')
         segmentation_test = Compute_Segmentation_test(cont_dct)
         
-        self._loginfo('Std signal saved in self.cube_std')        
+        self._loginfo('Std signal saved in self.cube_std and self.ima_std')        
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
-                         mask=np.ma.nomask)  
-        self._loginfo('DCT continuum saved in self.cont_dct')
+                         mask=np.ma.nomask)
+        self.ima_std = self.cube_std.mean(axis=0)
+        self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)
+        self.ima_dct = self.cont_dct.mean(axis=0)
         self._loginfo('Segmentation map saved in self.segmentation_test')
         self.segmentation_test = Image(data=segmentation_test, 
                                       wcs=self.wcs, mask=np.ma.nomask)        
