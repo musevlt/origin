@@ -60,7 +60,27 @@ from .lib_origin import Spatial_Segmentation, \
     area_growing, \
     area_segmentation_final, \
     __version__    
-     
+
+def _format_cat(Cat, i):
+    Cat['ra'].format = '.3f'
+    Cat['dec'].format = '.3f'
+    Cat['lbda'].format = '.2f'
+    Cat['T_GLR'].format = '.2f'
+    if i>0:
+        Cat['residual'].format = '.3f'
+        Cat['flux'].format = '.1f'
+        Cat['purity'].format = '.3f'
+    if i>1:  
+        Cat['x_circle'].format = '.1f'
+        Cat['y_circle'].format = '.1f'
+        Cat['ra_circle'].format = '.3f'
+        Cat['dec_circle'].format = '.3f'
+        Cat['x_centroid'].format = '.1f'
+        Cat['y_centroid'].format = '.1f'
+        Cat['ra_centroid'].format = '.3f'
+        Cat['dec_centroid'].format = '.3f'
+        
+    
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
@@ -486,6 +506,7 @@ class ORIGIN(object):
         # step5
         if os.path.isfile('%s/Cat0.fits'%folder):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
+            _format_cat(Cat0, 0)
         else:
             Cat0 = None        
         if os.path.isfile('%s/Pval_r0.txt'%folder):
@@ -533,6 +554,7 @@ class ORIGIN(object):
         # step6
         if os.path.isfile('%s/Cat1.fits'%folder):
             Cat1 = Table.read('%s/Cat1.fits'%folder)
+            _format_cat(Cat1, 1)
         else:
             Cat1 = None
         if os.path.isfile('%s/spectra.fits'%folder):
@@ -560,6 +582,7 @@ class ORIGIN(object):
         # step7
         if os.path.isfile('%s/Cat2.fits'%folder):
             Cat2 = Table.read('%s/Cat2.fits'%folder)
+            _format_cat(Cat2, 2)
         else:
             Cat2 = None
         if os.path.isfile('%s/segmentation_map_threshold.fits'%folder):
@@ -1140,6 +1163,7 @@ class ORIGIN(object):
                                          self.cube_profile._data,
                                          cube_pval_correl,
                                          self.wcs, self.wave)
+        _format_cat(self.Cat0, 0)
         self._loginfo('Save a first version of the catalogue of ' + \
                               'emission lines in self.Cat0 (%d lines)' \
                               %(len(self.Cat0))) 
@@ -1194,7 +1218,7 @@ class ORIGIN(object):
                                         self.Pval_r, self.index_pval, 
                                         bck_or_src)
                    
-        
+        _format_cat(self.Cat1, 1)
         self._loginfo('Save the updated catalogue in self.Cat1' + \
         ' (%d lines)'%len(self.Cat1))
         
@@ -1263,6 +1287,7 @@ class ORIGIN(object):
         self._loginfo('Save the segmentation map for spatio-spectral ' + \
         'merging in self.segmentation_map_spatspect')  
         
+        _format_cat(self.Cat2, 2)
         self._loginfo('Save the updated catalogue in self.Cat2 ' + \
         '(%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0],
           len(self.Cat2)))
