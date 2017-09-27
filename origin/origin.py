@@ -1420,7 +1420,8 @@ class ORIGIN(object):
         else:
             ax.set_title('continuum test (1 area)')
     
-    def plot_step03(self, log10=True, fig=None, **fig_kw):
+    def plot_step03_PCA_threshold(self, log10=False, xlim=None, fig=None,
+                                  **fig_kw):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
@@ -1428,8 +1429,13 @@ class ORIGIN(object):
         ----------
         log10     : bool
                     Draw histogram in logarithmic scale or not
-        **fig_kw : 
-        All additional keyword arguments are passed to the figure() call.
+        xlim      : (float, float)
+                    Set the data limits for the x-axes
+        fig       : matplotlib.Figure
+                    Figure instance in which the image is drawn
+        **fig_kw  : matplotlib.artist.Artist
+                    All additional keyword arguments are passed to the figure()
+                    call.
 
         """
         if self.cube_std is None:
@@ -1466,17 +1472,32 @@ class ORIGIN(object):
                 threshold = None
             else:
                 threshold = threshold_list[area]
-            ax = fig.add_subplot(n, m, area, **fig_kw)
-            self.plot_PCA_threshold(area, pfa_test, threshold, log10, ax)
+            if area==1:
+                ax = fig.add_subplot(n, m, area, **fig_kw)
+            else:
+                ax = fig.add_subplot(n, m, area, sharey=fig.axes[0], **fig_kw)
+            self.plot_PCA_threshold(area, pfa_test, threshold, log10, xlim, ax)
            
-        # Fine-tune figure; hide x ticks for top plots and y ticks for right plots
+        # Fine-tune figure
         for a in fig.axes[:-1]:
             a.set_xlabel("")
         for a in fig.axes[1:]:
             a.set_ylabel("")
+        plt.setp([a.get_yticklabels() for a in fig.axes], visible=False)
+        plt.setp([a.get_yticklabels() for a in fig.axes[0::3]], visible=True)
+        plt.setp([a.get_yticklines() for a in fig.axes], visible=False)
+        plt.setp([a.get_yticklines() for a in fig.axes[0::3]], visible=True)
+        fig.subplots_adjust(wspace=0)
+        if xlim is not None:
+            plt.setp([a.get_xticklabels() for a in fig.axes[:-3]],
+                      visible=False)
+            plt.setp([a.get_xticklines() for a in fig.axes[:-3]],
+                      visible=False)
+            fig.subplots_adjust(hspace=0)
+        
         
     def plot_PCA_threshold(self, area, pfa_test=None, threshold=None,
-                           log10=True, ax=None):
+                           log10=False, xlim=None, ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
@@ -1490,7 +1511,9 @@ class ORIGIN(object):
         threshold : float
                     Threshold value (estimated if None)
         log10     : bool
-                    Draw histogram in logarithmic scale or not                    
+                    Draw histogram in logarithmic scale or not
+        xlim      : (float, float)
+                    Set the data limits for the x-axis                  
         ax        : matplotlib.Axes
                     Axes instance in which the image is drawn
         """
@@ -1542,11 +1565,14 @@ class ORIGIN(object):
             ax.plot(center, gauss,'-b', alpha=.5)
         ax.plot([thre,thre],[ym,yM],'b', lw=2, alpha=.5)
         ax.grid()
-        ax.set_xlim((center.min(),center.max()))
+        if xlim is None:
+            ax.set_xlim((center.min(),center.max()))
+        else:
+            ax.set_xlim(xlim)
         ax.set_ylim((ym,yM))
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
-        ax.text(0.7, 0.8 ,'zone %d\nthreshold %.2f'%(area, thre),
+        ax.text(0.1, 0.8 ,'zone %d\nthreshold %.2f'%(area, thre),
                 transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5)) 
             
         
@@ -1652,13 +1678,8 @@ class ORIGIN(object):
                               
         if maxmap:
             self.maxmap[self.maxmap._data == 0] = np.ma.masked
-            self.maxmap.plot(ax=ax)
-            if 'cmap' not in kwargs:
-                kwargs['cmap'] = 'Greys'
-            if 'interpolation' not in kwargs:
-                kwargs['interpolation'] = 'nearest'
-            kwargs['origin'] = 'lower'
-            ax.contour(map_in, [0], **kwargs)
+            self.maxmap.plot(ax=ax, **kwargs)
+            ax.contour(map_in, [0], origin='lower', cmap='Greys')
         else:
             ima = Image(data=map_in, wcs=self.wcs)
             if 'cmap' not in kwargs:
