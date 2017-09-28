@@ -952,9 +952,18 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     ind2 = np.argmin(( histO2[ind]/2 - histO2[:ind] )**2)
     fwhm = mod - frecO2[ind2]
     sigma = fwhm/np.sqrt(2*np.log(2))
-
-    thresO2 = mod - sigma*stats.norm.ppf(threshold_test)
-
+    
+    coef = stats.norm.ppf(threshold_test)
+    thresO2 = mod - sigma*coef
+    print('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
+    
+    limit = ind+ind2
+    ict = (frecO2[limit]+frecO2[limit+1]) / 2
+    c2 = c[c<ict]            
+    mea,std = (np.mean(c2),np.std(c2))
+    thresO2 = mea - std*coef
+    print('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
+    
     return histO2, frecO2, thresO2
     
 def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
