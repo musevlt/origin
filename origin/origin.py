@@ -169,7 +169,7 @@ class ORIGIN(object):
                              Catalog returned by step07_spatiospectral_merging.
     """
     
-    def __init__(self, path, name, filename, profiles, PSF, FWHM_PSF,
+    def __init__(self, path, name, filename,  fieldmap, profiles, PSF, FWHM_PSF,
                  cube_faint, mapO2, thresO2, cube_correl, maxmap, NbAreas,
                  cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
                  ThresholdPval, Cat1, spectra, Cat2, param, cube_std, var,
@@ -256,7 +256,7 @@ class ORIGIN(object):
         # map fileds in the case of MUSE mosaic
         self.wfields = None
         if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header' + \
+            self._loginfo('Compute FSFs from the datacube FITS header ' + \
                                                                     'keywords')
             Nfsf=13
             if 'FSFMODE' in cub.primary_header:
@@ -271,6 +271,7 @@ class ORIGIN(object):
                                                                  np.newaxis]
                     # mean of the fwhm of the FSF in pixel
                     self.FWHM_PSF = np.mean(fwhm_pix)
+                    self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
                     self._loginfo('mean FWHM of the FSFs = %.2f pixels'\
                                                                 %self.FWHM_PSF)
                 else: # mosaic: one FSF cube per field
@@ -285,9 +286,10 @@ class ORIGIN(object):
                         self.FWHM_PSF.append(fwhm)
                         self._loginfo('mean FWHM of the FSFs' + \
                         ' (field %d) = %.2f pixels'%(i, fwhm))
-                    fmap = FieldsMap(filename, extname='FIELDMAP')
+                    fmap = FieldsMap(fieldmap, nfields=nfields)
                     # weighted field map
                     self.wfields = fmap.compute_weights()
+                    self.param['FWHM PSF'] = self.FWHM_PSF
             else:
                 raise IOError('PSF are not described in the FITS header' + \
                                                                  'of the cube')
@@ -305,25 +307,23 @@ class ORIGIN(object):
                 if cubePSF.shape[0] != self.Nz:
                     raise IOError('PSF and data cube have not the same' + \
                                          'dimensions along the spectral axis.')
-                if not np.isclose(cubePSF.wcs.get_step(unit=u.arcsec)[0],
-                                  step_arcsec):
-                    raise IOError('PSF and data cube have not the same pixel ',
-                                  'sizes.')
-    
                 self.PSF = cubePSF._data
+                # mean of the fwhm of the FSF in pixel
+                self.FWHM_PSF = np.mean(FWHM_PSF)
+                self.param['FWHM PSF'] = FWHM_PSF.tolist()
+                self._loginfo('mean FWHM of the FSFs = %.2f pixels'%self.FWHM_PSF)
             else:
                 nfields = len(PSF)
                 self.PSF = []
+                self.wfields = []
+                self.FWHM_PSF = FWHM_PSF.tolist()
                 for n in range(nfields):
-                    self._loginfo('Load FSF from %s'%PSF[i])
-                    self.PSF.append(Cube(PSF[i]))
-                fmap = FieldsMap(filename, extname='FIELDMAP')
-                # weighted field map
-                self.wfields = fmap.compute_weights()
-            # mean of the fwhm of the FSF in pixel
-            self.FWHM_PSF = np.mean(FWHM_PSF)
-            self.param['FWHM PSF'] = FWHM_PSF.tolist()
-            self._loginfo('mean FWHM of the FSFs = %.2f pixels'%self.FWHM_PSF)
+                    self._loginfo('Load FSF from %s'%PSF[n])
+                    self.PSF.append(Cube(PSF[n])._data)
+                    # weighted field map
+                    self.wfields.append(Image(fieldmap[n])._data)
+                    self._loginfo('mean FWHM of the FSFs' + \
+                        ' (field %d) = %.2f pixels'%(n, FWHM_PSF[n]))
             
         # additional images
         if imawhite is None:
@@ -382,7 +382,7 @@ class ORIGIN(object):
         self._loginfo('00 Done')
         
     @classmethod
-    def init(cls, cube, profiles=None, PSF=None, FWHM_PSF=None, name='origin'):
+    def init(cls, cube, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -409,7 +409,7 @@ class ORIGIN(object):
         name        : str
                       Name of this session and basename for the sources.
         """
-        return cls(path='.',  name=name, filename=cube, 
+        return cls(path='.',  name=name, filename=cube, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, 
                    cube_faint=None, mapO2=None, thresO2=None, cube_correl=None,
                    maxmap=None, NbAreas=None, cube_profile=None, Cat0=None, 
@@ -452,13 +452,21 @@ class ORIGIN(object):
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
         else:
-            PSF_files = glob.glob('%s/cube_psf_*.fits'%folder)
-            if len(PSF_files) == 0:
-                PSF = None
-            if len(PSF_files) == 1:
-                PSF = PSF_files[0]
+            if os.path.isfile('%s/cube_psf.fits'%folder):
+                PSF = '%s/cube_psf.fits'%folder
             else:
-                PSF = sorted(PSF_files)
+                PSF_files = glob.glob('%s/cube_psf_*.fits'%folder)
+                if len(PSF_files) == 0:
+                    PSF = None
+                elif len(PSF_files) == 1:
+                    PSF = PSF_files[0]
+                else:
+                    PSF = sorted(PSF_files)
+        wfield_files = glob.glob('%s/wfield_*.fits'%folder)
+        if len(wfield_files) == 0:
+            wfields = None
+        else:
+            wfields = sorted(wfield_files)
 
         NbAreas = param['nbareas']
         # step0
@@ -642,6 +650,7 @@ class ORIGIN(object):
             name = newname
                 
         return cls(path=path,  name=name, filename=param['cubename'],
+                   fieldmap=wfields,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    cube_std=cube_std, var=var,
                    cube_faint=cube_faint, mapO2=mapO2, thresO2=thresO2,
@@ -716,6 +725,10 @@ class ORIGIN(object):
         else:
             Cube(data=self.PSF, mask=np.ma.nomask).write('%s'%path2 + \
             '/cube_psf.fits')
+        if self.wfields is not None:
+            for i, wfield in enumerate(self.wfields):
+                Image(data=wfield, mask=np.ma.nomask).write('%s'%path2 + \
+                '/wfield_%02d.fits'%i)
             
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits'%path2)
