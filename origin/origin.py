@@ -252,7 +252,6 @@ class ORIGIN(object):
         
         #FSF
         # FSF cube(s)
-        step_arcsec = self.wcs.get_step(unit=u.arcsec)[0]
         # map fileds in the case of MUSE mosaic
         self.wfields = None
         if PSF is None or FWHM_PSF is None:
@@ -286,6 +285,7 @@ class ORIGIN(object):
                         self.FWHM_PSF.append(fwhm)
                         self._loginfo('mean FWHM of the FSFs' + \
                         ' (field %d) = %.2f pixels'%(i, fwhm))
+                    self._loginfo('Compute weight maps from field map %s'%fieldmap)
                     fmap = FieldsMap(fieldmap, nfields=nfields)
                     # weighted field map
                     self.wfields = fmap.compute_weights()
@@ -321,6 +321,7 @@ class ORIGIN(object):
                     self._loginfo('Load FSF from %s'%PSF[n])
                     self.PSF.append(Cube(PSF[n])._data)
                     # weighted field map
+                    self._loginfo('Load weight maps from %s'%fieldmap[n])
                     self.wfields.append(Image(fieldmap[n])._data)
                     self._loginfo('mean FWHM of the FSFs' + \
                         ' (field %d) = %.2f pixels'%(n, FWHM_PSF[n]))
@@ -396,6 +397,8 @@ class ORIGIN(object):
         ----------
         cube        : string
                       Cube FITS file name
+        fieldmap    : string
+                      FITS file containing the field map (mosaic)
         profiles    : string
                       FITS of spectral profiles
                       If None, a default dictionary of 20 profiles is used.
