@@ -925,7 +925,6 @@ class ORIGIN(object):
         nexpmap = (np.sum(~self.mask, axis=0) >0).astype(np.int)
         
         NbSubcube = np.maximum(1,int( np.sqrt( np.sum(nexpmap)/(minsize**2) )))
-        print(NbSubcube)
         if NbSubcube > 1:          
             if maxsize is None:
                 maxsize = minsize*2
