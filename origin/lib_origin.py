@@ -39,7 +39,6 @@ import sys
 import time
 
 from astropy.table import Table, Column
-from astropy.utils.console import ProgressBar
 from joblib import Parallel, delayed
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
@@ -47,6 +46,7 @@ from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import KDTree, ConvexHull
 from scipy.sparse.linalg import svds
 from six.moves import range, zip
+from tqdm import trange, tqdm
 
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
@@ -753,29 +753,26 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
-#    cube_faint = np.zeros(cube_std.shape)
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1],cube_std.shape[2]))
     # Spatial segmentation
     thresO2_area = []     
-    with ProgressBar(NbArea) as bar:
-        for area_ind in range(1, NbArea+1):
-            # limits of each spatial zone
-            ksel = (areamap == area_ind)
-            
-            # Data in this spatio-spectral zone
-            cube_temp = cube_std[:, ksel]
+    for area_ind in trange(1, NbArea+1):
+        # limits of each spatial zone
+        ksel = (areamap == area_ind)
+        
+        # Data in this spatio-spectral zone
+        cube_temp = cube_std[:, ksel]
 
-            # greedy PCA on each subcube
-            if threshold_test is None:
-                thr = None
-            else:
-                thr = threshold_test[area_ind-1]
-            cube_faint[:, ksel], mO2, tO2 = Compute_GreedyPCA(cube_temp,
-                                      Noise_population, thr, pfa_test, itermax)            
-            mapO2[ksel]= mO2
-            thresO2_area.append(tO2)
-            bar.update()       
+        # greedy PCA on each subcube
+        if threshold_test is None:
+            thr = None
+        else:
+            thr = threshold_test[area_ind-1]
+        cube_faint[:, ksel], mO2, tO2 = Compute_GreedyPCA(cube_temp,
+                                  Noise_population, thr, pfa_test, itermax)            
+        mapO2[ksel]= mO2
+        thresO2_area.append(tO2)
         
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_faint, mapO2, thresO2_area
@@ -842,8 +839,8 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
     npix = len(pypx)
 
     mapO2 = np.zeros(nynx)
-
-    with ProgressBar(npix) as bar:
+    
+    with tqdm(total=npix) as bar:
         # greedy loop based on test
         tmp=0
         while True:
@@ -900,8 +897,9 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
             test = O2test(faint)
 
             # nuisance part
+            oldlen = len(pypx)
             pypx = np.where(test>thresO2)[0]
-            bar.update(npix-len(pypx))
+            bar.update(oldlen-len(pypx))
 
     return faint, mapO2, thresO2  
 
@@ -1091,7 +1089,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                 'zero-mean FSF')
         PSF_Moffat_m = PSF_Moffat \
             - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
-        for i in ProgressBar(list(range(Nz))):
+        for i in trange(Nz):
             cube_fsf[i, :, :] = signal.fftconvolve(cube_var[i, :, :],
                                                    PSF_Moffat_m[i, :, :][::-1, ::-1],
                                                    mode='same')
@@ -1100,7 +1098,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         del PSF_Moffat_m
         # Spatial part of the norm of the 3D atom
         logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
-        for i in ProgressBar(list(range(Nz))):
+        for i in trange(Nz):
             norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
                                                    fsf_square[i, :, :][::-1, ::-1],
                                                    mode='same')
@@ -1116,7 +1114,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
             - np.mean(PSF_Moffat[n], axis=(1, 2))[:, np.newaxis, np.newaxis])
         # build a weighting map per PSF and convolve
         cube_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
+        for i in trange(Nz):
             cube_fsf[i, :, :] = 0
             for n in range(nfields):
                 cube_fsf[i, :, :] = cube_fsf[i, :, :] \
@@ -1130,7 +1128,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
         del PSF_Moffat_m
         # Spatial part of the norm of the 3D atom
         logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
-        for i in ProgressBar(list(range(Nz))):
+        for i in trange(Nz):
             norm_fsf[i, :, :] = 0
             for n in range(nfields):
                 norm_fsf[i, :, :] = norm_fsf[i, :, :] \
@@ -1147,7 +1145,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
     profile = np.empty(shape)
     correl = -np.inf * np.ones(shape)
     correl_min = np.inf * np.ones(shape)
-    for k in ProgressBar(list(range(len(Dico)))):
+    for k in trange(len(Dico)):
         # Second cube of correlation values
         d_j = Dico[k]
         d_j = d_j - np.mean(d_j)
