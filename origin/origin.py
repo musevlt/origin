@@ -1517,13 +1517,16 @@ class ORIGIN(object):
         else:
             ax.set_title('continuum test (1 area)')
     
-    def plot_step03_PCA_threshold(self, log10=False, xlim=None, fig=None,
+    def plot_step03_PCA_threshold(self, pfa_test=0.01, log10=False, xlim=None, fig=None,
                                   **fig_kw):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
         
         Parameters
         ----------
+        pfa_test  : float or string
+                    PFA of the test (if 'step03', the value set during step03 is
+                    used)
         log10     : bool
                     Draw histogram in logarithmic scale or not
         xlim      : (float, float)
@@ -1540,12 +1543,6 @@ class ORIGIN(object):
             
         if self.NbAreas is None:
             raise IOError('Run the step 02 to initialize self.NbAreas')
-            
-        if 'pfa_test' in self.param:
-            pfa_test = self.param['pfa_test']
-        else:
-            raise IOError('pfa_test param is None: set a value or run' + \
-            ' the Step03')
          
         if 'threshold_list' is self.param:
             threshold_list = self.param['threshold_list']
@@ -1593,7 +1590,7 @@ class ORIGIN(object):
             fig.subplots_adjust(hspace=0)
         
         
-    def plot_PCA_threshold(self, area, pfa_test=None, threshold=None,
+    def plot_PCA_threshold(self, area, pfa_test='step03', threshold=None,
                            log10=False, xlim=None, ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA, this version of the plot is to do before doing the PCA
@@ -1602,8 +1599,8 @@ class ORIGIN(object):
         ----------
         area      : integer in [1, NbAreas] 
                     Area ID          
-        pfa_test  : float
-                    PFA of the test (if None, the value set during step03 is
+        pfa_test  : float or string
+                    PFA of the test (if 'step03', the value set during step03 is
                     used)
         threshold : float
                     Threshold value (estimated if None)
@@ -1620,7 +1617,7 @@ class ORIGIN(object):
         if self.NbAreas is None:
             raise IOError('Run the step 02 to initialize self.NbAreas')
             
-        if pfa_test is None:
+        if pfa_test == 'step03':
             if 'pfa_test' in self.param:
                 pfa_test = self.param['pfa_test']
             else:
@@ -1669,7 +1666,8 @@ class ORIGIN(object):
         ax.set_ylim((ym,yM))
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
-        ax.text(0.1, 0.8 ,'zone %d\nthreshold %.2f'%(area, thre),
+        ax.text(0.1, 0.8 ,'zone %d\npfa %.2f\nthreshold %.2f'%(area, pfa_test,
+                                                               thre),
                 transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5)) 
             
         
