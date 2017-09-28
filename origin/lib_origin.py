@@ -822,6 +822,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
+    logger = logging.getLogger('origin')
 
     faint = cube_in.copy()
     nl,nynx = cube_in.shape
@@ -849,7 +850,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
             if len(pypx)==0:
                 break
             if tmp>itermax:
-                print('Warning iterations stopped at %d' %(tmp))
+                logger.info('Warning iterations stopped at %d' %(tmp))
                 break
             # vector data
             test_v = np.ravel(test)
@@ -943,7 +944,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     Date  : July, 06 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-
+    logger = logging.getLogger('origin')
     test_v = np.ravel(test)
     c = test_v[test_v>0]
     histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
@@ -955,14 +956,14 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     
     coef = stats.norm.ppf(threshold_test)
     thresO2 = mod - sigma*coef
-    print('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
+    logger.info('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
     
     limit = ind+ind2
     ict = (frecO2[limit]+frecO2[limit+1]) / 2
     c2 = c[c<ict]            
     mea,std = (np.mean(c2),np.std(c2))
     thresO2 = mea - std*coef
-    print('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
+    logger.info('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
     
     return histO2, frecO2, thresO2
     
@@ -1386,10 +1387,8 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         if threshold_option is not None:
 
             if threshold_option=='background':
-                print('background')
                 threshold[ind_n] = threshold[(0)]
             else:
-                print('given')
                 threshold[ind_n] = threshold_option
 
         cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
