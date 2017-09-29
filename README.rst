@@ -30,19 +30,21 @@ Usage
  
 2- we run the different steps
 
- > my_origin.step01_preprocessing(EXPMAP)
+ > my_origin.step01_preprocessing()
     
  >  my_origin.step02_areas()
-    
- >  my_origin.step03_compute_greedy_PCA()
-    
- >  my_origin.step04_compute_TGLR()
  
- >  my_origin.step05_threshold_pval()
+ >  my_origin.step03_compute_PCA_threshold()
     
- >  my_origin.step06_compute_spectra()
+ >  my_origin.step04_compute_greedy_PCA()
     
- >  my_origin.step07_spatiospectral_merging(deltaz)
+ >  my_origin.step05_compute_TGLR()
+ 
+ >  my_origin.step06_threshold_pval()
+    
+ >  my_origin.step07_compute_spectra()
+    
+ >  my_origin.step08_spatiospectral_merging(deltaz)
     
  >  nsources = my_origin.step08_write_sources(ncpu=1)
  

@@ -28,34 +28,38 @@ def test_origin():
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step03_compute_greedy_PCA()
+    my_origin.step03_compute_PCA_threshold()
+    my_origin.write()
+    
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step04_compute_greedy_PCA()
     my_origin.write()
 
     # TGLR computing (normalized correlations)
     my_origin = ORIGIN.load('tmp')
-    my_origin.step04_compute_TGLR()
+    my_origin.step05_compute_TGLR()
     my_origin.write()
 
     # threshold applied on pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step05_threshold_pval(pfa=0.01)
+    my_origin.step06_threshold_pval(pfa=0.01)
     my_origin.write()
     
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
-    my_origin.step06_compute_spectra()
+    my_origin.step07_compute_spectra()
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     my_origin = ORIGIN.load('tmp2')
-    my_origin.step07_spatiospectral_merging(deltaz=deltaz)
+    my_origin.step08_spatiospectral_merging(deltaz=deltaz)
     my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
-    cat = my_origin.step08_write_sources(ncpu=1)
-    cat = my_origin.step08_write_sources(ncpu=2, overwrite=True)
+    cat = my_origin.step09_write_sources(ncpu=1)
+    cat = my_origin.step09_write_sources(ncpu=2, overwrite=True)
     assert (len(cat) == 3) 
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 3)

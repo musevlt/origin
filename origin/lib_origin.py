@@ -720,7 +720,7 @@ def area_segmentation_final(label, MinS, MaxS):
     return areamap
 
 def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
-                           threshold_test, pfa_test, itermax):
+                           threshold_test, itermax, testO2):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
@@ -737,12 +737,11 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     threshold_test   : list
                        User given list of threshold (not pfa) to apply
                        on each area, the list is of lenght NbAreas
-                       or of lenght 1. 
-    pfa_test         : float
-                       Threshold of the test                                 
+                       or of lenght 1.                               
     itermax          : integer
                        Maximum number of iterations
-    
+    testO2           : list of arrays
+                       Result of the O2 test
     Returns
     -------
     cube_faint : array
@@ -755,8 +754,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     t0 = time.time()
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1],cube_std.shape[2]))
-    # Spatial segmentation
-    thresO2_area = []     
+    # Spatial segmentation  
     for area_ind in trange(1, NbArea+1):
         # limits of each spatial zone
         ksel = (areamap == area_ind)
@@ -764,22 +762,42 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
         # Data in this spatio-spectral zone
         cube_temp = cube_std[:, ksel]
 
-        # greedy PCA on each subcube
-        if threshold_test is None:
-            thr = None
-        else:
-            thr = threshold_test[area_ind-1]
-        cube_faint[:, ksel], mO2, tO2 = Compute_GreedyPCA(cube_temp,
-                                  Noise_population, thr, pfa_test, itermax)            
+        thr = threshold_test[area_ind-1]
+        test = testO2[area_ind-1]
+        cube_faint[:, ksel], mO2 = Compute_GreedyPCA(cube_temp, test, thr,
+                                                     Noise_population, itermax)
         mapO2[ksel]= mO2
-        thresO2_area.append(tO2)
         
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, mapO2, thresO2_area
+    return cube_faint, mapO2
 
 
-def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
-                      itermax):
+def Compute_PCA_threshold(faint, pfa_test):
+    """
+
+    Parameters
+    ----------
+    faint   :   array
+                The 3D cube data clean
+    pfa_test         : float
+                       PFA of the test                       
+    
+    Returns
+    -------
+    histO2:
+    frecO2:
+    thresO2 :   Threshold for the O2 test
+    """
+    test = O2test(faint)
+
+    # automatic threshold computation
+    histO2, frecO2, thresO2, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
+    
+    return test, histO2, frecO2, thresO2, mea, std
+        
+    
+    
+def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     """Function to compute greedy svd. thanks to the test (test_fun) and
     according to a defined threshold (threshold_test) the cube is segmented
     in nuisance and background part. A part of the background part
@@ -803,11 +821,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
                 the test to be performed on data
 
     Noise_population : float
-                       Fraction of spectra estimated as background
-    pfa_test         : float
-                       PFA of the test
-    threshold_test   : float
-                       Threshold value                          
+                       Fraction of spectra estimated as background                          
     itermax          : integer
                        Maximum number of iterations
     
@@ -825,14 +839,8 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
     logger = logging.getLogger('origin')
 
     faint = cube_in.copy()
-    nl,nynx = cube_in.shape
-    test = O2test(faint)
 
-    if threshold_test is not None:
-        thresO2 = threshold_test
-    else:
-        # automatic threshold computation
-        histO2, frecO2, thresO2, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
+    nl,nynx = faint.shape
         
     # nuisance part
     pypx = np.where(test>thresO2)[0]
@@ -902,7 +910,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
             pypx = np.where(test>thresO2)[0]
             bar.update(oldlen-len(pypx))
 
-    return faint, mapO2, thresO2  
+    return faint, mapO2
 
 def O2test(Cube_in):
     """Function to compute the test on data. The test estimate the background
@@ -923,7 +931,7 @@ def O2test(Cube_in):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    return np.mean( Cube_in**2 ,axis=0)
+    return np.mean(Cube_in**2 , axis=0)
 
     
 def Compute_thresh_PCA_hist(test, threshold_test): 
@@ -2612,8 +2620,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_THV = (param['threshold_test'], 'OR input Threshold')
     if 'threshold_list' in param.keys():
         th = param['threshold_list']
-        for i in range(th.shape[0]):
-            src.header['OR_THL%02d'%i] = (th[i], 'OR input Threshold per area')
+        for i,th in enumerate(param['threshold_list']):
+            src.header['OR_THL%02d'%i] = (th, 'OR input Threshold per area')
     if 'neighboors' in param.keys():
         src.OR_NG = (param['neighboors'], 'OR input Neighboors')          
     if 'nbsubcube' in param.keys():
@@ -2632,8 +2640,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
     
     # pval
-    src.header['OR_THB'%i] = (ThresholdPval[0], 'OR Background threshold')
-    src.header['OR_THS'%i] = (ThresholdPval[0], 'OR Source threshold')
+    src.header['OR_THB'] = (ThresholdPval[0], 'OR Background threshold')
+    src.header['OR_THS'] = (ThresholdPval[1], 'OR Source threshold')
     
     # WHITE IMAGE
     src.add_white_image(cube)
