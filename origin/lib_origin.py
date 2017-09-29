@@ -832,7 +832,7 @@ def Compute_GreedyPCA(cube_in, Noise_population, threshold_test, pfa_test,
         thresO2 = threshold_test
     else:
         # automatic threshold computation
-        histO2, frecO2, thresO2 = Compute_thresh_PCA_hist(test, pfa_test)
+        histO2, frecO2, thresO2, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
         
     # nuisance part
     pypx = np.where(test>thresO2)[0]
@@ -967,7 +967,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     thresO2 = mea - std*coef
     logger.info('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
     
-    return histO2, frecO2, thresO2
+    return histO2, frecO2, thresO2, mea, std
     
 def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
                               intx, inty, NbSubcube):

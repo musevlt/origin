@@ -1647,18 +1647,13 @@ class ORIGIN(object):
         test = O2test(self.cube_std.data[:, self.areamap._data==area])
         
         # automatic threshold computation     
-        hist, bins, thre = Compute_thresh_PCA_hist(test, pfa_test)
+        hist, bins, thre, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
         center = (bins[:-1] + bins[1:]) / 2
         
         if threshold is not None:
             thre = threshold
         else:
-            ind = np.argmax(hist)
-            mod = bins[ind]
-            ind2 = np.argmin(( hist[ind]/2 - hist[:ind] )**2)
-            fwhm = mod - bins[ind2]
-            sigma = fwhm/np.sqrt(2*np.log(2))           
-            gauss = stats.norm.pdf(center, loc=mod, scale=sigma)
+            gauss = stats.norm.pdf(center, loc=mea, scale=std)
             if log10:
                 gauss = np.log10(gauss)
                 
