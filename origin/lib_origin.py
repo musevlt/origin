@@ -925,7 +925,7 @@ def O2test(Cube_in):
     """
     return np.mean( Cube_in**2 ,axis=0)
 
-
+    
 def Compute_thresh_PCA_hist(test, threshold_test): 
     """Function to compute greedy svd.
     Parameters
@@ -957,9 +957,11 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     coef = stats.norm.ppf(threshold_test)
     thresO2 = mod - sigma*coef
     logger.info('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
+
+    limit = 2*ind-ind2+1 
+    limit = np.minimum(limit,ind)
     
-    limit = ind+ind2
-    ict = (frecO2[limit]+frecO2[limit+1]) / 2
+    ict = (frecO2[limit-1]+frecO2[limit]) / 2
     c2 = c[c<ict]            
     mea,std = (np.mean(c2),np.std(c2))
     thresO2 = mea - std*coef
