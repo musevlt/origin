@@ -42,7 +42,7 @@ def test_origin():
 
     # threshold applied on pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step06_threshold_pval(pfa=0.01)
+    my_origin.step06_threshold_pval(pfa=0.05)
     my_origin.write()
     
     # estimation
@@ -60,9 +60,9 @@ def test_origin():
     my_origin = ORIGIN.load('tmp2')
     cat = my_origin.step09_write_sources(ncpu=1)
     cat = my_origin.step09_write_sources(ncpu=2, overwrite=True)
-    assert (len(cat) == 3) 
+    assert (len(cat) == 5) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 3)
+    assert (len(cat) == 5)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
