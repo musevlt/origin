@@ -1776,6 +1776,7 @@ class ORIGIN(object):
         
         center = (bins[:-1] + bins[1:]) / 2
         gauss = stats.norm.pdf(center, loc=mea, scale=std)
+        gauss *= hist.max()/gauss.max()
 
         if log10:
             with warnings.catch_warnings():

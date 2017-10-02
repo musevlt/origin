@@ -966,11 +966,9 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     thresO2 = mod - sigma*coef
     logger.info('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
 
-    limit = 2*ind-ind2+1 
-    limit = np.minimum(limit,ind)
-    
-    ict = (frecO2[limit-1]+frecO2[limit]) / 2
-    c2 = c[c<ict]            
+    ict = np.minimum(mod+fwhm*2, c.max())
+    c2 = c[c<ict] 
+           
     mea,std = (np.mean(c2),np.std(c2))
     thresO2 = mea - std*coef
     logger.info('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
