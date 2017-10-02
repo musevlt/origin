@@ -231,9 +231,6 @@ class ORIGIN(object):
         self.Nz, self.Ny, self.Nx = cub.shape
         
         # ORIGIN parameters
-        if NbAreas is None:
-            NbAreas = 0 
-        self.param['nbareas'] = NbAreas
         self.NbAreas = NbAreas
         
         # List of spectral profile
@@ -478,7 +475,10 @@ class ORIGIN(object):
         else:
             wfields = sorted(wfield_files)
 
-        NbAreas = param['nbareas']
+        if 'nbareas' in param:
+            NbAreas = param['nbareas']
+        else:
+            NbAreas = None
         # step0
         if os.path.isfile('%s/ima_white.fits'%folder):
             ima_white = Image('%s/ima_white.fits'%folder)
@@ -522,26 +522,31 @@ class ORIGIN(object):
             thresO2 = thresO2.tolist()
         else:
             thresO2 = None
-        if os.path.isfile('%s/testO2_1.txt'%(folder)):
-            testO2 = []
-            for area in range(1, NbAreas+1):
-                testO2.append(np.loadtxt('%s/testO2_%d.txt'%(folder,area),
-                                         ndmin=1))
+        if NbAreas is not None: 
+            if os.path.isfile('%s/testO2_1.txt'%(folder)):
+                testO2 = []
+                for area in range(1, NbAreas+1):
+                    testO2.append(np.loadtxt('%s/testO2_%d.txt'%(folder,area),
+                                             ndmin=1))
+            else:
+                testO2 = None
+            if os.path.isfile('%s/histO2_1.txt'%(folder)):
+                histO2 = []
+                for area in range(1, NbAreas+1):
+                    histO2.append(np.loadtxt('%s/histO2_%d.txt'%(folder, area),
+                                             ndmin=1))
+            else:
+                histO2 = None
+            if os.path.isfile('%s/binO2_1.txt'%(folder)):
+                binO2 = []
+                for area in range(1, NbAreas+1):
+                    binO2.append(np.loadtxt('%s/binO2_%d.txt'%(folder, area),
+                                             ndmin=1))
+            else:
+                binO2 = None
         else:
             testO2 = None
-        if os.path.isfile('%s/histO2_1.txt'%(folder)):
-            histO2 = []
-            for area in range(1, NbAreas+1):
-                histO2.append(np.loadtxt('%s/histO2_%d.txt'%(folder, area),
-                                         ndmin=1))
-        else:
             histO2 = None
-        if os.path.isfile('%s/binO2_1.txt'%(folder)):
-            binO2 = []
-            for area in range(1, NbAreas+1):
-                binO2.append(np.loadtxt('%s/binO2_%d.txt'%(folder, area),
-                                         ndmin=1))
-        else:
             binO2 = None
         if os.path.isfile('%s/meaO2.txt'%(folder)):
             meaO2 = np.loadtxt('%s/meaO2.txt'%(folder), ndmin=1)
@@ -796,18 +801,19 @@ class ORIGIN(object):
         #step3
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
-        if self.testO2 is not None:
-            for area in range(1, self.NbAreas+1):
-                np.savetxt('%s/testO2_%d.txt'%(path2, area),
-                           self.testO2[area-1])
-        if self.histO2 is not None:
-            for area in range(1, self.NbAreas+1):
-                np.savetxt('%s/histO2_%d.txt'%(path2, area),
-                           self.histO2[area-1])
-        if self.binO2 is not None:
-            for area in range(1, self.NbAreas+1):
-                np.savetxt('%s/binO2_%d.txt'%(path2, area),
-                           self.binO2[area-1])
+        if self.NbAreas is not None:
+            if self.testO2 is not None:
+                for area in range(1, self.NbAreas+1):
+                    np.savetxt('%s/testO2_%d.txt'%(path2, area),
+                               self.testO2[area-1])
+            if self.histO2 is not None:
+                for area in range(1, self.NbAreas+1):
+                    np.savetxt('%s/histO2_%d.txt'%(path2, area),
+                               self.histO2[area-1])
+            if self.binO2 is not None:
+                for area in range(1, self.NbAreas+1):
+                    np.savetxt('%s/binO2_%d.txt'%(path2, area),
+                               self.binO2[area-1])
         if self.meaO2 is not None:
             np.savetxt('%s/meaO2.txt'%path2, self.meaO2)
         if self.stdO2 is not None:
