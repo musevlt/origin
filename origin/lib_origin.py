@@ -39,6 +39,9 @@ import sys
 import time
 
 from astropy.table import Table, Column
+from astropy.modeling.models import Gaussian1D
+from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.stats import gaussian_sigma_to_fwhm
 from joblib import Parallel, delayed
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
@@ -965,11 +968,14 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     coef = stats.norm.ppf(threshold_test)
     thresO2 = mod - sigma*coef
     logger.info('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
-
-    ict = np.minimum(mod+fwhm*2, c.max())
-    c2 = c[c<ict] 
-           
-    mea,std = (np.mean(c2),np.std(c2))
+    
+    x = (frecO2[1:] + frecO2[:-1]) / 2
+    g1 = Gaussian1D(amplitude=histO2.max(), mean=mod, stddev=sigma)
+    fit_g = LevMarLSQFitter()
+    xcut = g1.mean + gaussian_sigma_to_fwhm * g1.stddev / 2
+    ksel = x < xcut
+    g2 = fit_g(g1,x[ksel], histO2[ksel])
+    mea,std = (g2.mean.value, g2.stddev.value)
     thresO2 = mea - std*coef
     logger.info('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
     
