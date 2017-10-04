@@ -967,7 +967,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     
     coef = stats.norm.ppf(threshold_test)
     thresO2 = mod - sigma*coef
-    logger.info('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
+    logger.debug('1st estimation mean/std/threshold: %f/%f/%f' %(mod,sigma,thresO2))
     
     x = (frecO2[1:] + frecO2[:-1]) / 2
     g1 = Gaussian1D(amplitude=histO2.max(), mean=mod, stddev=sigma)
@@ -977,7 +977,6 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     g2 = fit_g(g1,x[ksel], histO2[ksel])
     mea,std = (g2.mean.value, g2.stddev.value)
     thresO2 = mea - std*coef
-    logger.info('2nd estimation mean/std/threshold: %f/%f/%f' %(mea,std,thresO2))
     
     return histO2, frecO2, thresO2, mea, std
     

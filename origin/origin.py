@@ -1077,7 +1077,10 @@ class ORIGIN(object):
             # Data in this spatio-spectral zone
             cube_temp = self.cube_std._data[:, ksel]
 
-            testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp, pfa_test)
+            testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp,
+                                                                    pfa_test)
+            self._loginfo('Area %d, estimation mean/std/threshold:'%area_ind \
+                                                + ' %f/%f/%f' %(mea, std, tO2))
             self.testO2.append(testO2)
             self.histO2.append(hO2)
             self.binO2.append(fO2)
@@ -1640,8 +1643,8 @@ class ORIGIN(object):
         else:
             ax.set_title('continuum test (1 area)')
     
-    def plot_step03_PCA_threshold(self, log10=False, xlim=None, fig=None,
-                                  **fig_kw):
+    def plot_step03_PCA_threshold(self, log10=False, ncol=3, legend=True,
+                                  xlim=None, fig=None, **fig_kw):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA
         
@@ -1649,6 +1652,10 @@ class ORIGIN(object):
         ----------
         log10     : bool
                     Draw histogram in logarithmic scale or not
+        ncol      : integer
+                    Number of colomns in the subplots
+        legend    : bool
+                    If true, write pfa and threshold values as legend
         xlim      : (float, float)
                     Set the data limits for the x-axes
         fig       : matplotlib.Figure
@@ -1667,12 +1674,12 @@ class ORIGIN(object):
         if fig is None:
             fig = plt.figure()
             
-        if self.NbAreas<= 3:
+        if self.NbAreas<= ncol:
             n = 1
             m = self.NbAreas
         else:
-            n = self.NbAreas//3
-            m = 3
+            n = self.NbAreas//ncol
+            m = ncol
             if (n*m)<self.NbAreas:
                 n = n + 1
 
@@ -1681,7 +1688,7 @@ class ORIGIN(object):
                 ax = fig.add_subplot(n, m, area, **fig_kw)
             else:
                 ax = fig.add_subplot(n, m, area, sharey=fig.axes[0], **fig_kw)
-            self.plot_PCA_threshold(area, 'step03', log10, xlim, ax)
+            self.plot_PCA_threshold(area, 'step03', log10, legend, xlim, ax)
            
         # Fine-tune figure
         for a in fig.axes[:-1]:
@@ -1689,18 +1696,18 @@ class ORIGIN(object):
         for a in fig.axes[1:]:
             a.set_ylabel("")
         plt.setp([a.get_yticklabels() for a in fig.axes], visible=False)
-        plt.setp([a.get_yticklabels() for a in fig.axes[0::3]], visible=True)
+        plt.setp([a.get_yticklabels() for a in fig.axes[0::m]], visible=True)
         plt.setp([a.get_yticklines() for a in fig.axes], visible=False)
-        plt.setp([a.get_yticklines() for a in fig.axes[0::3]], visible=True)
+        plt.setp([a.get_yticklines() for a in fig.axes[0::m]], visible=True)
         fig.subplots_adjust(wspace=0)
         if xlim is not None:
-            plt.setp([a.get_xticklabels() for a in fig.axes[:-3]],
+            plt.setp([a.get_xticklabels() for a in fig.axes[:-m]],
                       visible=False)
-            plt.setp([a.get_xticklines() for a in fig.axes[:-3]],
+            plt.setp([a.get_xticklines() for a in fig.axes[:-m]],
                       visible=False)
             fig.subplots_adjust(hspace=0)
             
-    def plot_step03_PCA_stat(self, cutoff=2, ax=None):
+    def plot_step03_PCA_stat(self, cutoff=5, ax=None):
         """ Plot the thrashold value according to the area.
         Median Absolute Deviation is used to find outliers.
         
@@ -1733,7 +1740,7 @@ class ORIGIN(object):
         
         
     def plot_PCA_threshold(self, area, pfa_test='step03', log10=False,
-                           xlim=None, ax=None):
+                           legend=True, xlim=None, ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
         PCA
         
@@ -1746,6 +1753,8 @@ class ORIGIN(object):
                     is used)
         log10     : bool
                     Draw histogram in logarithmic scale or not
+        legend    : bool
+                    If true, write pfa and threshold values as legend
         xlim      : (float, float)
                     Set the data limits for the x-axis                  
         ax        : matplotlib.Axes
@@ -1803,9 +1812,13 @@ class ORIGIN(object):
         ax.set_ylim((ym,yM))
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
-        ax.text(0.1, 0.8 ,'zone %d\npfa %.2f\nthreshold %.2f'%(area, pfa_test,
-                                                               thre),
-                transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5)) 
+        if legend:
+            ax.text(0.1, 0.8 ,'zone %d\npfa %.2f\nthreshold %.2f'%(area,
+                                                            pfa_test, thre),
+                transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
+        else:
+            ax.text(0.9, 0.9 ,'%d'%area, transform=ax.transAxes,
+                    bbox=dict(facecolor='red', alpha=0.5))
             
         
     def plot_mapPCA(self, area=None, iteration=None, ax=None, **kwargs):
