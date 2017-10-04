@@ -1665,9 +1665,6 @@ class ORIGIN(object):
                     call.
 
         """
-        if self.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-            
         if self.NbAreas is None:
             raise IOError('Run the step 02 to initialize self.NbAreas')
                        
@@ -1737,8 +1734,7 @@ class ORIGIN(object):
         ax.set_ylabel('Threshold')        
         ax.set_title('PCA threshold (med=%.2f, mad= %.2f)'%(med,mad))
         
-        
-        
+
     def plot_PCA_threshold(self, area, pfa_test='step03', log10=False,
                            legend=True, xlim=None, ax=None):
         """ Plot the histogram and the threshold for the starting point of the 
@@ -1760,9 +1756,6 @@ class ORIGIN(object):
         ax        : matplotlib.Axes
                     Axes instance in which the image is drawn
         """
-        if self.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-            
         if self.NbAreas is None:
             raise IOError('Run the step 02 to initialize self.NbAreas')
             
@@ -1778,6 +1771,8 @@ class ORIGIN(object):
                 raise IOError('pfa_test param is None: set a value or run' + \
                 ' the Step03')
         else:
+            if self.cube_std is None:
+                raise IOError('Run the step 01 to initialize self.cube_std')
             # limits of each spatial zone
             ksel = (self.areamap._data == area)
             # Data in this spatio-spectral zone
@@ -1801,15 +1796,13 @@ class ORIGIN(object):
             
         ax.plot(center, hist,'-k')
         ax.plot(center, hist,'.r')
-        ym,yM = ax.get_ylim()
         ax.plot(center, gauss,'-b', alpha=.5)
-        ax.plot([thre,thre],[ym,yM],'b', lw=2, alpha=.5)
+        ax.axvline(thre,color='b', lw=2, alpha=.5)
         ax.grid()
         if xlim is None:
             ax.set_xlim((center.min(),center.max()))
         else:
             ax.set_xlim(xlim)
-        ax.set_ylim((ym,yM))
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
         if legend:
