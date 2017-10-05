@@ -782,9 +782,9 @@ class ORIGIN(object):
             
         #step1
         if self.cube_std is not None:
-            if self.var is not None:
-                self.cube_std._var = self.var
+            self.cube_std._var = self.var
             self.cube_std.write('%s/cube_std.fits'%path2)
+            self.cube_std._var = None
         if self.cont_dct is not None:
             self.cont_dct.write('%s/cont_dct.fits'%path2)
         if self.segmentation_test is not None:
