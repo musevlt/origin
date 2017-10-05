@@ -1309,7 +1309,8 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
     return Local_max, Local_min
 
 def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
-                           threshold_option, segmentation_test, pfa):
+                           threshold_back, threshold_src, segmentation_test,
+                           pfa):
     """Function to threshold the p-values from
     computatino of threshold from the local maxima of:
         - Maximum correlation
@@ -1323,14 +1324,15 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
                      cube of local maxima from maximum correlation
     cube_Local_min : array
                      cube of local maxima from minus minimum correlation
-    threshold_option : float
-                       float it is a manual threshold.
-                       string
-                       threshold based on background threshold
-
+    threshold_back : float
+                     Manual threshold
+                     If None, estimated from the purity
+    threshold_src  : float or string
+                     if float, manual threshold
+                     if 'background', threshold background is used
+                     If None, estimated from the purity
     segmentation_test : array
                         Test on estimated continuum for segmentation
-
     pfa       : Pvalue for the test which performs segmentation
 
     Returns
@@ -1366,44 +1368,38 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     index_pval = []
     det_m = []
     det_M = []
-
-    # index of segmentation
-    ind_y = []
-    ind_x = []
-    bck_y, bck_x = np.where(map_in==0)
-    ind_y.append(bck_y)
-    ind_x.append(bck_x)
-    src_y, src_x = np.where(map_in==1)
-    ind_y.append(src_y)
-    ind_x.append(src_x)
-
-    # threshold
-    for ind_n in range(2):
-
-        cube_local_max_edge = cube_local_max[:, ind_y[ind_n], ind_x[ind_n]]
-        cube_local_min_edge = cube_local_min[:, ind_y[ind_n], ind_x[ind_n]]
-
+    
+    for i in [0,1]:
+        #background i=0
+        #source i=1
+        ksel_y, ksel_x = np.where(map_in==i)
+        cube_local_max_edge = cube_local_max[:, ksel_y, ksel_x]
+        cube_local_min_edge = cube_local_min[:, ksel_y, ksel_x]
+    
         _threshold, _Pval_r, _index_pval, _det_m, _det_M \
-        = Compute_threshold( purity, cube_local_max_edge, \
-                                           cube_local_min_edge)
+        = Compute_threshold( purity, cube_local_max_edge, cube_local_min_edge)
+        
+        
+        if i==0:
+            if threshold_back is not None:
+                _threshold = threshold_back
+        else:
+            if threshold_src is not None:
+                if threshold_src == 'background':
+                    _threshold = threshold[0]
+                else:
+                    _threshold = threshold_src
+    
+        cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, _threshold)
+    
+        cube_pval_correl[:, ksel_y, ksel_x]= cube_pval_correl_l
+        mapThresh[ksel_y, ksel_x] = _threshold
+        
         threshold.append(_threshold)
         Pval_r.append((np.asarray(_Pval_r)))
         index_pval.append((np.asarray(_index_pval)))
         det_m.append((np.asarray(_det_m)))
         det_M.append((np.asarray(_det_M)))
-
-        if threshold_option is not None:
-
-            if threshold_option=='background':
-                threshold[ind_n] = threshold[(0)]
-            else:
-                threshold[ind_n] = threshold_option
-
-        cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, \
-                                            threshold[ind_n])
-
-        cube_pval_correl[:, ind_y[ind_n], ind_x[ind_n]]= cube_pval_correl_l
-        mapThresh[ind_y[ind_n], ind_x[ind_n]] = threshold[ind_n]
 
     return np.asarray(threshold), Pval_r, index_pval,  \
             cube_pval_correl, mapThresh, map_in, det_m, det_M

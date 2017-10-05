@@ -1279,7 +1279,8 @@ class ORIGIN(object):
         
         self._loginfo('05 Done')  
 
-    def step06_threshold_pval(self, purity=.9, threshold_option=None, pfa=0.15):        
+    def step06_threshold_pval(self, purity=.9, threshold_back=None,
+                              threshold_src=None, pfa=0.15): 
         """Threshold the Pvalue with the given threshold, if the threshold is
         None the threshold is automaticaly computed from confidence applied
         on local maximam from maximum correlation and local maxima from 
@@ -1288,12 +1289,14 @@ class ORIGIN(object):
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold        
-        threshold_option : float, 'background' or None
-                           float -> it is a manual threshold.
-                           string 'background' -> threshold based on background
-                           threshold
-                           None -> estimated
+                 purity to automatically compute the threshold 
+        threshold_back : float
+                     Manual threshold
+                     If None, estimated from the purity
+        threshold_src  : float or string
+                     if float, manual threshold
+                     if 'background', threshold background is used
+                     If None, estimated from the purity
         pfa              : float
                            Pvalue for the test which performs segmentation
                             
@@ -1316,18 +1319,24 @@ class ORIGIN(object):
             raise IOError('Run the step 05 to initialize ' + \
             'self.cube_local_max and self.cube_local_min')
         
-        if threshold_option is None:
-            self._loginfo('Estimation of threshold with purity = %.1f'%purity)
-        elif threshold_option == 'background' :
-            self._loginfo('Computation of threshold (based on background)' + \
-            ' with purity = %.1f (background option)'%purity)
+        if threshold_back is None:
+            self._loginfo('Estimation of background threshold with ' + \
+            'purity = %.1f'%purity)
+        else:
+            self._loginfo('Threshold background = %.1f '%threshold_back)
+        if threshold_src is None:
+            self._loginfo('Estimation of source threshold with ' + \
+            'purity = %.1f'%purity)
+        elif threshold_src == 'background' :
+            self._loginfo('threshold source = threshold background')
         else: 
-            self._loginfo('Threshold = %.1f '%threshold_option)
+            self._loginfo('Threshold = %.1f '%threshold_src)
             
         self._loginfo('PFA = %.2f '%pfa)
             
         self.param['purity'] = purity
-        self.param['threshold_option'] = threshold_option
+        self.param['threshold_back'] = threshold_back
+        self.param['threshold_src'] = threshold_src
         self.param['pfa'] = pfa
 
         self.ThresholdPval, self.Pval_r, self.index_pval, \
@@ -1336,7 +1345,7 @@ class ORIGIN(object):
                                            purity, 
                                            self.cube_local_max.data,
                                            self.cube_local_min.data,
-                                           threshold_option, 
+                                           threshold_back, threshold_src,
                                            self.segmentation_test.data, pfa)
         self._loginfo('Threshold: %.1f (background)'%self.ThresholdPval[0] + \
         ' %.1f (sources)'%self.ThresholdPval[1])
