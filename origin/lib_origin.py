@@ -1118,15 +1118,14 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                                                    PSF_Moffat_m[i, :, :][::-1, ::-1],
                                                    mode='same')
         del cube_var
-        fsf_square = PSF_Moffat_m**2
-        del PSF_Moffat_m
+        PSF_Moffat_m = PSF_Moffat_m**2
         # Spatial part of the norm of the 3D atom
         logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
         for i in ProgressBar(list(range(Nz))):
             norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
-                                                   fsf_square[i, :, :][::-1, ::-1],
+                                                   PSF_Moffat_m[i, :, :][::-1, ::-1],
                                                    mode='same')
-        del fsf_square, inv_var
+        del PSF_Moffat_m, inv_var
     else: # several FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
         logger.info('Step 1/3 Spatial convolution of the weighted data with the '
@@ -1146,10 +1145,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                                              PSF_Moffat_m[n][i, :, :][::-1, ::-1],
                                             mode='same')
         del cube_var
-        fsf_square = []
         for n in range(nfields):
-            fsf_square.append(PSF_Moffat_m[n]**2)
-        del PSF_Moffat_m
+            PSF_Moffat_m[n] = PSF_Moffat_m[n]**2
         # Spatial part of the norm of the 3D atom
         logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
         for i in ProgressBar(list(range(Nz))):
@@ -1157,26 +1154,23 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
             for n in range(nfields):
                 norm_fsf[i, :, :] = norm_fsf[i, :, :] \
                 + signal.fftconvolve(weights[n]*inv_var[i, :, :],
-                                    fsf_square[n][i, :, :][::-1, ::-1],
+                                    PSF_Moffat_m[n][i, :, :][::-1, ::-1],
                                     mode='same')
+        del PSF_Moffat_m, inv_var
 
     # First cube of correlation values
     # initialization with the first profile
-    profile = np.zeros(shape, dtype=np.int)
-
-
     logger.info('Step 3/3 Computing second cube of correlation values')
-    profile = np.empty(shape)
+    profile = np.empty(shape, dtype=np.int)
     correl = -np.inf * np.ones(shape)
     correl_min = np.inf * np.ones(shape)
     for k in ProgressBar(list(range(len(Dico)))):
         # Second cube of correlation values
-        d_j = Dico[k]
-        d_j = d_j - np.mean(d_j)
+        d_j = Dico[k] - np.mean(Dico[k])
         profile_square = d_j**2
 
-        cube_profile2 = np.zeros((Nz,Ny,Nx))
-        norm_profile2 = np.zeros((Nz,Ny,Nx))
+        cube_profile2 = np.empty((Nz,Ny,Nx))
+        norm_profile2 = np.empty((Nz,Ny,Nx))
         for y in range(Ny):
             for x in range(Nx):
                 cube_profile = signal.fftconvolve(cube_fsf[:,y,x], d_j,
