@@ -1155,7 +1155,7 @@ class ORIGIN(object):
             
         self._loginfo('   - Noise_population = %0.2f'%Noise_population)
         self._loginfo('   - List of threshold = ' + \
-            " ".join(str(x) for x in thr))     
+            " ".join("%.2f"%x for x in thr))     
         self._loginfo('   - mixing = %d'%mixing)
         self._loginfo('   - Max number of iterations = %d'%itermax)
         
