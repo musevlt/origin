@@ -1622,7 +1622,7 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     -------
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : x y z ra dec lba T_GLR profile
+              Columns of Cat_ref : ra dec lbda x0 y0 z0 T_GLR profile
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1642,12 +1642,12 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     dec = skycrd[:, 0]
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
-    Cat_ref = Table([xpixRef, ypixRef, zpixRef, ra, dec, lbda, correl_max,
+    Cat_ref = Table([ra, dec, lbda, xpixRef, ypixRef, zpixRef, correl_max,
                      profile_max],
-                    names=('x', 'y', 'z', 'ra', 'dec', 'lbda', 'T_GLR',
+                    names=( 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0','T_GLR',
                            'profile'))
     # Catalogue sorted along the Z axis
-    Cat_ref.sort('z')
+    Cat_ref.sort('z0')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat_ref
 
@@ -2080,7 +2080,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
                  Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile
+                 ra dec lbda x0 y0 z0 T_GLR profile
     DATA       : array
                  RAW data
     VAR        : array
@@ -2110,7 +2110,8 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2             : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
-                       x y z ra dec lbda, T_GLR profile residual flux num_line
+                       ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
+                       flux num_line
     Cat_est_line_raw : list of arrays
                        Estimated lines in data space
     Cat_est_line_std : list of arrays
@@ -2134,9 +2135,9 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat_est_line_var = []
     Cat_est_cont_raw = []
     for src in Cat1_T:
-        y0 = src['y']
-        x0 = src['x']
-        z0 = src['z']
+        y0 = src['y0']
+        x0 = src['x0']
+        z0 = src['z0']
 
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
                                                           y0, x0, size_grid)
@@ -2157,9 +2158,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     Cat2 = Cat1_T.copy()
 
-    Cat2['x'] = Cat2_x_grid
-    Cat2['y'] = Cat2_y_grid
-    Cat2['z'] = Cat2_z_grid
     # add real coordinates
     pixcrd = [[p, q] for p, q in zip(Cat2_y_grid, Cat2_x_grid)]
     skycrd = wcs.pix2sky(pixcrd)
@@ -2173,8 +2171,12 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     col_flux = Column(name='flux', data=Cat2_flux5)
     col_res = Column(name='residual', data=Cat2_res_min5)
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
+    col_x = Column(name='x1', data=Cat2_x_grid)
+    col_y = Column(name='y1', data=Cat2_y_grid)
+    col_z = Column(name='z1', data=Cat2_z_grid)
 
-    Cat2.add_columns([col_res, col_flux, col_num])
+    Cat2.add_columns([col_x, col_y, col_z, col_res, col_flux, col_num],
+                     indexes=[4, 5, 6, 8, 8, 8])
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
 
@@ -2190,8 +2192,6 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
     Cat_in     : astropy.Table
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
-                 Columns of the Catalogue Cat1_T:
-                 x y z T_GLR profile
     correl     : array
                  Origin Correlation data
     purity_curves     : array
@@ -2206,9 +2206,8 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
     Cat1_2            : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns of the Catalogue Cat2:
-                       x y z ra dec lbda, 
-                       T_GLR profile residual flux num_line
-                       purity
+                       ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
+                       flux num_line purity
 
 
     Date  : July, 25 2017
@@ -2219,9 +2218,9 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
     purity = []
     
     for n,src in enumerate(Cat1_2):
-        y = src['y']
-        x = src['x'] 
-        z = src['z']         
+        y = src['y1']
+        x = src['x1'] 
+        z = src['z1']         
         area = bck_or_src[y,x]
         seuil = purity_index[area]
         fidel = purity_curves[area]
@@ -2254,7 +2253,8 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     Cat0     : astropy.Table
                catalogue
                Columns of Cat0:
-               x y z ra dec lbda T_GLR profile residual flux num_line
+               ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
+                       flux num_line purity
     fwhm_fsf : float
                The mean over the wavelengths of the FWHM of the FSF
     wcs      : `mpdaf.obj.WCS`
@@ -2264,9 +2264,8 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     -------
     CatF : astropy.Table
            Columns of CatF:
-           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
-           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           residual flux num_line
+           ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
+                    T_GLR profile residual flux num_line purity
     """
     logger = logging.getLogger('origin')
     t0 = time.time()
@@ -2280,8 +2279,8 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     colF_nlines = []
 
     points = np.empty((len(Cat0), 2))
-    points[:, 0] = Cat0['x'].data
-    points[:, 1] = Cat0['y'].data
+    points[:, 0] = Cat0['x1'].data
+    points[:, 1] = Cat0['y1'].data
 
     col_tglr = Cat0['T_GLR'].data
     col_id = np.arange(len(Cat0))
@@ -2290,7 +2289,9 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
     r = t.query_ball_tree(t, fwhm_fsf / 2)
     r = [list(x) for x in set(tuple(x) for x in r)]
 
-    centroid = np.array([np.sum(col_tglr[r[i]][:, np.newaxis] * points[r[i]], axis=0) / np.sum(col_tglr[r[i]]) for i in range(len(r))])
+    centroid = np.array([np.sum(col_tglr[r[i]][:, np.newaxis] * points[r[i]],
+                                axis=0) \
+                            / np.sum(col_tglr[r[i]]) for i in range(len(r))])
     unique_centroid = np.array(list(set(tuple(p) for p in centroid)))
 
     t_centroid = KDTree(unique_centroid)
@@ -2336,28 +2337,18 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
 
     CatF = Cat0[np.concatenate(colF)].copy()
     col_id = Column(name='ID', data=np.concatenate(colF_id))
-    colF_x = np.concatenate(colF_x)
-    col_x = Column(name='x_circle', data=colF_x)
-    colF_y = np.concatenate(colF_y)
-    col_y = Column(name='y_circle', data=colF_y)
     colF_xc = np.concatenate(colF_xc)
-    col_xc = Column(name='x_centroid', data=colF_xc)
+    col_xc = Column(name='x2', data=colF_xc)
     colF_yc = np.concatenate(colF_yc)
-    col_yc = Column(name='y_centroid', data=colF_yc)
+    col_yc = Column(name='y2', data=colF_yc)
     col_nlines = Column(name='nb_lines', data=np.concatenate(colF_nlines))
     # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(colF_y, colF_x)]
-    skycrd = wcs.pix2sky(pixcrd)
-    col_ra = Column(name='ra_circle', data=skycrd[:, 1])
-    col_dec = Column(name='dec_circle', data=skycrd[:, 0])
     pixcrd = [[p, q] for p, q in zip(colF_yc, colF_xc)]
     skycrd = wcs.pix2sky(pixcrd)
-    col_rac = Column(name='ra_centroid', data=skycrd[:, 1])
-    col_decc = Column(name='dec_centroid', data=skycrd[:, 0])
-
-    CatF.add_columns([col_id, col_x, col_y, col_ra, col_dec, col_xc, col_yc,
-                      col_rac, col_decc, col_nlines],
-                     indexes=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    CatF['ra'] = skycrd[:, 1]
+    CatF['dec']= skycrd[:, 0]
+    CatF.add_columns([col_id, col_xc, col_yc, col_nlines],
+                     indexes=[0, 5, 7, 9])
 
     nid = len(np.unique(CatF['ID']))
     logger.info('%d sources identified in catalog after spatial merging', nid)
@@ -2369,7 +2360,7 @@ def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
 
 
 def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in , 
-                           deltaz): 
+                           deltaz, wcs): 
     """Merge the detected emission lines distants to less than deltaz
     spectral channel in a source area
 
@@ -2378,10 +2369,8 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     Cat          : astropy.Table
                    Catalogue of detected emission lines
                    Columns of Cat:
-                   ID x_circle y_circle ra_circle dec_circle
-                   x_centroid y_centroid ra_centroid, dec_centroid nb_lines
-                   x y z ra dec lbda T_GLR profile
-                   residual flux num_line
+                   ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
+                    T_GLR profile residual flux num_line purity
     pfa          : Pvalue for the test which performs segmentation
     segmentation_test : array
                         Test on estimated continuum for segmentation  
@@ -2398,9 +2387,8 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     CatF : astropy.Table
            Catalogue
            Columns of CatF:
-           ID x_circle y_circle ra_circle dec_circle x_centroid y_centroid
-           ra_centroid dec_centroid nb_lines x y z ra dec lbda T_GLR profile
-           residual flux num_line
+           ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
+                    T_GLR profile residual flux num_line purity seg_label
     map_in       : Array
                    segmentation map           
 
@@ -2421,9 +2409,9 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     _specmax = []
     for id_src in np.unique(cat_in['ID']):
         cat_src = cat_in[cat_in['ID']==id_src]
-        mean_x = int(np.mean(cat_src['x']))
-        mean_y = int(np.mean(cat_src['y']))
-        max_spectre = np.amax(cor_in[:,cat_src['y'], cat_src['x']], axis=1)
+        mean_x = int(np.mean(cat_src['x1']))
+        mean_y = int(np.mean(cat_src['y1']))
+        max_spectre = np.amax(cor_in[:,cat_src['y1'], cat_src['x1']], axis=1)
         area = map_in[mean_y, mean_x]
 
         _id.append(id_src)
@@ -2477,7 +2465,7 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     ID_tmp = cat_out['ID']
 
     ID_arr = np.array(id_cal)
-    col_old_id = Column(name='ID_old', data=cat_in['ID'])
+    #col_old_id = Column(name='ID_old', data=cat_in['ID'])
     for n in ID_arr:
         for m in range(len(ID_tmp)):
             if ID_tmp[m] == n[0]:
@@ -2492,19 +2480,23 @@ def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in ,
     # Spatial Centroid and label of the segmentation map
     for ind_id_src in np.unique(cat_out['ID']):
         ind_id_src = int(ind_id_src)
-        x = np.mean( cat_out[cat_out['ID']==ind_id_src]['x'] )
-        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y'] )
+        x = np.mean( cat_out[cat_out['ID']==ind_id_src]['x1'] )
+        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y1'] )
         seg_label = map_in[int(y), int(x)]
         xc[cat_out['ID']==ind_id_src] = x
         yc[cat_out['ID']==ind_id_src] = y
         seg[cat_out['ID']==ind_id_src] = seg_label
 
-    cat_out['x_centroid'] = xc
-    cat_out['y_centroid'] = yc
+    cat_out['x2'] = xc
+    cat_out['y2'] = yc
+    pixcrd = [[p, q] for p, q in zip(yc, xc)]
+    skycrd = wcs.pix2sky(pixcrd)
+    cat_out['ra'] = skycrd[:, 1]
+    cat_out['dec']= skycrd[:, 0]
 
     #save the label of the segmentation map
     col_seg_label = Column(name='seg_label', data=seg)
-    cat_out.add_columns([col_old_id, col_seg_label])
+    cat_out.add_columns([col_seg_label])
     
     nid = len(np.unique(cat_out['ID']))
     logger.info('%d sources identified in catalog after spectral merging', nid)
@@ -2761,14 +2753,14 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     for i in np.unique(Cat['ID']):
         # Source = group
         E = Cat[Cat['ID'] == i]
-        ra = E['ra_centroid'][0]
-        dec = E['dec_centroid'][0]
-        x_centroid = E['x_centroid'][0]
-        y_centroid = E['y_centroid'][0]
+        ra = E['ra'][0]
+        dec = E['dec'][0]
+        x_centroid = E['x2'][0]
+        y_centroid = E['y2'][0]
         seg_label = E['seg_label'][0]
         # Lines of this group
-        E.sort('z')
-        wave_pix = E['z'].data
+        E.sort('z1')
+        wave_pix = E['z1'].data
         GLR = E['T_GLR']
         num_profil = E['profile'].data
         # Number of lines in this group
@@ -2782,8 +2774,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             Cat_est_line_var[j,:] = Cat_est_line[E['num_line'][j]]._var
             Cat_est_cont_data[j,:] = Cat_est_cont[E['num_line'][j]]._data
             Cat_est_cont_var[j,:] = Cat_est_cont[E['num_line'][j]]._var
-        y = E['y']
-        x = E['x']
+        y = E['y1']
+        x = E['x1']
         flux = E['flux']
         purity = E['purity']
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,

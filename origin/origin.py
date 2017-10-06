@@ -70,14 +70,8 @@ def _format_cat(Cat, i):
         Cat['flux'].format = '.1f'
         Cat['purity'].format = '.3f'
     if i>1:  
-        Cat['x_circle'].format = '.1f'
-        Cat['y_circle'].format = '.1f'
-        Cat['ra_circle'].format = '.3f'
-        Cat['dec_circle'].format = '.3f'
-        Cat['x_centroid'].format = '.1f'
-        Cat['y_centroid'].format = '.1f'
-        Cat['ra_centroid'].format = '.3f'
-        Cat['dec_centroid'].format = '.3f'
+        Cat['x2'].format = '.1f'
+        Cat['y2'].format = '.1f'
         
     
 
@@ -1308,8 +1302,7 @@ class ORIGIN(object):
                                  Threshold map
         self.Cat0 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: x y z ra dec lbda T_GLR profile
-                    Coordinates are in pixels.
+                    Columns: ra dec lbda x0 y0 z0 T_GLR profile
         self.segmentation_map_threshold : `~mpdaf.obj.Image`
                                           Segmentation map for threshold
         """
@@ -1384,7 +1377,7 @@ class ORIGIN(object):
         -------
         self.Cat1    : astropy.Table
                        Catalogue of parameters of detected emission lines.
-                       Columns: x y z ra dec lbda T_GLR profile
+                       Columns: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile
                                 residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
@@ -1451,10 +1444,8 @@ class ORIGIN(object):
         -------
         self.Cat2 : astropy.Table
                     Catalogue
-                    Columns: ID x_circle y_circle ra_circle dec_circle
-                    x_centroid y_centroid ra_centroid dec_centroid nb_lines x y
-                    z ra dec lbda T_GLR profile residual flux
-                    num_line purity ID_old seg_label
+                    Columns: ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
+                    T_GLR profile residual flux num_line purity seg_label
         self.segmentation_map_spatspect : `~mpdaf.obj.Image`
                                           Segmentation map
         """
@@ -1474,7 +1465,7 @@ class ORIGIN(object):
         self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
                                            self.segmentation_test.data, \
                                            self.cube_correl.data, \
-                                           self.var, deltaz)
+                                           self.var, deltaz, self.wcs)
         self.segmentation_map_spatspect = Image(data=segmap,
                                     wcs=self.wcs, mask=np.ma.nomask)
         self._loginfo('Save the segmentation map for spatio-spectral ' + \
@@ -1507,8 +1498,8 @@ class ORIGIN(object):
             ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
                                          format='.2f'))
         for key, group in zip(cat.groups.keys,cat.groups):
-            dic = {'ID':key['ID'], 'RA':group['ra_centroid'].mean(),
-            'DEC':group['dec_centroid'].mean(), 'NLINE':len(group['lbda']),
+            dic = {'ID':key['ID'], 'RA':group['ra'].mean(),
+            'DEC':group['dec'].mean(), 'NLINE':len(group['lbda']),
             'SEG':group['seg_label'][0]}
             ksort = group['T_GLR'].argsort()[::-1]
             for k, (lbda, flux, tglr, eflux, purity) in \
@@ -2048,9 +2039,9 @@ class ORIGIN(object):
             ax3 = plt.subplot(1,3,3)
             
         # Coordinates of the source
-        x0 = self.Cat0[src_ind]['x']
-        y0 = self.Cat0[src_ind]['y']
-        z0 = self.Cat0[src_ind]['z']
+        x0 = self.Cat0[src_ind]['x0']
+        y0 = self.Cat0[src_ind]['y0']
+        z0 = self.Cat0[src_ind]['z0']
         # Larger spatial ranges for the plots
         longxy0 = 20
         y01 = max(0, y0 - longxy0)
