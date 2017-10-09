@@ -61,18 +61,21 @@ from .lib_origin import Spatial_Segmentation, \
     __version__    
 
 def _format_cat(Cat, i):
-    Cat['ra'].format = '.3f'
-    Cat['dec'].format = '.3f'
-    Cat['lbda'].format = '.2f'
-    Cat['T_GLR'].format = '.2f'
-    if i>0:
-        Cat['residual'].format = '.3f'
-        Cat['flux'].format = '.1f'
-        Cat['purity'].format = '.3f'
-    if i>1:  
-        Cat['x2'].format = '.1f'
-        Cat['y2'].format = '.1f'
-        
+    try:
+        Cat['ra'].format = '.3f'
+        Cat['dec'].format = '.3f'
+        Cat['lbda'].format = '.2f'
+        Cat['T_GLR'].format = '.2f'
+        if i>0:
+            Cat['residual'].format = '.3f'
+            Cat['flux'].format = '.1f'
+            Cat['purity'].format = '.3f'
+        if i>1:  
+            Cat['x2'].format = '.1f'
+            Cat['y2'].format = '.1f'
+    except:
+        logger = logging.getLogger('origin')
+        logger.info('Invalid format for the Catalog')
     
 
 class ORIGIN(object):
