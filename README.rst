@@ -25,28 +25,30 @@ Usage
 
  > from origin import ORIGIN
  
- > my_origin = ORIGIN.init('cube.fits', name='tmp')
+ > orig = ORIGIN.init('cube.fits', name='tmp')
  
  
 2- we run the different steps
 
- > my_origin.step01_preprocessing()
+ > orig.step01_preprocessing()
     
- >  my_origin.step02_areas()
+ >  orig.step02_areas()
  
- >  my_origin.step03_compute_PCA_threshold()
+ >  orig.step03_compute_PCA_threshold()
     
- >  my_origin.step04_compute_greedy_PCA()
+ >  orig.step04_compute_greedy_PCA()
     
- >  my_origin.step05_compute_TGLR()
+ >  orig.step05_compute_TGLR()
  
- >  my_origin.step06_threshold_pval()
+ >  orig.step06_compute_segmentation_threshold(pfa=0.05)
+ 
+ >  orig.step07_threshold_pval()
     
- >  my_origin.step07_compute_spectra()
+ >  orig.step08_compute_spectra()
     
- >  my_origin.step08_spatiospectral_merging(deltaz)
+ >  orig.step09_spatiospectral_merging(deltaz)
     
- >  nsources = my_origin.step08_write_sources(ncpu=1)
+ >  nsources = orig.step10_write_sources(ncpu=1)
  
  
 3- Resulted detected sources can be load by using mpdaf
@@ -58,11 +60,11 @@ Usage
  
 4- at each step, we can write the results in a folder
 
- > my_origin.write()
+ > orig.write()
  
  
 5- it is possible to create an ORIGIN object from a previous session by loading
 the data stored in the folder 
 
- > my_origin = ORIGIN.load('tmp')
+ > orig = ORIGIN.load('tmp')
  

@@ -1307,14 +1307,11 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
     Local_min=minus_correl_min*Local_min_mask
 
     return Local_max, Local_min
+    
 
-def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
-                           threshold_back, threshold_src, segmentation_test,
-                           pfa):
-    """Function to threshold the p-values from
-    computatino of threshold from the local maxima of:
-        - Maximum correlation
-        - Minus minimum correlation
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
+                           segmentation_test, pfa):
+    """Compute threshold values corresponding to a given purity
 
     Parameters
     ----------
@@ -1324,33 +1321,25 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
                      cube of local maxima from maximum correlation
     cube_Local_min : array
                      cube of local maxima from minus minimum correlation
-    threshold_back : float
-                     Manual threshold
-                     If None, estimated from the purity
-    threshold_src  : float or string
-                     if float, manual threshold
-                     if 'background', threshold background is used
-                     If None, estimated from the purity
     segmentation_test : array
                         Test on estimated continuum for segmentation
     pfa       : Pvalue for the test which performs segmentation
 
     Returns
     -------
-    Confidence : float
-                 the threshold associated to the purity
-    PVal_M : array
-             the P Value associated to Maximum Correlation local maxima
-    PVal_m : array
-             the P Value associated to Minus Minimum Correlation local maxima
     PVal_r : array
              The purity function
     index_pval: array
                 index value to plot
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the local max of T_GLR values
-
+    mapThresh : array
+                Map if threshold values
+    map_in    : array
+                Segmentation map
+    det_m     : array
+                Number of detections (-DATA)
+    det_M     : array
+                Number of detections (+DATA)
+    
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
@@ -1361,7 +1350,6 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
     map_in = (segmentation_test>gamma)*1.
     map_in[segmentation_test**2 == 0] = -1
     # initialization
-    cube_pval_correl = np.zeros(cube_local_max.shape)
     mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))
     threshold = []
     Pval_r = []
@@ -1379,20 +1367,6 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         _threshold, _Pval_r, _index_pval, _det_m, _det_M \
         = Compute_threshold( purity, cube_local_max_edge, cube_local_min_edge)
         
-        
-        if i==0:
-            if threshold_back is not None:
-                _threshold = threshold_back
-        else:
-            if threshold_src is not None:
-                if threshold_src == 'background':
-                    _threshold = threshold[0]
-                else:
-                    _threshold = threshold_src
-    
-        cube_pval_correl_l = Threshold_pval(cube_local_max_edge.data, _threshold)
-    
-        cube_pval_correl[:, ksel_y, ksel_x]= cube_pval_correl_l
         mapThresh[ksel_y, ksel_x] = _threshold
         
         threshold.append(_threshold)
@@ -1401,8 +1375,48 @@ def Compute_threshold_segmentation(purity, cube_local_max, cube_local_min, \
         det_m.append((np.asarray(_det_m)))
         det_M.append((np.asarray(_det_M)))
 
-    return np.asarray(threshold), Pval_r, index_pval,  \
-            cube_pval_correl, mapThresh, map_in, det_m, det_M
+    return np.asarray(threshold), Pval_r, index_pval, mapThresh, map_in, \
+    det_m, det_M
+
+
+def Compute_threshold_segmentation(cube_local_max, threshold, map_in):
+    """Function to threshold the p-values from
+    computatino of threshold from the local maxima of:
+        - Maximum correlation
+        - Minus minimum correlation
+
+    Parameters
+    ----------
+    cube_Local_max : array
+                     cube of local maxima from maximum correlation
+    threshold : (float,float)
+                Threshold values (background/sources)
+    map_in    : array
+                Segmentation map
+
+    Returns
+    -------
+    cube_pval_correl : array
+                       cube of thresholded p-values associated
+                       to the local max of T_GLR values
+
+    Date  : July, 6 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """
+    # initialization
+    cube_pval_correl = np.zeros(cube_local_max.shape)
+    
+    for i in [0,1]:
+        #background i=0
+        #source i=1
+        ksel_y, ksel_x = np.where(map_in==i)
+        cube_local_max_edge = cube_local_max[:, ksel_y, ksel_x]
+
+        cube_pval_correl_l = Threshold_pval(cube_local_max_edge, threshold[i])
+    
+        cube_pval_correl[:, ksel_y, ksel_x]= cube_pval_correl_l
+
+    return cube_pval_correl
             
             
             
@@ -2184,7 +2198,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
 def Purity_Estimation(Cat_in, correl, purity_curves, purity_index, 
                         bck_or_src): 
-    
     """Function to compute the estimated purity for each line.
 
     Parameters

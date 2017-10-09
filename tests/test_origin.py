@@ -42,24 +42,28 @@ def test_origin():
 
     # threshold applied on pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step06_threshold_pval(pfa=0.05)
+    my_origin.step06_compute_segmentation_threshold(pfa=0.05)
+    my_origin.write()
+    
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step07_threshold_pval()
     my_origin.write()
     
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
-    my_origin.step07_compute_spectra()
+    my_origin.step08_compute_spectra()
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
     deltaz = 1
     my_origin = ORIGIN.load('tmp2')
-    my_origin.step08_spatiospectral_merging(deltaz=deltaz)
+    my_origin.step09_spatiospectral_merging(deltaz=deltaz)
     my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
-    cat = my_origin.step09_write_sources(ncpu=1)
-    cat = my_origin.step09_write_sources(ncpu=2, overwrite=True)
+    cat = my_origin.step10_write_sources(ncpu=1)
+    cat = my_origin.step10_write_sources(ncpu=2, overwrite=True)
     assert (len(cat) == 5) 
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 5)
