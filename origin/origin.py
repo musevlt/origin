@@ -1399,7 +1399,7 @@ class ORIGIN(object):
         self._loginfo('Purity estimation')    
         # 0 for background and 1 for sources; to know which self.index_pval 
         # is correponding to the pixel (y,x)
-        bck_or_src = self.mapThresh.data == self.ThresholdPval[0]
+        bck_or_src = self.mapThresh.data == self.ThresholdPval[1]
         self.Cat1 = Purity_Estimation(self.Cat1, self.cube_correl.data, 
                                         self.Pval_r, self.index_pval, 
                                         bck_or_src)
