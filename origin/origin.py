@@ -244,6 +244,9 @@ class ORIGIN(object):
             self.profiles.append(hdu.data)
             self.FWHM_profiles.append(hdu.header['FWHM'])
         fprof.close()
+        # check that the profiles have the same size
+        if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
+            raise IOError('The profiles must have the same size')
         
         #FSF
         # FSF cube(s)
@@ -1172,7 +1175,7 @@ class ORIGIN(object):
         self._loginfo('04 Done')              
         
 
-    def step05_compute_TGLR(self, NbSubcube=1, neighboors=26):
+    def step05_compute_TGLR(self, NbSubcube=1, neighboors=26, ncpu=4):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
@@ -1197,7 +1200,9 @@ class ORIGIN(object):
                         minimas are performed on smaller subcube and combined
                         after. Useful to avoid swapp
         neighboors  :   integer
-                        Connectivity of contiguous voxels                                                       
+                        Connectivity of contiguous voxels
+        ncpu        :   integer
+                        Number of CPUs used
                                 
         Returns
         -------
@@ -1228,11 +1233,11 @@ class ORIGIN(object):
         if NbSubcube == 1:
             correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
                                             self.var, self.PSF, self.wfields,
-                                               self.profiles)  
+                                               self.profiles, ncpu)  
         else:              
             correl, profile, cm = Correlation_GLR_test_zone( \
                     self.cube_faint._data, self.var, self.PSF, self.wfields,
-                    self.profiles, intx, inty, NbSubcube)  
+                    self.profiles, intx, inty, NbSubcube, ncpu)  
                                                                          
         
         self._loginfo('Save the TGLR value in self.cube_correl')

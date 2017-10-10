@@ -44,6 +44,7 @@ from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
 from joblib import Parallel, delayed
+import pyfftw
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
@@ -982,7 +983,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     return histO2, frecO2, thresO2, mea, std
     
 def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
-                              intx, inty, NbSubcube):
+                              intx, inty, NbSubcube, threads):
     """Function to compute the cube of GLR test values per zone
     obtained with the given PSF and dictionary of spectral profile.
 
@@ -1004,6 +1005,8 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
                 limits in pixels of the rows for each zone
     NbSubcube : int
                 Number of subcube in the spatial segmentation
+    threads    : integer
+                 number of threads
 
     Returns
     -------
@@ -1048,7 +1051,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
             mini_sigma = sigma[:,y1:y2,x1:x2]
 
             c,p,cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat, \
-                                          weights, Dico)
+                                          weights, Dico, threads)
 
             correl[:,inty[numy+1]:inty[numy],intx[numx]:intx[numx+1]] = \
             c[:,y11:y22,x11:x22]
@@ -1062,8 +1065,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
     return correl, profile, correl_min
 
 
-def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
-    # Antony optimiser
+def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
 
@@ -1079,6 +1081,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
                  Weight maps of each field
     Dico       : array
                  Dictionary of spectral profiles to test
+    threads    : integer
+                 number of threads
 
     Returns
     -------
@@ -1160,33 +1164,67 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico):
 
     # First cube of correlation values
     # initialization with the first profile
-    logger.info('Step 3/3 Computing second cube of correlation values')
+    logger.info('Step 3/3 Computing second cube of correlation values')  
     profile = np.empty(shape, dtype=np.int)
     correl = -np.inf * np.ones(shape)
     correl_min = np.inf * np.ones(shape)
+    
+    ndico = Dico[0].shape[0]
+    s = Nz+ndico-1
+    if ndico/2==ndico//2:
+        cc1 = ndico//2-1
+        cc2 = -ndico//2
+    else:
+        cc1 = ndico//2
+        cc2 = -ndico//2+1
+    
+    logger.info('Compute the FFT planes...')
+    temp = pyfftw.empty_aligned(s, dtype='float64')
+    fd_j = pyfftw.empty_aligned(s//2+1, dtype='complex128')
+    flags=['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
+    fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
+                             threads=threads)
+    temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
+    ffsf = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
+    fftfsf = pyfftw.FFTW(temp2, ffsf, direction='FFTW_FORWARD', axes=[0],
+                         flags=flags, threads=threads)
+    temp3 = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
+    res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
+    ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD', axes=[0],
+                              flags=flags, threads=threads)
+    
     for k in ProgressBar(list(range(len(Dico)))):
-        # Second cube of correlation values
+        
+        # fftconvolve(cube_fsf[:,x,y], d_j)
         d_j = Dico[k] - np.mean(Dico[k])
-        profile_square = d_j**2
-
-        cube_profile2 = np.empty((Nz,Ny,Nx))
-        norm_profile2 = np.empty((Nz,Ny,Nx))
-        for y in range(Ny):
-            for x in range(Nx):
-                cube_profile = signal.fftconvolve(cube_fsf[:,y,x], d_j,
-                                                         mode = 'same')
-                norm_profile = signal.fftconvolve(norm_fsf[:,y,x],
-                                                         profile_square,
-                                                         mode = 'same')
-                norm_profile2[:,y,x] = norm_profile
-                cube_profile2[:,y,x] = cube_profile
-
-                norm_profile[norm_profile <= 0] = np.inf
-                tmp = cube_profile/np.sqrt(norm_profile)
-                PROFILE_MAX = np.where( tmp > correl[:, y, x])[0]
-                correl[:, y, x] = np.maximum( correl[:, y, x],tmp)
-                correl_min[:, y, x] = np.minimum( correl_min[:, y, x],tmp)
-                profile[PROFILE_MAX,y,x] = k
+        temp[:ndico] = d_j
+        temp[ndico:] = 0
+        fftd_j() # fd_j=fft(d_j)
+        
+        temp2[:Nz,:,:] = cube_fsf[:,:,:]
+        temp2[Nz:,:,:] = 0
+        fftfsf() # fsf = fft(cube_fsf)
+        temp3[:] = ffsf[:,:,:] * fd_j[:,np.newaxis, np.newaxis]
+        ifft_object()
+        cube_profile = res[cc1:cc2, :, :].copy()
+        
+        # fftconvolve(norm_fsf[:,x,y], d_j**2)
+        temp[:ndico] = d_j**2
+        temp[ndico:] = 0
+        fftd_j() # fprof=fft(d_j**2)
+        
+        temp2[:Nz,:,:] = norm_fsf[:,:,:]
+        temp2[Nz:,:,:] = 0
+        fftfsf() 
+        temp3[:] = ffsf[:] * fd_j[:,np.newaxis, np.newaxis]
+        ifft_object()
+        norm_profile = res[cc1:cc2,:,:].copy()
+        
+        norm_profile[norm_profile <= 0] = np.inf
+        tmp = cube_profile/np.sqrt(norm_profile)
+        profile[tmp > correl] = k
+        correl = np.maximum( correl, tmp)
+        correl_min = np.minimum( correl_min, tmp)
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return correl, profile, correl_min
@@ -1327,6 +1365,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
 
     Returns
     -------
+    threshold : float
+                the threshold associated to the purity
     PVal_r : array
              The purity function
     index_pval: array
@@ -1365,7 +1405,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
         cube_local_min_edge = cube_local_min[:, ksel_y, ksel_x]
     
         _threshold, _Pval_r, _index_pval, _det_m, _det_M \
-        = Compute_threshold( purity, cube_local_max_edge, cube_local_min_edge)
+        = Compute_threshold(purity, cube_local_max_edge, cube_local_min_edge)
         
         mapThresh[ksel_y, ksel_x] = _threshold
         
