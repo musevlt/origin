@@ -1565,19 +1565,24 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
 
     Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
 
-    fid_ind = np.where(Pval_r>=purity)[0][0] 
+    try:
+        fid_ind = np.where(Pval_r>=purity)[0][0] 
   
-    x2 = index[fid_ind]
-    x1 = index[fid_ind-1]
-    y2 = Pval_r[fid_ind]
-    y1 = Pval_r[fid_ind-1]
+        x2 = index[fid_ind]
+        x1 = index[fid_ind-1]
+        y2 = Pval_r[fid_ind]
+        y1 = Pval_r[fid_ind-1]
         
-    b = y2-y1
-    a = x2-x1
+        b = y2-y1
+        a = x2-x1
 
-    tan_theta = b/a
-    threshold = (purity-y1)/tan_theta + x1
-    
+        tan_theta = b/a
+        threshold = (purity-y1)/tan_theta + x1
+    except:
+        threshold = 0
+        logger = logging.getLogger('origin')
+        logger.info('problem occurs during threshold computation, threshold=0')
+        
     return threshold, Pval_r, index, Det_M, Det_m
 
 
