@@ -374,7 +374,6 @@ class ORIGIN(object):
         # step8
         self.Cat1 = Cat1
         self.spectra = spectra
-        self.continuum = continuum
         # step9
         self.Cat2 = Cat2
         if self.Cat2 is not None:
@@ -875,18 +874,6 @@ class ORIGIN(object):
                 if hdu is not None:
                     hdulist.append(hdu)
             write_hdulist_to(hdulist, '%s/spectra.fits'%path2, overwrite=True)
-            
-        if self.continuum is not None:
-            hdulist = fits.HDUList([fits.PrimaryHDU()])
-            for i in range(len(self.continuum)):
-                hdu = self.continuum[i].get_data_hdu(name='DATA%d'%i,
-                                                   savemask='nan')
-                hdulist.append(hdu)
-                hdu = self.continuum[i].get_stat_hdu(name='STAT%d'%i)
-                if hdu is not None:
-                    hdulist.append(hdu)
-            write_hdulist_to(hdulist, '%s/continuum.fits'%path2,overwrite=True)
-            
         # step9
         if self.Cat2 is not None:
             self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
@@ -1403,8 +1390,6 @@ class ORIGIN(object):
                                 residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
-        self.continuum : list of `~mpdaf.obj.Spectrum`
-                       Roughly estimated continuum
         """
         self._loginfo('Step08 - Lines estimation (grid_dxy=%d)' %(grid_dxy))
         self.param['grid_dxy'] = grid_dxy
@@ -1412,7 +1397,7 @@ class ORIGIN(object):
         if self.Cat0 is None:
             raise IOError('Run the step 07 to initialize self.Cat0 catalogs')
             
-        self.Cat1, Cat_est_line_raw_T, Cat_est_line_var_T, Cat_est_cnt_T = \
+        self.Cat1, Cat_est_line_raw_T, Cat_est_line_var_T = \
         Estimation_Line(self.Cat0, self.cube_raw, self.var, self.PSF, \
                      self.wfields, self.wcs, self.wave, size_grid = grid_dxy, \
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
@@ -1437,14 +1422,6 @@ class ORIGIN(object):
             self.spectra.append(spe)
         self._loginfo('Save the estimated spectrum of each line in ' + \
         'self.spectra')
-            
-        self.continuum = []                  
-        for data, vari in zip(Cat_est_cnt_T, Cat_est_line_var_T): 
-            cnt = Spectrum(data=data, var=vari, wave=self.wave,
-                           mask=np.ma.nomask)
-            self.continuum.append(cnt)          
-        self._loginfo('Save the estimated continuum of each line in ' + \
-        'self.continuum, CAUTION: rough estimate!')
         
         self._loginfo('08 Done')       
 
@@ -1610,8 +1587,7 @@ class ORIGIN(object):
                                               path_src, self.name, self.param,
                                               src_vers, author,
                                               self.path, self.maxmap,
-                                              self.segmentation_map_spatspect,                                               
-                                              self.continuum,
+                                              self.segmentation_map_spatspect,
                                               self.ThresholdPval, ncpu)                                            
                                               
         # create the final catalog

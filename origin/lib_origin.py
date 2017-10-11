@@ -1899,12 +1899,8 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
 
     # PSF convolution of estimated line
     conv_out = conv_wgt(estimated_line, psf_in) 
-    # cleaning line in data to estimate convolved continuum
-    continuum = (data_in - conv_out) / np.sqrt(var_in)
-    # LS deconvolution of the continuum
-    estimated_cont, tmp = LS_deconv_wgt(continuum, var_in, psf_in)
     
-    return estimated_line, estimated_var, estimated_cont
+    return estimated_line, estimated_var
 
 
 def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
@@ -1990,7 +1986,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 
     lin_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))
     var_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))
-    cnt_est = np.zeros((nl,1+2*size_grid,1+2*size_grid))
     # half size psf
     longxy = int(sizpsf // 2)
     inds = slice(longxy-horiz_psf,longxy+1+horiz_psf)
@@ -2008,7 +2003,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                                                axis=1)*psf, axis=0)
 
                     # estimate Full Line and theoretic variance
-                    deconv_met,varest_met,cont = method_PCA_wgt(r1, var, psf, \
+                    deconv_met, varest_met = method_PCA_wgt(r1, var, psf, \
                                                            order_dct)
 
                     z_est = peakdet(deconv_met[ind_max],3)
@@ -2023,7 +2018,6 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
 
                     lin_est[:,dy,dx] = deconv_met
                     var_est[:,dy,dx] = varest_met
-                    cnt_est[:,dy,dx] = cont
 
                     # compute MSE
                     LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz,:,:])
@@ -2057,10 +2051,9 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
     #MSE_10 = float( mse_10[wy,wx] )
     estimated_line = lin_est[:,wy,wx]
     estimated_variance = var_est[:,wy,wx]
-    estimated_continuum = cnt_est[:,wy,wx]
 
     return flux_est_5, MSE_5, estimated_line, \
-            estimated_variance, int(y), int(x), int(z), estimated_continuum
+            estimated_variance, int(y), int(x), int(z)
 
 def peakdet(v, delta):
     
@@ -2152,7 +2145,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     Cat2_flux5 = []
     Cat_est_line_raw = []
     Cat_est_line_var = []
-    Cat_est_cont_raw = []
     for src in Cat1_T:
         y0 = src['y0']
         x0 = src['x0']
@@ -2161,7 +2153,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
                                                           y0, x0, size_grid)
 
-        f5, m5, lin_est, var_est, y, x, z, cnt_est = GridAnalysis(red_dat,  \
+        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
                       red_var, red_psf, red_wgt, horiz,  \
                       size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,\
                       order_dct)
@@ -2173,7 +2165,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
         Cat2_flux5.append(f5)
         Cat_est_line_raw.append(lin_est.ravel())
         Cat_est_line_var.append(var_est.ravel())
-        Cat_est_cont_raw.append(cnt_est.ravel())
 
     Cat2 = Cat1_T.copy()
 
@@ -2199,7 +2190,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
 
-    return Cat2, Cat_est_line_raw, Cat_est_line_var, Cat_est_cont_raw
+    return Cat2, Cat_est_line_raw, Cat_est_line_var
 
 def Purity_Estimation(Cat_in, correl, purity_curves, purity_index, 
                         bck_or_src): 
@@ -2565,7 +2556,6 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      param, path, name, ThresholdPval, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
-                     Cat_est_cont_data, Cat_est_cont_var,
                      y, x, flux, purity, src_vers, author):
     """Function to create the final source
 
@@ -2709,9 +2699,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
-                               path_src, name, param, src_vers, author,
-                               path, maxmap, segmap, Cat_est_cont,
-                               ThresholdPval, ncpu=1):
+                               path_src, name, param, src_vers, author, path,
+                               maxmap, segmap, ThresholdPval, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -2722,8 +2711,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                        flux num_line RA DEC
     Cat_est_line     : list of spectra
                        Catalogue of estimated lines
-    Cat_est_cont     : list of spectra
-                       Catalogue of roughly estimated continuum
     correl            : array
                         Cube of T_GLR values
     wave              : `mpdaf.obj.WaveCoord`
@@ -2790,8 +2777,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         for j in range(nb_lines):
             Cat_est_line_data[j,:] = Cat_est_line[E['num_line'][j]]._data
             Cat_est_line_var[j,:] = Cat_est_line[E['num_line'][j]]._var
-            Cat_est_cont_data[j,:] = Cat_est_cont[E['num_line'][j]]._data
-            Cat_est_cont_var[j,:] = Cat_est_cont[E['num_line'][j]]._var
         y = E['y1']
         x = E['x1']
         flux = E['flux']
@@ -2799,7 +2784,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
                           wave_pix, GLR, num_profil, nb_lines,
                           Cat_est_line_data, Cat_est_line_var,
-                          Cat_est_cont_data, Cat_est_cont_var,
                           y, x, flux, purity,
                           src_vers, author)
         sources_arglist.append(source_arglist)
