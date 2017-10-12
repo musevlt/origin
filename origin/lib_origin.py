@@ -1560,10 +1560,7 @@ def Compute_threshold(purity, cube_local_max, cube_local_min):
     Det_M = [np.sum( (Lc_M>seuil) ) for seuil in index ]
     Det_m = [np.sum( (Lc_m>seuil) ) for seuil in index ]
 
-    PVal_M = [np.mean( (Lc_M>seuil) ) for seuil in index ]
-    PVal_m = [np.mean( (Lc_m>seuil) ) for seuil in index ]
-
-    Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
+    Pval_r = 1 - np.array(Det_m)/np.array(Det_M)
 
     try:
         fid_ind = np.where(Pval_r>=purity)[0][0] 
