@@ -880,6 +880,8 @@ class ORIGIN(object):
         # step9
         if self.Cat2 is not None:
             self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
+        if self.Cat2b is not None:
+            self.Cat2b.write('%s/Cat2b.fits'%path2, overwrite=True)
         
         self._loginfo("Current session saved in %s"%path2)
       
