@@ -431,19 +431,22 @@ class ORIGIN(object):
                    imadct=None, imastd=None)
         
     @classmethod
-    def load(cls, folder, newpath=None, newname=None):
-        """Load a previous session of ORIGIN
+    def load(cls, folder, newname=None):
+        """Load a previous session of ORIGIN.
+        
+        ORIGIN.write() method saves a session in a folder that has the name of
+        the ORIGIN object (self.name)
         
         Parameters
         ----------
-        folder : string
-                 path
-        newpath : string
-                  The session is loaded from the given folder but it will be
-                  saved in a new folder under the new path.
+        folder  : string
+                  Folder name (with the relative path) where the ORIGIN data 
+                  have been stored.
         newname : string
-                  The session is loaded from the given folder but it will be
-                  saved in a new folder.
+                  New name for this session.
+                  This parameter lets the user to load a previous session but
+                  continue in a new one.
+                  If None, the user will continue the loaded session. 
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
@@ -690,9 +693,7 @@ class ORIGIN(object):
             mapThresh = Image('%s/mapThresh.fits'%folder)
         else:
             mapThresh = None            
-            
-        if newpath is not None:
-            path = newpath
+
         if newname is not None:
             name = newname
                 
@@ -720,16 +721,20 @@ class ORIGIN(object):
         self._log_file.info(logstr) 
         self._log_stdout.info(logstr)
                    
-    def write(self, path=None, overwrite=False):
-        """Save the current session in a folder
+    def write(self, path=None, erase=False):
+        """Save the current session in a folder that will have the name of the
+        ORIGIN object (self.name)
+        
+        The ORIGIN.load(folder, newname=None) method will be used to load a
+        session. The parameter newname will let the user to load a session but
+        continue in a new one.
         
         Parameters
         ----------
-        path      : string
-                    Path where the ORIGIN data will be stored.
-                    If None, the name of the session is used
-        overwrite : bool
-                    remove the folder if it exists
+        path  : string
+                Path where the folder (self.name) will be stored.
+        erase : bool
+                Remove the folder if it exists
         """
         self._loginfo('Writing...')
         # path
@@ -744,7 +749,7 @@ class ORIGIN(object):
         if not os.path.exists(path2):
             os.makedirs(path2)
         else:
-            if overwrite:
+            if erase:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
         
