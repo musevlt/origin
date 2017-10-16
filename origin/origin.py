@@ -415,6 +415,9 @@ class ORIGIN(object):
                       FWHM of the PSFs in pixels.
         name        : str
                       Name of this session and basename for the sources.
+                      ORIGIN.write() method saves the session in a folder that
+                      has this name. The ORIGIN.load() method will be used to
+                      load a session, continue it or create a new from it.
         """
         return cls(path='.',  name=name, filename=cube, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF, 
