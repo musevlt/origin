@@ -1303,6 +1303,35 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
+    
+def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):   
+    (zM, yM, xM) = (CatM['z0'], CatM['y0'], CatM['x0'])
+    (zm, ym, xm) = catm
+    spat_size2 = int( spat_size/2 )
+    spect_size2 = int( spect_size/2 )
+    for n,z in enumerate(zm):
+        y = ym[n]
+        x = xm[n]            
+        x1 = np.maximum(0, x-spat_size2)
+        x2 = np.minimum(Nx, x+spat_size2)
+        y1 = np.maximum(0, y-spat_size2)
+        y2 = np.minimum(Ny, y+spat_size2)
+        z1 = np.maximum(0, z-spect_size2)
+        z2 = np.minimum(Nz, z+spect_size2)            
+        mdata[z1:z2, y1:y2, x1:x2] = 0  
+
+    for n,z in enumerate(zM):
+        y = yM[n]
+        x = xM[n]            
+        x1 = np.maximum(0, x-spat_size2)
+        x2 = np.minimum(Nx, x+spat_size2)
+        y1 = np.maximum(0, y-spat_size2)
+        y2 = np.minimum(Ny, y+spat_size2)
+        z1 = np.maximum(0, z-spect_size2)
+        z2 = np.minimum(Nz, z+spect_size2)            
+        Mdata[z1:z2, y1:y2, x1:x2] = 0   
+    
+    return Mdata, mdata 
 
 def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
                           mask_temp_edge, neighboors):
@@ -1345,10 +1374,516 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
     Local_min=minus_correl_min*Local_min_mask
 
     return Local_max, Local_min
+
+def itersrc_mat(cat,coord,spatdist,area,tol_spat,tol_spec,n,iin,id_cu,IDorder):
+    # MATRIX VERSION faster for smaller data
+    xout,yout,zout,aout,iout = cat 
+    z,y,x = coord
+    
+    ind = np.where(spatdist[n,:]<tol_spat)[0]
+    if len(ind)>0:            
+        for indn in ind:
+            if iin[indn]>0:
+                
+                if spatdist[id_cu,indn]>tol_spat*np.sqrt(2):
+                    # check spectral content
+                    dz = np.sqrt( (z[indn] - z[id_cu])**2 )
+                    if dz < tol_spec:
+                        xout.append(x[indn])
+                        yout.append(y[indn])
+                        zout.append(z[indn]) 
+                        aout.append(area[indn])                    
+            
+                        iout.append(id_cu)                
+                        iin[indn]=0
+                        spatdist[:,IDorder[indn]] = np.inf                 
+                        cat = [xout,yout,zout,aout,iout]
+                        coord = [z,y,x]                             
+                        xout,yout,zout,aout,iout,spatdist,iin = \
+                        itersrc_mat(cat, coord, spatdist, area, tol_spat, \
+                                tol_spec, indn, iin, id_cu, IDorder)              
+                        
+                        spatdist[indn,:] = np.inf
+                        
+                else:
+                    xout.append(x[indn])
+                    yout.append(y[indn])
+                    zout.append(z[indn]) 
+                    aout.append(area[indn])                    
+        
+                    iout.append(id_cu)                
+                    iin[indn]=0
+                    spatdist[:,IDorder[indn]] = np.inf                 
+                    cat = [xout,yout,zout,aout,iout]
+                    coord = [z,y,x]    
+                    xout,yout,zout,aout,iout,spatdist,iin = \
+                    itersrc_mat(cat, coord, spatdist, area, tol_spat, \
+                            tol_spec, indn, iin, id_cu, IDorder)              
+                    
+                    spatdist[indn,:] = np.inf                    
+
+            
+    return xout,yout,zout,aout,iout,spatdist,iin
+
+
+def spatiospectral_merging_mat(z,y,x,map_in,tol_spat,tol_spec):
+    # MATRIX VERSION faster for smaller data
+    Nz = len(z)
+    IDorder = np.arange( Nz )
+    area = map_in[y,x] 
+    
+    difx = x[np.newaxis,:].T - x[np.newaxis,:] 
+    dify = y[np.newaxis,:].T - y[np.newaxis,:] 
+    
+    spatdist = np.sqrt( difx**2 + dify**2 )
+    spatdist[np.arange(Nz),np.arange(Nz)] = np.inf
+
+    xout=[]
+    yout=[]
+    zout=[]
+    iout=[]
+    aout=[]
+
+    iin = np.ones(IDorder.shape)
+    for n in IDorder:
+        if iin[n] == 1:
+            iin[n] = 0
+            xout.append(x[n])
+            yout.append(y[n])
+            zout.append(z[n])
+            iout.append(n)
+            aout.append(area[n])        
+            spatdist[:,IDorder[n]] = np.inf                               
+            cat = [xout,yout,zout,aout,iout]
+            coord = [z,y,x]
+            xout,yout,zout,aout,iout,spatdist,iin = \
+            itersrc_mat(cat,coord,spatdist,area,tol_spat,tol_spec,n,iin,n,IDorder)                                                                    
+    
+    xout=np.array(xout,dtype=int)
+    yout=np.array(yout,dtype=int)
+    zout=np.array(zout,dtype=int)
+    iout=np.array(iout,dtype=int)
+    aout=np.array(aout,dtype=int)
+    
+    xout2 = []
+    yout2 = []
+    zout2 = []
+    aout2 = []
+    iout2 = []
+    
+    for n,id_cu in enumerate(np.unique(iout)):
+        area_in_ID = aout[iout==id_cu] 
+        area_cu = area_in_ID.max()
+        for id_c in np.where(iout==id_cu)[0]:
+            xout2.append(xout[id_c])
+            yout2.append(yout[id_c])
+            zout2.append(zout[id_c])        
+            iout2.append(n)
+            aout2.append(area_cu)        
+            
+    xout=np.array(xout2,dtype=int)
+    yout=np.array(yout2,dtype=int)
+    zout=np.array(zout2,dtype=int)
+    iout=np.array(iout2,dtype=int)
+    aout=np.array(aout2,dtype=int)
+    
+    for n,area_cu in enumerate(np.unique(aout)):
+        if area_cu>0:
+            ind = np.where(aout==area_cu)[0]
+            # take all the group inside the area        
+            group_dep = np.unique(iout[ind])                  
+            for cu in group_dep:
+                group = np.unique(iout[ind])
+                if len(group)==1: # if there is only one group remaining
+                    break
+                if cu in group:   
+                    for otg in group:
+                        if otg != cu:    
+                            zin = zout[iout==cu]            
+                            zot = zout[iout==otg]            
+                            difz = zin[np.newaxis,:].T - zot[np.newaxis,:]   
+                            if np.sqrt(difz**2).min() < tol_spec:
+                                iout[iout==otg] = cu
+
+    return xout,yout,zout,aout,iout,iout2                                
+
+def itersrc(cat,coord,area,tol_spat,tol_spec,n,iin,id_cu,IDorder):
+    """recursive function to perform the spatial merging. 
+    if neighborhood are close spatially to a lines: they are merged, 
+    then the neighboor of the seed is analysed if they are enough close to
+    the current line (a neighboor of the original seed) they are merged
+    only if the frequency is enough close (surrogate) if the frequency is 
+    different it is rejected. 
+    If two line (or a group of lines and a new line) are:
+        Enough close without a big spectral gap 
+        not in the same label (a group in background close to one source 
+        inside a source label)
+    the resulting ID is the ID of the source label and not the background
     
 
+    Parameters
+    ----------
+    cat     : kinda of catalog of the previously merged lines 
+              xout,yout,zout,aout,iout: 
+              the 3D position, area label and ID for all analysed lines
+    coord   : the 3D position of the analysed line which become the current 
+              seed
+    area    : array
+              list of area
+              
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging                    
+    n : int
+        index of the original seed
+    iin : 0-1
+          index of (not) processed line
+    id_cu : ID of the original seed
+    IDorder :   list in which the ID are processed, 
+                *** maybe to improve *** 
+                can be by the max max loc correl
+                can be by the closest distance        
+    Returns
+    -------
+    xout,yout,zout : array
+                     the 3D position of the estimated lines
+                     the same as z,y,x, they are not changed
+                     
+    aout : array 
+           the index of the label in map_in
+    iout : array
+           the ID after spatial and spatio spectral merging
+    spatdist : array
+               the spatial distance of the current line with all others
+    iin : 0-1
+          index of (not) processed line
+
+    
+    Date  : October, 25 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """  
+    xout,yout,zout,aout,iout = cat 
+    z,y,x = coord
+    spatdist = np.sqrt( (x[n]-x)**2 + (y[n]-y)**2  )
+    spatdist[iin==0]= np.inf 
+
+    cu_spat = np.sqrt( (x[id_cu]-x)**2 + (y[id_cu]-y)**2  )
+    cu_spat[iin==0]= np.inf     
+    
+    ind = np.where(spatdist<tol_spat)[0]
+    if len(ind)>0:            
+        for indn in ind:
+            if iin[indn]>0:
+                
+                if cu_spat[indn]>tol_spat*np.sqrt(2):
+                    # check spectral content
+                    dz = np.sqrt( (z[indn] - z[id_cu])**2 )
+                    if dz < tol_spec:
+                        xout.append(x[indn])
+                        yout.append(y[indn])
+                        zout.append(z[indn]) 
+                        aout.append(area[indn])                    
+            
+                        iout.append(id_cu)                
+                        iin[indn]=0
+                        cat = [xout,yout,zout,aout,iout]
+                        coord = [z,y,x]                             
+                        xout,yout,zout,aout,iout,spatdist,iin = \
+                        itersrc(cat, coord,  area, tol_spat, \
+                                tol_spec, indn, iin, id_cu, IDorder)              
+                        
+                        
+                else:
+                    xout.append(x[indn])
+                    yout.append(y[indn])
+                    zout.append(z[indn]) 
+                    aout.append(area[indn])                    
+        
+                    iout.append(id_cu)                
+                    iin[indn]=0
+                    cat = [xout,yout,zout,aout,iout]
+                    coord = [z,y,x]    
+                    xout,yout,zout,aout,iout,spatdist,iin = \
+                    itersrc(cat, coord,  area, tol_spat, \
+                            tol_spec, indn, iin, id_cu, IDorder)              
+                    
+
+            
+    return xout,yout,zout,aout,iout,spatdist,iin
+
+
+def spatiospectral_merging(z,y,x,map_in,tol_spat,tol_spec):
+    """perform the spatial and spatio spectral merging. 
+    The spectral merging give the same ID if several group of lines (from 
+    spatiale merging) if they share at least one line frequency
+
+    Parameters
+    ----------
+    z,y,x     : array
+                the 3D position of the estimated lines
+    map_in    : array
+                Segmentation map
+              
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging                    
+
+    Returns
+    -------
+    xout,yout,zout : array
+                     the 3D position of the estimated lines
+                     the same as z,y,x, they are not changed
+                     
+    aout : array 
+           the index of the label in map_in
+    iout : array
+           the ID after spatial and spatio spectral merging
+    iout2 : array
+           the ID after spatial merging
+
+    
+    Date  : October, 25 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """    
+    Nz = len(z)
+    IDorder = np.arange( Nz )
+    area = map_in[y,x] 
+
+    # Spatiale Merging    
+    xout=[]
+    yout=[]
+    zout=[]
+    iout=[]
+    aout=[]
+
+    iin = np.ones(IDorder.shape)
+    for n in IDorder:
+        if iin[n] == 1:
+
+            iin[n] = 0
+            xout.append(x[n])
+            yout.append(y[n])
+            zout.append(z[n])
+            iout.append(n)
+            aout.append(area[n])                             
+            cat = [xout,yout,zout,aout,iout]
+            coord = [z,y,x]
+            xout,yout,zout,aout,iout,spatdist,iin = \
+            itersrc(cat,coord,area,tol_spat,tol_spec,n,iin,n,IDorder)                                                                    
+    
+    xout=np.array(xout,dtype=int)
+    yout=np.array(yout,dtype=int)
+    zout=np.array(zout,dtype=int)
+    iout=np.array(iout,dtype=int)
+    aout=np.array(aout,dtype=int)
+
+    # ID of Spatiale Merging        
+    xout2 = []
+    yout2 = []
+    zout2 = []
+    aout2 = []
+    iout2 = []
+    
+    for n,id_cu in enumerate(np.unique(iout)):
+        area_in_ID = aout[iout==id_cu] 
+        area_cu = area_in_ID.max()
+        for id_c in np.where(iout==id_cu)[0]:
+            xout2.append(xout[id_c])
+            yout2.append(yout[id_c])
+            zout2.append(zout[id_c])        
+            iout2.append(n)
+            aout2.append(area_cu)        
+            
+    xout=np.array(xout2,dtype=int)
+    yout=np.array(yout2,dtype=int)
+    zout=np.array(zout2,dtype=int)
+    iout=np.array(iout2,dtype=int)
+    aout=np.array(aout2,dtype=int)
+    
+    # Group Spectrale Merging            
+    for n,area_cu in enumerate(np.unique(aout)):
+        if area_cu>0:
+            ind = np.where(aout==area_cu)[0]
+            # take all the group inside the area        
+            group_dep = np.unique(iout[ind])                  
+            for cu in group_dep:
+                group = np.unique(iout[ind])
+                if len(group)==1: # if there is only one group remaining
+                    break
+                if cu in group:   
+                    for otg in group:
+                        if otg != cu:    
+                            zin = zout[iout==cu]            
+                            zot = zout[iout==otg]            
+                            difz = zin[np.newaxis,:].T - zot[np.newaxis,:]   
+                            if np.sqrt(difz**2).min() < tol_spec:
+                                iout[iout==otg] = cu
+
+    return xout,yout,zout,aout,iout,iout2 
+    #LPI iout2 pour debbugger          
+
+
+def Thresh_Max_Min_Loc_filtering(MaxLoc,MinLoc,thresh,spat_size,spect_size,filter_act,both=True):
+    
+    """Filter the correl>thresh in + DATA by the correl>thresh in - DATA
+    if both = True do the same in opposite
+    
+    if a line is detected at the z0,y0,x0 in the - data correlation for a 
+    threshold, the + data correl are cleaned from this line and vice versa
+
+    Parameters
+    ----------
+    MaxLoc : array
+           cube of local maxima from maximum correlation
+    MinLoc : array
+           cube of local maxima from minus minimum correlation
+    thresh : float
+             a threshold value           
+
+    spat_size : int
+                spatiale size of the spatiale filter                
+    spect_size : int
+                 spectral lenght of the spectral filter  
+    map_in  : array 
+              labels of source segmentation basedd on continuum
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging                    
+    filter_act : Bool
+                 activate or deactivate the spatio spectral filter 
+                 default: True
+    both : Bool 
+           if true the process is applied in both sense, otherwise it s applied
+           only in detection purpose and not to compute the purity
+           
+    Returns
+    -------
+    zM,yM,xM : list of tuple of int
+               The spatio spectral position of the lines in the + data correl
+
+    zM,yM,xM : (optional) list of tuple of int
+               The spatio spectral position of the lines in the - data correl    
+    Date  : October, 25 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """       
+
+    nz,ny,nx = MaxLoc.shape
+    locM = ( MaxLoc>thresh )
+    locm = ( MinLoc>thresh )        
+    
+    if filter_act:
+        spat_size2 = int(spat_size/2)
+        spect_size2 = int(spect_size/2)        
+        
+        LM = locM.copy()
+        if both:
+            Lm = locm.copy()        
+        
+        zm,ym,xm = np.where( locm )   
+        for n,z in enumerate(zm):
+            y = ym[n]
+            x = xm[n]            
+            x1 = np.maximum(0,x-spat_size2)
+            x2 = np.minimum(nx,x+spat_size2)
+            y1 = np.maximum(0,y-spat_size2)
+            y2 = np.minimum(ny,y+spat_size2)
+            z1 = np.maximum(0,z-spect_size2)
+            z2 = np.minimum(nz,z+spect_size2)            
+            LM[z1:z2,y1:y2,x1:x2] = 0
+            
+        if both:            
+            zm,ym,xm = np.where( locM )   
+            for n,z in enumerate(zm):
+                y = ym[n]
+                x = xm[n]            
+                x1 = np.maximum(0,x-spat_size2)
+                x2 = np.minimum(nx,x+spat_size2)
+                y1 = np.maximum(0,y-spat_size2)
+                y2 = np.minimum(ny,y+spat_size2)
+                z1 = np.maximum(0,z-spect_size2)
+                z2 = np.minimum(nz,z+spect_size2)            
+                Lm[z1:z2,y1:y2,x1:x2] = 0            
+                   
+            
+        zM,yM,xM = np.where( LM>0 )
+        if both:
+            zm,ym,xm = np.where( Lm>0 )    
+    else: 
+        zM,yM,xM = np.where( locM>0 )
+        if both:
+            zm,ym,xm = np.where( locm>0 ) 
+    if both:            
+        return zM,yM,xM,zm,ym,xm
+    else:
+        return zM,yM,xM
+    
+def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,filter_act):
+    
+    """Compute the purity values corresponding to a threshold
+
+    Parameters
+    ----------
+    locM : array
+           cube of local maxima from maximum correlation
+    locm : array
+           cube of local maxima from minus minimum correlation
+    thresh : float
+             a threshold value           
+
+    spat_size : int
+                spatiale size of the spatiale filter                
+    spect_size : int
+                 spectral lenght of the spectral filter  
+    map_in  : array 
+              labels of source segmentation basedd on continuum
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging       
+    filter_act : Bool
+                 activate or deactivate the spatio spectral filter 
+                 default: True
+    Returns
+    -------
+    est_purity : float
+                 The estimated purity for this threshold
+    det_m     : float
+                Number of unique ID (-DATA)
+    det_M     : float
+                Number of unique ID (+DATA)
+    
+    Date  : October, 25 2017
+    Author: Antony Schutz(antonyschutz@gmail.com)
+    """    
+    
+    
+    zM,yM,xM,zm,ym,xm = Thresh_Max_Min_Loc_filtering(locM,locm,thresh,spat_size,spect_size,filter_act)
+    if len(zM)>1000:
+        xoutM,youtM,zoutM,aoutM,iout1M,iout2M = spatiospectral_merging(zM,yM,xM,map_in,tol_spat,tol_spec)
+    else:
+        xoutM,youtM,zoutM,aoutM,iout1M,iout2M = spatiospectral_merging_mat(zM,yM,xM,map_in,tol_spat,tol_spec)  
+    if len(zm)>1000:        
+        xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging(zm,ym,xm,map_in,tol_spat,tol_spec)
+    else:
+        xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging_mat(zm,ym,xm,map_in,tol_spat,tol_spec)
+        
+    det_m, det_M = len(np.unique(iout1m)) , len(np.unique(iout1M))
+    if len(np.unique(iout1M))>0:
+        est_purity = 1 - det_m / det_M      
+    else:
+        est_purity = 0     
+    return est_purity , det_m, det_M   
+
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
-                           segmentation_test, pfa):
+                           segmentation_test, pfa, spat_size, spect_size, \
+                           tol_spat, tol_spec, filter_act):
     """Compute threshold values corresponding to a given purity
 
     Parameters
@@ -1362,7 +1897,19 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     segmentation_test : array
                         Test on estimated continuum for segmentation
     pfa       : Pvalue for the test which performs segmentation
-
+    spat_size : int
+                spatiale size of the spatiale filter                
+    spect_size : int
+                 spectral lenght of the spectral filter                
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging              
+          
+    filter_act : Bool
+                 activate or deactivate the spatio spectral filter 
+                 default: True
     Returns
     -------
     threshold : float
@@ -1371,8 +1918,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
              The purity function
     index_pval: array
                 index value to plot
-    mapThresh : array
-                Map if threshold values
     map_in    : array
                 Segmentation map
     det_m     : array
@@ -1385,300 +1930,87 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     """
 
     # Label
-#    map_in = Segmentation(segmentation_test, pfa, clean=False)
-    gamma =  stats.chi2.ppf(1-pfa, 1)
-    map_in = (segmentation_test>gamma)*1.
-    map_in[segmentation_test**2 == 0] = -1
+    map_in = Segmentation(segmentation_test, pfa) #LPI toujours clean=True, param clean a virer toujours True
+#    gamma =  stats.chi2.ppf(1-pfa, 1)
+#    map_in = (segmentation_test>gamma)*1.
+#    map_in[segmentation_test**2 == 0] = -1
     # initialization
-    mapThresh = np.zeros((cube_local_max.shape[1],cube_local_max.shape[2]))
-    threshold = []
-    Pval_r = []
-    index_pval = []
     det_m = []
-    det_M = []
+    det_M = []    
+    Pval_r = []
+    thresh_max = np.minimum(cube_local_min.max(),cube_local_max.max())
+    thresh_min = np.median(np.amax(cube_local_max,axis=0))*1.1
     
-    for i in [0,1]:
-        #background i=0
-        #source i=1
-        ksel_y, ksel_x = np.where(map_in==i)
-        cube_local_max_edge = cube_local_max[:, ksel_y, ksel_x]
-        cube_local_min_edge = cube_local_min[:, ksel_y, ksel_x]
+    index_pval = np.arange(thresh_max,thresh_min,-.5)
+    for thresh in index_pval:
+        est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
+                                                    cube_local_min, \
+                                                    thresh,spat_size,\
+                                                    spect_size,map_in,\
+                                                    tol_spat,tol_spec, \
+                                                    filter_act) 
+
+        Pval_r.append(est_purity)
+        det_m.append(det_mit)
+        det_M.append(det_Mit)        
+        
+    Pval_r = np.asarray(Pval_r)    
+    Pval_r = Pval_r[::-1]
+    det_m = det_m[::-1]
+    det_M = det_M[::-1]    
+    index_pval = index_pval[::-1]    
     
-        _threshold, _Pval_r, _index_pval, _det_m, _det_M \
-        = Compute_threshold(purity, cube_local_max_edge, cube_local_min_edge)
-        
-        mapThresh[ksel_y, ksel_x] = _threshold
-        
-        threshold.append(_threshold)
-        Pval_r.append((np.asarray(_Pval_r)))
-        index_pval.append((np.asarray(_index_pval)))
-        det_m.append((np.asarray(_det_m)))
-        det_M.append((np.asarray(_det_M)))
+    ind = np.where(purity<Pval_r)[0][0]
+    x2 = index_pval[ind]
+    x1 = index_pval[ind-1]
+    y2 = Pval_r[ind]
+    y1 = Pval_r[ind-1]
+    
+    b = y2-y1
+    a = x2-x1    
+    
+    tan_theta = b/a
+    threshold = (purity-y1)/tan_theta + x1
+    
+    return threshold, Pval_r, index_pval, map_in, det_m, det_M    
 
-    return np.asarray(threshold), Pval_r, index_pval, mapThresh, map_in, \
-    det_m, det_M
 
 
-def Compute_threshold_segmentation(cube_local_max, threshold, map_in):
-    """Function to threshold the p-values from
-    computatino of threshold from the local maxima of:
-        - Maximum correlation
-        - Minus minimum correlation
+def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
+                           segmentation_map, spat_size, spect_size, \
+                           tol_spat, tol_spec,filter_act,profile,wcs,wave):
+    """ Function which extract detection and performs  spatio spectral merging
+    at same time for a given purity and segmentation map
 
     Parameters
     ----------
-    cube_Local_max : array
+    thresh    : float
+                the threshold for correl
+    cube_local_max : array
                      cube of local maxima from maximum correlation
-    threshold : (float,float)
-                Threshold values (background/sources)
-    map_in    : array
-                Segmentation map
-
-    Returns
-    -------
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the local max of T_GLR values
-
-    Date  : July, 6 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-    # initialization
-    cube_pval_correl = np.zeros(cube_local_max.shape)
-    
-    for i in [0,1]:
-        #background i=0
-        #source i=1
-        ksel_y, ksel_x = np.where(map_in==i)
-        cube_local_max_edge = cube_local_max[:, ksel_y, ksel_x]
-
-        cube_pval_correl_l = Threshold_pval(cube_local_max_edge, threshold[i])
-    
-        cube_pval_correl[:, ksel_y, ksel_x]= cube_pval_correl_l
-
-    return cube_pval_correl
-            
-            
-            
-
-def thresholdVsPFA_purity(test,cube_local_max, cube_local_min, purity, pfaset):        
-    """Function to compute the threshold from the local maxima Versus the 
-    PFA of the segmentation test for a given purity
-
-    Parameters
-    ----------
-    test:   array
-            the test of continuum used for the segmentation                
-    cube_Local_max : array
-                     cube of local maxima from maximum correlation
-    cube_Local_min : array
+    cube_local_min : array
                      cube of local maxima from minus minimum correlation
-    purity    : float
-                the purity between 0 and 1
-    pfaset :    array
-                the set of PFA to test
-    Returns
-    -------
-    threshold : list
-                the threshold associated to pfaset
-    Date  : September, 7 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """    
+    segmentation_map : array
+                        map of estimated continuum for segmentation
 
-    N = 100
-    nl,ny,nx = cube_local_max.shape
-    # without nexpmap
-    test2 = np.ravel(test)
-    ind = np.where(test2**2 > 0)[0]
-    cube_local_max_2 = np.reshape(cube_local_max,(nl,ny*nx))
-    cube_local_min_2 = np.reshape(cube_local_min,(nl,ny*nx))
-    test2 = test2[ind]
-    cube_local_max_2 = cube_local_max_2[:,ind]
-    cube_local_min_2 = cube_local_min_2[:,ind]
-    
-    # pre calculus of maximas
-    ind = np.where(test2<=pfaset[0])[0]
-    Lc_M = cube_local_max_2[:,ind]
-    Lc_M = Lc_M[np.nonzero(Lc_M)]
-    Lc_m = cube_local_min_2[:,ind]
-    Lc_m = Lc_m[np.nonzero(Lc_m)]      
-    
-    # initialization
-    threshold = []    
-    #        pfalist = []
-    datamax = np.empty(0)
-    datamin = np.empty(0)
-        
-    for pfa in pfaset[::-1]:
-        gamma =  stats.chi2.ppf(1-pfa, 1)
-        # index of segmentation
-    
-        ind = np.where(test2<=gamma)[0]
-        test2[ind]=np.inf    
-    
-        mini_max = cube_local_max_2[:, ind].data
-        mini_min = cube_local_min_2[:, ind].data
-        
-        Maxlist = mini_max[np.nonzero(mini_max)]
-        Minlist = mini_min[np.nonzero(mini_min)]         
-    
-        datamax = np.hstack((datamax,Maxlist))
-        datamin = np.hstack((datamin,Minlist))    
-
-
-        mini = np.minimum( datamin.min() , datamax.min() )
-        maxi = np.maximum( datamin.max() , datamax.max() )   
-        
-        dx = (maxi-mini)/N
-        index = np.arange(mini,maxi,dx)    
-    
-        PVal_M = [np.mean( (datamax>seuil) ) for seuil in index ]
-        PVal_m = [np.mean( (datamin>seuil) ) for seuil in index ]
-        Pval_r = 1 - np.array(PVal_m)/np.array(PVal_M)
-    
-        fid_ind = np.where(Pval_r>=purity)[0][0] 
-      
-        x2 = index[fid_ind]
-        x1 = index[fid_ind-1]
-        y2 = Pval_r[fid_ind]
-        y1 = Pval_r[fid_ind-1]
-    
-        b = y2-y1
-        a = x2-x1
-    
-        tan_theta = b/a
-        threshold.append( (purity-y1)/tan_theta + x1)
-
-    return threshold[::-1]
-
-
-def Compute_threshold(purity, cube_local_max, cube_local_min):
-    """Function to compute the threshold from the local maxima of:
-        - Maximum correlation
-        - Minus minimum correlation
-
-    Parameters
-    ----------
-    purity    : float
-                the purity between 0 and 1
-    cube_Local_max : array
-                     cube of local maxima from maximum correlation
-    cube_Local_min : array
-                     cube of local maxima from minus minimum correlation
-
-    Returns
-    -------
-    Confidence : float
-                     the threshold associated to the purity
-    PVal_M : array
-             the P Value associated to Maximum Correlation local maxima
-    PVal_m : array
-             the P Value associated to Minus Minimum Correlation local maxima
-    Pval_r:  list
-             ratio of Pvalue thresholded by purity 
-    index :  array
-             index corresponding to the Pvalue 
-    Det_M, Det_m : arrays
-                   Number of voxels > threshold == detected sources
-    Date  : July, 6 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-    N = 100
-
-    Lc_M = cube_local_max
-    Lc_m = cube_local_min
-
-    Lc_M = Lc_M[np.nonzero(Lc_M)]
-    Lc_m = Lc_m[np.nonzero(Lc_m)]
-    
-    mini = np.minimum( Lc_m.min() , Lc_M.min() )
-    maxi = np.maximum( Lc_m.max() , Lc_M.max() )
-
-    dx = (maxi-mini)/N
-    index = np.arange(mini,maxi,dx)
-
-    Det_M = [np.sum( (Lc_M>seuil) ) for seuil in index ]
-    Det_m = [np.sum( (Lc_m>seuil) ) for seuil in index ]
-
-    Pval_r = 1 - np.array(Det_m)/np.array(Det_M)
-
-    try:
-        fid_ind = np.where(Pval_r>=purity)[0][0] 
-  
-        x2 = index[fid_ind]
-        x1 = index[fid_ind-1]
-        y2 = Pval_r[fid_ind]
-        y1 = Pval_r[fid_ind-1]
-        
-        b = y2-y1
-        a = x2-x1
-
-        tan_theta = b/a
-        threshold = (purity-y1)/tan_theta + x1
-    except:
-        threshold = 0
-        logger = logging.getLogger('origin')
-        logger.info('problem occurs during threshold computation, threshold=0')
-        
-    return threshold, Pval_r, index, Det_M, Det_m
-
-
-def Threshold_pval(cube_local_max, threshold):
-    """Function to threshold the p-values
-
-    Parameters
-    ----------
-    cube_Local_max : array
-                     cube of local maxima from maximum correlation
-    threshold : float
-                The threshold applied to the p-values cube
-
-    Returns
-    -------
-
-    cube_pval_correl : array
-                       cube of thresholded p-values associated
-                       to the local max of T_GLR values
-
-    Date  : July, 6 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    # Threshold the pvalues
-    cube_pval_lm_correl = cube_local_max.copy()
-    cube_pval_lm_correl[cube_local_max <= threshold] = 0.
-    
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_pval_lm_correl
-
-
-
-
-
-def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
-    """Function to compute refrerent voxel of each group of connected voxels
-    using the voxel with the higher T_GLR value.
-
-    Parameters
-    ----------
-    correl            : array
-                        cube of T_GLR values
-    profile           : array
-                        Number of the profile associated to the T_GLR
-    cube_pval_lm_correl  : array
-                        cube of thresholded p-values associated
-                        to the local max of the T_GLR values
-    wcs               : `mpdaf.obj.WCS`
-                         RA-DEC coordinates.
-    wave              : `mpdaf.obj.WaveCoord`
-                         Spectral coordinates.
+    spat_size : int
+                spatiale size of the spatiale filter                
+    spect_size : int
+                 spectral lenght of the spectral filter                
+    tol_spat : int
+               spatiale tolerance for the spatial merging 
+                
+    tol_spec : int
+               spectrale tolerance for the spectral merging                   
+    filter_act : Bool
+                 activate or deactivate the spatio spectral filter 
+                 default: True
 
     Returns
     -------
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : ra dec lbda x0 y0 z0 T_GLR profile
+              Columns of Cat_ref : x y z ra dec lba T_GLR profile
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1686,9 +2018,15 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     logger = logging.getLogger('origin')
     t0 = time.time()
 
+    
 
-    zpixRef,ypixRef,xpixRef = np.where(cube_pval_lm_correl>0)
-    correl_max = correl[zpixRef,ypixRef,xpixRef]
+    zM,yM,xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(cube_local_max,cube_local_min,thresh,spat_size,spect_size,filter_act)
+    if len(zM)>1000:
+        xpixRef,ypixRef,zpixRef,seg_label,idout,iout2M = spatiospectral_merging(zM,yM,xM,segmentation_map,tol_spat,tol_spec)
+    else:
+        xpixRef,ypixRef,zpixRef,seg_label,idout,iout2M = spatiospectral_merging_mat(zM,yM,xM,segmentation_map,tol_spat,tol_spec)  
+
+    correl_max = cube_local_max[zpixRef,ypixRef,xpixRef]
     profile_max = profile[zpixRef, ypixRef, xpixRef]
 
     # add real coordinates
@@ -1698,15 +2036,13 @@ def Create_local_max_cat(correl, profile, cube_pval_lm_correl, wcs, wave):
     dec = skycrd[:, 0]
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
-    Cat_ref = Table([ra, dec, lbda, xpixRef, ypixRef, zpixRef, correl_max,
-                     profile_max],
-                    names=( 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0','T_GLR',
-                           'profile'))
-    # Catalogue sorted along the Z axis
-    Cat_ref.sort('z0')
+    Cat_ref = Table([idout, ra, dec, lbda, xpixRef, ypixRef, zpixRef, correl_max,
+                     profile_max,seg_label],
+                    names=('ID', 'ra', 'dec', 'lbda','x0', 'y0', 'z0', 'T_GLR',
+                           'profile','seg_label'))
+    Cat_ref.sort('ID')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Cat_ref
-
+    return Cat_ref, (zm, ym, xm)
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
 
@@ -2229,8 +2565,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     return Cat2, Cat_est_line_raw, Cat_est_line_var
 
-def Purity_Estimation(Cat_in, correl, purity_curves, purity_index, 
-                        bck_or_src): 
+def Purity_Estimation(Cat_in, correl, purity_curves, purity_index): 
     """Function to compute the estimated purity for each line.
 
     Parameters
@@ -2244,8 +2579,6 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
                           purity curves related to area
     purity_index      : array
                           index of purity curves related to area             
-    bck_or_src          : array
-                          Map to know which area the source is in
 
     Returns
     -------
@@ -2267,9 +2600,8 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index,
         y = src['y1']
         x = src['x1'] 
         z = src['z1']         
-        area = bck_or_src[y,x]
-        seuil = purity_index[area]
-        fidel = purity_curves[area]
+        seuil = purity_index
+        fidel = purity_curves
         value = correl[z,y,x]
         if value>seuil[(fidel==1).tolist().index(True)]:
             fid_tmp = 1
@@ -2590,7 +2922,7 @@ def estimate_spectrum(nb_lines, wave_pix, num_profil, fwhm_profiles,
 
 def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      origin, filename, maxmap, segmap, correl, fwhm_profiles, 
-                     param, path, name, ThresholdPval, i, ra, dec, x_centroid,
+                     param, path, name, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
                      y, x, flux, purity, src_vers, author):
@@ -2669,10 +3001,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_DZ = (param['deltaz'], 'OR input Deltaz')
     if 'pfa_merging' in param.keys():
         src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
-    
-    # pval
-    src.header['OR_THB'] = (ThresholdPval[0], 'OR Background threshold')
-    src.header['OR_THS'] = (ThresholdPval[1], 'OR Source threshold')
+    if 'threshold' in param.keys():
+        src.OR_TH = (param['threshold'], 'OR threshold')
     
     # WHITE IMAGE
     src.add_white_image(cube)
@@ -2737,7 +3067,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
 
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author, path,
-                               maxmap, segmap, ThresholdPval, ncpu=1):
+                               maxmap, segmap, ncpu=1):
     """Function to create the final catalogue of sources with their parameters
 
     Parameters
@@ -2797,8 +3127,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         E = Cat[Cat['ID'] == i]
         ra = E['ra'][0]
         dec = E['dec'][0]
-        x_centroid = E['x2'][0]
-        y_centroid = E['y2'][0]
+        x_centroid = E['x1'][0]
+        y_centroid = E['y1'][0]
         seg_label = E['seg_label'][0]
         # Lines of this group
         E.sort('z1')
@@ -2806,11 +3136,9 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         GLR = E['T_GLR']
         num_profil = E['profile'].data
         # Number of lines in this group
-        nb_lines = E['nb_lines'][0]
+        nb_lines = len(E)
         Cat_est_line_data = np.empty((nb_lines, wave.shape))
         Cat_est_line_var = np.empty((nb_lines, wave.shape))
-        Cat_est_cont_data = np.empty((nb_lines, wave.shape))
-        Cat_est_cont_var = np.empty((nb_lines, wave.shape))
         for j in range(nb_lines):
             Cat_est_line_data[j,:] = Cat_est_line[E['num_line'][j]]._data
             Cat_est_line_var[j,:] = Cat_est_line[E['num_line'][j]]._var
@@ -2831,7 +3159,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             delayed(Construct_Object)(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       f_maxmap, f_segmap, f_correl, fwhm_profiles, 
-                                      param, path_src, name, ThresholdPval,
+                                      param, path_src, name,
                                       *source_arglist)
 
             for k,source_arglist in enumerate(sources_arglist))
@@ -2844,7 +3172,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
             msg = Construct_Object(k, len(sources_arglist), cols, units, desc,
                                       fmt, step_wave, origin, filename,
                                       maxmap, segmap, correl, fwhm_profiles, 
-                                      param, path_src, name, ThresholdPval,
+                                      param, path_src, name,
                                       *source_arglist)
 
             if msg is not None:

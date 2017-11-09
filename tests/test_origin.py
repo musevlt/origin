@@ -42,11 +42,15 @@ def test_origin():
 
     # threshold applied on pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step06_compute_segmentation_threshold(pfa=0.05)
+    my_origin.step06_compute_purity_threshold(pfa=0.05)
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step07_threshold_pval()
+    my_origin.step07_detection()
+    my_origin.write()
+    
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step07_detection_lost()
     my_origin.write()
     
     # estimation
@@ -55,10 +59,10 @@ def test_origin():
     my_origin.write()
 
     # Distance maximum between 2 different lines (in pixels)
-    deltaz = 1
-    my_origin = ORIGIN.load('tmp2')
-    my_origin.step09_spatiospectral_merging(deltaz=deltaz)
-    my_origin.write()
+#    deltaz = 1
+#    my_origin = ORIGIN.load('tmp2')
+#    my_origin.step09_spatiospectral_merging(deltaz=deltaz)
+#    my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')

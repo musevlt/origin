@@ -40,15 +40,15 @@ Usage
     
  >  orig.step05_compute_TGLR()
  
- >  orig.step06_compute_segmentation_threshold(pfa=0.05)
+ >  orig.step06_compute_purity_threshold()
  
- >  orig.step07_threshold_pval()
+ >  orig.step07_detection()
+ 
+ >  orig.step07_detection_lost()
     
  >  orig.step08_compute_spectra()
     
- >  orig.step09_spatiospectral_merging(deltaz)
-    
- >  nsources = orig.step10_write_sources(ncpu=1)
+ >  nsources = orig.step10_write_sources()
  
  
 3- Resulted detected sources can be load by using mpdaf

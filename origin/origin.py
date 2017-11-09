@@ -46,14 +46,11 @@ from .lib_origin import Spatial_Segmentation, \
     Compute_PCA_threshold, \
     Create_local_max_cat, \
     Estimation_Line, \
-    SpatioSpectral_Merging, \
     Segmentation, \
-    Spatial_Merging_Circle, \
     Correlation_GLR_test_zone, \
     Compute_threshold_purity, \
-    Compute_threshold_segmentation, \
+    CleanCube, \
     Purity_Estimation, \
-    thresholdVsPFA_purity, \
     area_segmentation_square_fusion, \
     area_segmentation_sources_fusion, \
     area_segmentation_convex_fusion, \
@@ -162,19 +159,17 @@ class ORIGIN(object):
         continuum          : list of `~mpdaf.obj.Spectrum`
                              Roughly Estimated continuum. 
                              Result of step07_compute_spectra.                             
-        Cat2               : astropy.Table
-                             Catalog returned by step08_spatiospectral_merging.
     """
     
     def __init__(self, path, name, filename,  fieldmap, profiles, PSF, FWHM_PSF,
                  cube_faint, mapO2, thresO2, testO2, histO2, binO2, meaO2, stdO2,
                  cube_correl, maxmap, NbAreas,
                  cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
-                 ThresholdPval, Cat1, spectra, Cat2, param, cube_std, var,
+                 Cat1, spectra, param, cube_std, var,
                  cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
-                 segmentation_map_spatspect, cube_local_min, continuum,
-                 mapThresh, areamap, imawhite, imadct, imastd):
+                 cube_local_min, continuum,
+                 mapThresh, areamap, imawhite, imadct, imastd, zm, ym, xm):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -337,7 +332,7 @@ class ORIGIN(object):
         self.cont_dct = cont_dct       
         self.segmentation_test = segmentation_test     
         if imadct is None and self.cont_dct is not None:
-                self.ima_dct = self.cont_dct.mean(axis=0)
+            self.ima_dct = self.cont_dct.mean(axis=0)
         else:
             self.ima_dct = imadct
         if imastd is None and self.cube_std is not None:
@@ -364,25 +359,27 @@ class ORIGIN(object):
         self.cube_profile = cube_profile
         self.maxmap = maxmap
         # step6
-        self.segmentation_map_threshold = segmentation_map_threshold
-        self.segmentation_map_spatspect = segmentation_map_spatspect        
+        self.segmentation_map_threshold = segmentation_map_threshold    
         self.mapThresh = mapThresh
         self.Pval_r = Pval_r
         self.index_pval = index_pval
         self.Det_M = Det_M
         self.Det_m = Det_m   
-        self.ThresholdPval = ThresholdPval
         # step7
         self.Cat0 = Cat0
+        if zm is not None and ym is not None and xm is not None:
+            self.det_correl_min = (zm, ym, xm)
+        else:
+            self.det_correl_min = None
         # step8
         self.Cat1 = Cat1
         self.spectra = spectra
         # step9
-        self.Cat2 = Cat2
-        if self.Cat2 is not None:
-            self.Cat2b = self._Cat2b()
-        else:
-            self.Cat2b = None
+#        self.Cat2 = Cat2
+#        if self.Cat2 is not None:
+#            self.Cat2b = self._Cat2b()
+#        else:
+#            self.Cat2b = None
         
         self._loginfo('00 Done')
         
@@ -425,13 +422,13 @@ class ORIGIN(object):
                    histO2=None, binO2=None, meaO2=None, stdO2=None, cube_correl=None,
                    maxmap=None, NbAreas=None, cube_profile=None, Cat0=None, 
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
-                   ThresholdPval=None, Cat1=None, spectra=None, Cat2=None,
+                   Cat1=None, spectra=None,
                    param=None, cube_std=None, var=None,
                    cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
-                   segmentation_map_spatspect=None, cube_local_min=None,
+                   cube_local_min=None,
                    continuum=None, mapThresh=None, areamap=None, imawhite=None,
-                   imadct=None, imastd=None)
+                   imadct=None, imastd=None, zm=None, ym=None, xm=None)
         
     @classmethod
     def load(cls, folder, newname=None):
@@ -599,53 +596,41 @@ class ORIGIN(object):
             cube_profile = None
 
         # step6
-        if os.path.isfile('%s/Pval_r0.txt'%folder):
-            Pval_r = []
-            i = 0
-            while(os.path.isfile('%s/Pval_r%d.txt'%(folder,i))):
-                Pval_r.append(np.loadtxt('%s/Pval_r%d.txt'%(folder,i))\
-                .astype(np.float))
-                i = i + 1
+        if os.path.isfile('%s/Pval_r.txt'%folder):
+            Pval_r = np.loadtxt('%s/Pval_r.txt'%folder).astype(np.float)
         else:
             Pval_r = None
-        if os.path.isfile('%s/index_pval0.txt'%folder):
-            index_pval = []
-            i = 0
-            while(os.path.isfile('%s/index_pval%d.txt'%(folder,i))):
-                index_pval.append(np.loadtxt('%s/index_pval%d.txt'%(folder,i))\
-                .astype(np.float))  
-                i = i + 1
+        if os.path.isfile('%s/index_pval.txt'%folder):
+            index_pval = np.loadtxt('%s/index_pval.txt'%folder)\
+            .astype(np.float) 
         else:
             index_pval = None
-        if os.path.isfile('%s/Det_M0.txt'%folder):
-            Det_M = []
-            i = 0
-            while(os.path.isfile('%s/Det_M%d.txt'%(folder,i))):
-                Det_M.append(np.loadtxt('%s/Det_M%d.txt'%(folder,i))\
-                .astype(np.int))
-                i = i + 1
+        if os.path.isfile('%s/Det_M.txt'%folder):
+            Det_M = np.loadtxt('%s/Det_M.txt'%folder).astype(np.int)
         else:
             Det_M = None
-        if os.path.isfile('%s/Det_min0.txt'%folder):
-            Det_m = []
-            i = 0
-            while(os.path.isfile('%s/Det_min%d.txt'%(folder,i))):
-                Det_m.append(np.loadtxt('%s/Det_min%d.txt'%(folder,i)).\
-                astype(np.int))
-                i = i + 1
+        if os.path.isfile('%s/Det_min.txt'%folder):
+            Det_m = np.loadtxt('%s/Det_min.txt'%folder).astype(np.int)
         else:
             Det_m = None
-        if os.path.isfile('%s/ThresholdPval.txt'%folder):
-            ThresholdPval = np.loadtxt('%s/ThresholdPval.txt'%folder).\
-            astype(np.float)
-        else:
-            ThresholdPval = None
         # step7  
         if os.path.isfile('%s/Cat0.fits'%folder):
             Cat0 = Table.read('%s/Cat0.fits'%folder)
             _format_cat(Cat0, 0)
         else:
-            Cat0 = None        
+            Cat0 = None   
+        if os.path.isfile('%s/zm.txt'%folder):
+            zm = np.loadtxt('%s/zm.txt'%folder, ndmin=1).astype(np.int)
+        else:
+            zm = None
+        if os.path.isfile('%s/ym.txt'%folder):
+            ym = np.loadtxt('%s/ym.txt'%folder, ndmin=1).astype(np.int)
+        else:
+            ym = None
+        if os.path.isfile('%s/xm.txt'%folder):
+            xm = np.loadtxt('%s/xm.txt'%folder, ndmin=1).astype(np.int)
+        else:
+            xm = None
         # step8
         if os.path.isfile('%s/Cat1.fits'%folder):
             Cat1 = Table.read('%s/Cat1.fits'%folder)
@@ -675,22 +660,11 @@ class ORIGIN(object):
             continuum = None            
         
         # step9
-        if os.path.isfile('%s/Cat2.fits'%folder):
-            Cat2 = Table.read('%s/Cat2.fits'%folder)
-            _format_cat(Cat2, 2)
-        else:
-            Cat2 = None
         if os.path.isfile('%s/segmentation_map_threshold.fits'%folder):
             segmentation_map_threshold = Image('%s'%folder + \
             '/segmentation_map_threshold.fits')
         else:
             segmentation_map_threshold = None
-            
-        if os.path.isfile('%s/segmentation_map_spatspect.fits'%folder):
-            segmentation_map_spatspect = Image('%s'%folder +  \
-            '/segmentation_map_spatspect.fits')
-        else:
-            segmentation_map_spatspect = None            
             
         if os.path.isfile('%s/mapThresh.fits'%folder):
             mapThresh = Image('%s/mapThresh.fits'%folder)
@@ -710,15 +684,14 @@ class ORIGIN(object):
                    maxmap=maxmap, NbAreas=NbAreas, cube_profile=cube_profile, 
                    Cat0=Cat0, Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m,
-                   ThresholdPval= ThresholdPval, Cat1=Cat1, spectra=spectra,
-                   Cat2=Cat2, param=param,
+                   Cat1=Cat1, spectra=spectra,
+                   param=param,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_test=segmentation_test,
                    segmentation_map_threshold=segmentation_map_threshold,
-                   segmentation_map_spatspect=segmentation_map_spatspect,
                    cube_local_min=cube_local_min, continuum=continuum,
                    mapThresh=mapThresh, areamap=areamap, imawhite=ima_white,
-                   imadct=ima_dct, imastd=ima_std)
+                   imadct=ima_dct, imastd=ima_std, zm=zm, ym=ym, xm=xm)
                    
     def _loginfo(self, logstr):
         self._log_file.info(logstr) 
@@ -841,37 +814,34 @@ class ORIGIN(object):
             self.cube_profile.write('%s/cube_profile.fits'%path2)
         if self.maxmap is not None:
             self.maxmap.write('%s/maxmap.fits'%path2)
-
-        # step6
         if self.cube_local_max is not None:
             self.cube_local_max.write('%s/cube_local_max.fits'%path2)    
         if self.cube_local_min is not None:
-            self.cube_local_min.write('%s/cube_local_min.fits'%path2)                                
+            self.cube_local_min.write('%s/cube_local_min.fits'%path2) 
+
+        # step6                       
         if self.segmentation_map_threshold is not None:
             self.segmentation_map_threshold.write('%s'%path2 + \
             '/segmentation_map_threshold.fits')  
-        if self.segmentation_map_spatspect is not None:
-            self.segmentation_map_spatspect.write('%s'%path2 + \
-            '/segmentation_map_spatspect.fits')              
         if self.mapThresh is not None:
-            self.mapThresh.write('%s/mapThresh.fits'%path2)              
+            self.mapThresh.write('%s/mapThresh.fits'%path2)
         if self.Pval_r is not None:
-            for i, pval in enumerate(self.Pval_r):
-                np.savetxt('%s/Pval_r%d.txt'%(path2,i), pval)
+            np.savetxt('%s/Pval_r.txt'%(path2), self.Pval_r)
         if self.index_pval is not None:
-            for i, pval in enumerate(self.index_pval):
-                np.savetxt('%s/index_pval%d.txt'%(path2,i), pval)
+            np.savetxt('%s/index_pval.txt'%(path2), self.index_pval)
         if self.Det_M is not None:
-            for i, det in enumerate(self.Det_M):
-                np.savetxt('%s/Det_M%d.txt'%(path2,i), det)
+            np.savetxt('%s/Det_M.txt'%(path2), self.Det_M)
         if self.Det_m is not None:
-            for i, det in enumerate(self.Det_m):
-                np.savetxt('%s/Det_min%d.txt'%(path2,i), det)
-        if self.ThresholdPval is not None:
-            np.savetxt('%s/ThresholdPval.txt'%path2, self.ThresholdPval)
+            np.savetxt('%s/Det_min.txt'%(path2), self.Det_m)
+        
         # step7
         if self.Cat0 is not None:
             self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
+        if self.det_correl_min is not None:
+            np.savetxt('%s/zm.txt'%(path2), self.det_correl_min[0])
+            np.savetxt('%s/ym.txt'%(path2), self.det_correl_min[1])
+            np.savetxt('%s/xm.txt'%(path2), self.det_correl_min[2])
+        
         # step8
         if self.Cat1 is not None:
             self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
@@ -885,11 +855,6 @@ class ORIGIN(object):
                 if hdu is not None:
                     hdulist.append(hdu)
             write_hdulist_to(hdulist, '%s/spectra.fits'%path2, overwrite=True)
-        # step9
-        if self.Cat2 is not None:
-            self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
-        if self.Cat2b is not None:
-            self.Cat2b.write('%s/Cat2b.fits'%path2, overwrite=True)
         
         self._loginfo("Current session saved in %s"%path2)
       
@@ -1280,110 +1245,203 @@ class ORIGIN(object):
         
         self._loginfo('05 Done')
         
-    def step06_compute_segmentation_threshold(self, purity=.9, pfa=0.15): 
-        """Estimate threshold from a given purity applied
-        on local maximam from maximum correlation and local maxima from 
-        minus minimum correlation
+    def step06_compute_purity_threshold(self, purity=.9, pfa=0.05, tol_spat=3,
+                                        tol_spec=5, filter_act=True, 
+                                        spat_size=19, spect_size=10):        
+        """find the threshold  for a given purity
 
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold 
+                 purity to automatically compute the threshold        
         pfa    : float
-                 Pvalue for the test which performs segmentation
-                            
+                 Pvalue for the test which performs segmentation       
+                 TODO le sauver directement la carte de label du step02
+        tol_spat : integer
+                   spatial tolerance for the spatial merging (distance in pixels)
+                   TODO en fonction du FWHM
+        tol_spec : integer
+                   spectral tolerance for the spatial merging (distance in pixels)
+        filter_act : bool
+                     activate or deactivate the spatio spectral filter 
+        spat_size : int
+                spatiale size of the spatiale filter                
+        spect_size : int
+                 spectral lenght of the spectral filter
+                     
         Returns
         -------
-        self.ThresholdPval     : [float, float]
-                                 Background and source threshold values  
-        self.mapThresh         : `~mpdaf.obj.Image`
-                                 Threshold map
         self.segmentation_map_threshold : `~mpdaf.obj.Image`
                                           Segmentation map for threshold
-                                          (background/sources)
         """
-        self._loginfo('Step 06 - p-values Thresholding')  
+        self._loginfo('Step 06 - Compute Purity threshold')  
         
         if self.cube_local_max is None:
             raise IOError('Run the step 05 to initialize ' + \
             'self.cube_local_max and self.cube_local_min')
+        
+
+        self._loginfo('Estimation of threshold with purity = %.1f'%purity)
+
             
         self._loginfo('PFA = %.2f '%pfa)
             
         self.param['purity'] = purity
         self.param['pfa'] = pfa
+        self.param['tol_spat'] = tol_spat
+        self.param['tol_spec'] = tol_spec
+        self.param['filter_act'] = filter_act
+        self.param['spat_size'] = spat_size
+        self.param['spect_size'] = spect_size
 
-        self.ThresholdPval, self.Pval_r, self.index_pval, mapThresh, segmap, \
-        self.Det_M, self.Det_m = Compute_threshold_purity(purity, 
+        # Pval_r=purity curves
+        # Det = nb de detections
+        threshold, self.Pval_r, self.index_pval, \
+        segmap, self.Det_M, self.Det_m = Compute_threshold_purity(
+                                           purity, 
                                            self.cube_local_max.data,
-                                           self.cube_local_min.data,
-                                           self.segmentation_test.data, pfa)
-                
-        self._loginfo('Threshold: %.1f (background)'%self.ThresholdPval[0] + \
-        ' %.1f (sources)'%self.ThresholdPval[1])
-        self._loginfo('Save the threshold map in self.mapThresh')                                          
-        self.mapThresh = Image(data=mapThresh, wcs=self.wcs, mask=np.ma.nomask)
-        
+                                           self.cube_local_min.data,                                            
+                                           self.segmentation_test.data, pfa, 
+                                           spat_size, spect_size, 
+                                           tol_spat, tol_spec, filter_act)
+        self.param['threshold'] = threshold                                       
+        self._loginfo('Threshold: %.1f '%threshold)
+     
         self.segmentation_map_threshold = Image(data=segmap,
-                                    wcs=self.wcs, mask=np.ma.nomask)
+                                    wcs=self.wcs, mask=np.ma.nomask) #TODO a supprimer si on garde celle du step02
         self._loginfo('Save the segmentation map for threshold in ' + \
-        'self.segmentation_map_threshold') 
-
+        'self.segmentation_map_threshold')          
+        
         self._loginfo('06 Done')
-
-    def step07_threshold_pval(self, threshold_back=None, threshold_src=None): 
-        """Threshold the Pvalue with the given threshold.
+        
+    def step07_detection(self, threshold=None):
+        """create first catalog which contains:
+        ['x', 'y', 'z', 'ID', 'ra', 'dec', 'lbda', 
+        'T_GLR', 'profile', 'seg_label']
 
         Parameters
         ----------
-        threshold_back : float
-                     Manual threshold
-                     If None, estimated from the purity
-        threshold_src  : float or string
-                     if float, manual threshold
-                     if 'background', threshold background is used
-                     If None, estimated from the purity
+        purity : float #LPI plutot le threshold. A changer.
+                 if the estimated purity is not good
+                 user purity to choose in the 
                             
         Returns
         -------
         self.Cat0 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: ra dec lbda x0 y0 z0 T_GLR profile
-        """
-        self._loginfo('Step 07 - p-values Thresholding')  
+                    Columns: x y z ra dec lbda T_GLR profile
+                    Coordinates are in pixels.
+        """        
+
+        self._loginfo('Step 07 - Thresholding and spatio-spectral merging')  
         
-        if self.ThresholdPval is None:
+        if self.Pval_r is None:
             raise IOError('Run the step 06 to initialize ' + \
-            'self.ThresholdPval and self.segmentation_map_threshold')
-        
-        self.param['threshold_back'] = threshold_back
-        self.param['threshold_src'] = threshold_src
+            'Pval_r')        
 
-        if threshold_back is not None:
-            self.ThresholdPval[0] = threshold_back
-        if threshold_src is not None:
-            if threshold_src == 'background':
-                self.ThresholdPval[1] = self.ThresholdPval[0]
-            else:
-                self.ThresholdPval[1] = threshold_src
-                
-        self._loginfo('Threshold: %.1f (background)'%self.ThresholdPval[0] + \
-        ' %.1f (sources)'%self.ThresholdPval[1])
-
-        cube_pval_correl = Compute_threshold_segmentation(
-                                         self.cube_local_max._data,
-                                         self.ThresholdPval,
-                                         self.segmentation_map_threshold._data)
+        if threshold is not None:
+            self.param['threshold'] = threshold
         
-        self.Cat0 = Create_local_max_cat(self.cube_correl._data,
-                                         self.cube_profile._data,
-                                         cube_pval_correl,
-                                         self.wcs, self.wave)
+        # det_correl_min: 3D positions 3D of detections in correl_min
+        self.Cat0, self.det_correl_min = Create_local_max_cat(self.param['threshold'], 
+                                           self.cube_local_max.data,
+                                           self.cube_local_min.data,                                            
+                                           self.segmentation_map_threshold.data, 
+                                           self.param['spat_size'],
+                                           self.param['spect_size'], 
+                                           self.param['tol_spat'],
+                                           self.param['tol_spec'],
+                                           self.param['filter_act'],
+                                           self.cube_profile._data,
+                                           self.wcs, self.wave)     
+                                
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save a first version of the catalogue of ' + \
-                              'emission lines in self.Cat0 (%d lines)' \
-                              %(len(self.Cat0))) 
+        self._loginfo('Save the catalogue in self.Cat0' + \
+        ' (%d lines)'%len(self.Cat0))
+        self._loginfo('07 Done')  
+        
+    def step07_detection_lost(self, purity=None, NbSubcube=1, catalog='additional'):
+        """create first catalog which contains:
+        ['x', 'y', 'z', 'ID', 'ra', 'dec', 'lbda', 
+        'T_GLR', 'profile', 'seg_label']
+
+        Parameters
+        ----------
+        purity : float
+                 if the estimated purity is not good
+                 user purity to choose in the 
+        NbSubcube : to perform max loc computation on subcube, glued                     
+        catalog : type of output catalog
+                  'additional' : second catalog independent from Cat0
+                  'complementary' : second catalog Complementary of Cat0                  
+        Returns
+        -------
+        self.Cat0 : astropy.Table
+                    Catalogue of the referent voxels for each group.
+                    Columns: x y z ra dec lbda T_GLR profile
+                    Coordinates are in pixels.
+        """        
+
+        self._loginfo('Step 07 bis - Thresholding and spatio-spectral merging')  
+        
+        if self.Cat0 is None:
+            raise IOError('Run the step 07 to initialize Cat0')        
+        
+        self._loginfo('Compute local maximum of std cube values')
+        inty, intx = Spatial_Segmentation(self.Nx, self.Ny,
+                                          self.param['NbSubcube'])
+        cube_local_max_faint_dct, cube_local_min_faint_dct = \
+        Compute_local_max_zone(self.cube_std.data, self.cube_std.data,
+                               self.mask, intx, inty, self.param['NbSubcube'],
+                               self.param['neighboors'])
+        
+        if catalog=='complementary': 
+            cube_local_max_faint_dct, cube_local_min_faint_dct = \
+            CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct, 
+                      self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny, 
+                      self.param['spat_size'], self.param['spect_size'])   
+            purity =  self.param['purity'] # to be logic needs to have same purity
+            self._loginfo('complementary catalog, needs to have same purity than the correlation one')
+        else:
+            if purity is None:
+                purity = self.param['purity']        
+
+        self._loginfo('Threshold computed with purity = %.1f'%purity)    
+        
+        self.cube_local_max_faint_dct = cube_local_max_faint_dct
+        self.cube_local_min_faint_dct = cube_local_min_faint_dct
+    
+        self.ThresholdPval2, self.Pval_r2, self.index_pval2, \
+        segmap2, self.Det_M2, self.Det_m2 = Compute_threshold_purity(
+                                           purity, 
+                                           cube_local_max_faint_dct,
+                                           cube_local_min_faint_dct,                                            
+                                           self.segmentation_test.data,
+                                           self.param['pfa'], 
+                                           self.param['spat_size'],
+                                           self.param['spect_size'],
+                                           self.param['tol_spat'],
+                                           self.param['tol_spec'],
+                                           self.param['filter_act'])
+        
+        self.Catcomp, inut = Create_local_max_cat(self.ThresholdPval2, 
+                                           cube_local_max_faint_dct,
+                                           cube_local_min_faint_dct,                                            
+                                           segmap2, 
+                                           self.param['spat_size'],
+                                           self.param['spect_size'],
+                                           self.param['tol_spat'],
+                                           self.param['tol_spec'],
+                                           self.param['filter_act'],
+                                           self.cube_profile._data,
+                                           self.wcs, self.wave)      
+                                           
+        #LPI a merger avec Cat0
+        #LPI si filter(complematary) a additionner sinon a merger
+        #(utiliser spatio spectral merging avec indicateur pour origin des sources)
+        
         self._loginfo('07 Done')
+        
         
     def step08_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
@@ -1419,12 +1477,8 @@ class ORIGIN(object):
                      horiz = 5)
             
         self._loginfo('Purity estimation')    
-        # 0 for background and 1 for sources; to know which self.index_pval 
-        # is correponding to the pixel (y,x)
-        bck_or_src = self.mapThresh.data == self.ThresholdPval[1]
         self.Cat1 = Purity_Estimation(self.Cat1, self.cube_correl.data, 
-                                        self.Pval_r, self.index_pval, 
-                                        bck_or_src)
+                                        self.Pval_r, self.index_pval)
                    
         _format_cat(self.Cat1, 1)
         self._loginfo('Save the updated catalogue in self.Cat1' + \
@@ -1438,61 +1492,62 @@ class ORIGIN(object):
         self._loginfo('Save the estimated spectrum of each line in ' + \
         'self.spectra')
         
-        self._loginfo('08 Done')       
+        self._loginfo('08 Done')
+#        self.Cat2b = self._Cat2b()
 
-    def step09_spatiospectral_merging(self, deltaz=20, pfa=0.05):
-        """Construct a catalogue of sources by spatial merging of the
-        detected emission lines in a circle with a diameter equal to
-        the mean over the wavelengths of the FWHM of the FSF.
-        Then, merge the detected emission lines distants in an estimated source 
-        area.
-
-        Parameters
-        ----------
-        deltaz : integer
-                 Distance maximum between 2 different lines
-        pfa    : float
-                 Pvalue for the test which performs segmentation                 
-
-        Returns
-        -------
-        self.Cat2 : astropy.Table
-                    Catalogue
-                    Columns: ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
-                    T_GLR profile residual flux num_line purity seg_label
-        self.segmentation_map_spatspect : `~mpdaf.obj.Image`
-                                          Segmentation map
-        """
-        self._loginfo('Step09 Spatio spectral merging ' + \
-        '(deltaz=%d, pfa=%d)'%(deltaz, pfa))
-        if self.wfields is None:
-            fwhm = self.FWHM_PSF
-        else:
-            fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved
-        self.param['deltaz'] = deltaz
-        self.param['pfa_merging'] = pfa
-        
-        if self.Cat1 is None:
-            raise IOError('Run the step 08 to initialize self.Cat1')
-
-        cat = Spatial_Merging_Circle(self.Cat1, fwhm, self.wcs)
-        self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
-                                           self.segmentation_test.data, \
-                                           self.cube_correl.data, \
-                                           self.var, deltaz, self.wcs)
-        self.segmentation_map_spatspect = Image(data=segmap,
-                                    wcs=self.wcs, mask=np.ma.nomask)
-        self._loginfo('Save the segmentation map for spatio-spectral ' + \
-        'merging in self.segmentation_map_spatspect')  
-        
-        _format_cat(self.Cat2, 2)
-        self._loginfo('Save the updated catalogue in self.Cat2' + \
-        ' and self.Cat2b' + \
-        '(%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0],
-          len(self.Cat2)))
-          
-        self.Cat2b = self._Cat2b()
-        self._loginfo('09 Done')
+#    def step09_spatiospectral_merging(self, deltaz=20, pfa=0.05):
+#        """Construct a catalogue of sources by spatial merging of the
+#        detected emission lines in a circle with a diameter equal to
+#        the mean over the wavelengths of the FWHM of the FSF.
+#        Then, merge the detected emission lines distants in an estimated source 
+#        area.
+#
+#        Parameters
+#        ----------
+#        deltaz : integer
+#                 Distance maximum between 2 different lines
+#        pfa    : float
+#                 Pvalue for the test which performs segmentation                 
+#
+#        Returns
+#        -------
+#        self.Cat2 : astropy.Table
+#                    Catalogue
+#                    Columns: ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
+#                    T_GLR profile residual flux num_line purity seg_label
+#        self.segmentation_map_spatspect : `~mpdaf.obj.Image`
+#                                          Segmentation map
+#        """
+#        self._loginfo('Step09 Spatio spectral merging ' + \
+#        '(deltaz=%d, pfa=%d)'%(deltaz, pfa))
+#        if self.wfields is None:
+#            fwhm = self.FWHM_PSF
+#        else:
+#            fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved
+#        self.param['deltaz'] = deltaz
+#        self.param['pfa_merging'] = pfa
+#        
+#        if self.Cat1 is None:
+#            raise IOError('Run the step 08 to initialize self.Cat1')
+#
+#        cat = Spatial_Merging_Circle(self.Cat1, fwhm, self.wcs)
+#        self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
+#                                           self.segmentation_test.data, \
+#                                           self.cube_correl.data, \
+#                                           self.var, deltaz, self.wcs)
+#        self.segmentation_map_spatspect = Image(data=segmap,
+#                                    wcs=self.wcs, mask=np.ma.nomask)
+#        self._loginfo('Save the segmentation map for spatio-spectral ' + \
+#        'merging in self.segmentation_map_spatspect')  
+#        
+#        _format_cat(self.Cat2, 2)
+#        self._loginfo('Save the updated catalogue in self.Cat2' + \
+#        ' and self.Cat2b' + \
+#        '(%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0],
+#          len(self.Cat2)))
+#          
+#        self.Cat2b = self._Cat2b()
+#        self._loginfo('09 Done')
         
     def _Cat2b(self):
         from astropy.table import MaskedColumn
@@ -1568,8 +1623,8 @@ class ORIGIN(object):
         # Add RA-DEC to the catalogue
         self._loginfo('Step 10 - Sources creation')
         self._loginfo('Add RA-DEC to the catalogue')
-        if self.Cat2 is None:
-            raise IOError('Run the step 09 to initialize self.Cat2')
+        if self.Cat1 is None:
+            raise IOError('Run the step 09 to initialize self.Cat1')
 
         # path
         if path is not None and not os.path.exists(path):
@@ -1596,14 +1651,14 @@ class ORIGIN(object):
             raise IOError('Run the step 05 to initialize self.cube_correl')
         if self.spectra is None:
             raise IOError('Run the step 08 to initialize self.spectra')
-        nsources = Construct_Object_Catalogue(self.Cat2, self.spectra,
+        nsources = Construct_Object_Catalogue(self.Cat1, self.spectra,
                                               self.cube_correl,
                                               self.wave, self.FWHM_profiles,
                                               path_src, self.name, self.param,
                                               src_vers, author,
                                               self.path, self.maxmap,
-                                              self.segmentation_map_spatspect,
-                                              self.ThresholdPval, ncpu)                                            
+                                              self.segmentation_map_threshold,
+                                              ncpu)                                            
                                               
         # create the final catalog
         self._loginfo('Create the final catalog- %d sources'%nsources)
@@ -1939,54 +1994,43 @@ class ORIGIN(object):
                      **kwargs)
 
 
-    def plot_thresholdVsPFA_background(self, purity=.9, 
-                                   pfaset=np.linspace(1e-3,0.5,41), ax=None):
-        """Draw threshold of local maxima as a function of the segmentation
-        map using PFA to create source/background mask of step05.
+#    def plot_thresholdVsPFA_background(self, purity=.9, 
+#                                   pfaset=np.linspace(1e-3,0.5,41), ax=None):
+#        """Draw threshold of local maxima as a function of the segmentation
+#        map using PFA to create source/background mask of step05.
+#        
+#        Parameters
+#        ----------
+#        purity : the purity for wich the function is plotted
+#        pfaset : the list of PFA to test
+#        ax : matplotlib.Axes
+#             The Axes instance in which the image is drawn
+#        """       
+#        
+#        cube_local_max = self.cube_local_max.data
+#        cube_local_min = self.cube_local_min.data
+#        test = self.segmentation_test.data
+#        
+#        threshold = \
+#        thresholdVsPFA_purity(test,cube_local_max,cube_local_min,purity,pfaset)
+#            
+#        if ax is None:
+#            ax = plt.gca()  
+#        
+#        ax.plot(pfaset,threshold,'-o')              
+#        ax.set_xlabel('PFA')
+#        ax.set_ylabel('Threshold')        
+#        ax.set_title('Purity %f' %purity)
         
-        Parameters
-        ----------
-        purity : the purity for wich the function is plotted
-        pfaset : the list of PFA to test
-        ax : matplotlib.Axes
-             The Axes instance in which the image is drawn
-        """       
-        
-        cube_local_max = self.cube_local_max.data
-        cube_local_min = self.cube_local_min.data
-        test = self.segmentation_test.data
-        
-        threshold = \
-        thresholdVsPFA_purity(test,cube_local_max,cube_local_min,purity,pfaset)
-            
-        if ax is None:
-            ax = plt.gca()  
-        
-        ax.plot(pfaset,threshold,'-o')              
-        ax.set_xlabel('PFA')
-        ax.set_ylabel('Threshold')        
-        ax.set_title('Purity %f' %purity)
-        
-    def plot_purity(self, thr_type, ax=None, log10=True):
+    def plot_purity(self, ax=None, log10=True):
         """Draw number of sources per threshold computed in step06
         
         Parameters
         ----------
-        thr_type  : str
-                     Pvalue for the test which performs segmentation
-                     'background'/'sources'
         ax : matplotlib.Axes
              The Axes instance in which the image is drawn
         log10 : To draw histogram in logarithmic scale or not
         """
-                
-        if thr_type == 'background':
-            i = 0
-        elif thr_type == 'sources':
-            i = 1
-        else:
-            raise IOError('thr_type must be "background" or "sources"')
-        
             
         if self.Det_M is None:
             raise IOError('Run the step 06')
@@ -1994,12 +2038,12 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()        
         
-        threshold = self.ThresholdPval[i]
-        Pval_r = self.Pval_r[i]
-        index_pval = self.index_pval[i]
+        threshold = self.param['threshold']
+        Pval_r = self.Pval_r
+        index_pval = self.index_pval
         purity = self.param['purity']
-        Det_M = self.Det_M[i]
-        Det_m = self.Det_m[i]
+        Det_M = self.Det_M
+        Det_m = self.Det_m
         
         ax2 = ax.twinx()
         if log10:
@@ -2024,7 +2068,7 @@ class ORIGIN(object):
         ax.set_xlabel('Threshold')
         ax2.set_ylabel('Purity')
         ax.set_ylabel('Number of detections')
-        ax.set_title('%s - threshold %f' %(thr_type, threshold))
+        ax.set_title('%s - threshold %f' %threshold)
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
         ax.legend(h1+h2, l1+l2, loc=2)                      
