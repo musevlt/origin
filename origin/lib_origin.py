@@ -1169,62 +1169,83 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     correl = -np.inf * np.ones(shape)
     correl_min = np.inf * np.ones(shape)
     
-    ndico = Dico[0].shape[0]
-    s = Nz+ndico-1
-    if ndico/2==ndico//2:
-        cc1 = ndico//2-1
-        cc2 = -ndico//2
+    if threads==1:
+        for k in ProgressBar(list(range(len(Dico)))):
+            # Second cube of correlation values
+            d_j = Dico[k] - np.mean(Dico[k])
+            profile_square = d_j**2         
+            for y in range(Ny):             
+                for x in range(Nx):                 
+                    cube_profile = signal.fftconvolve(cube_fsf[:,y,x], d_j,            
+                                                      mode = 'same')
+                    norm_profile = signal.fftconvolve(norm_fsf[:,y,x],
+                                                      profile_square,
+                                                      mode = 'same')
+                    
+                    norm_profile[norm_profile <= 0] = np.inf
+                    tmp = cube_profile/np.sqrt(norm_profile)
+                    PROFILE_MAX = np.where( tmp > correl[:, y, x])[0]
+                    correl[:, y, x] = np.maximum( correl[:, y, x],tmp)
+                    correl_min[:, y, x] = np.minimum( correl_min[:, y, x],tmp)
+                    profile[PROFILE_MAX,y,x] = k
     else:
-        cc1 = ndico//2
-        cc2 = -ndico//2+1
     
-    logger.info('Compute the FFT planes...')
-    temp = pyfftw.empty_aligned(s, dtype='float64')
-    fd_j = pyfftw.empty_aligned(s//2+1, dtype='complex128')
-    flags=['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
-    fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
-                             threads=threads)
-    temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-    ffsf = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
-    fftfsf = pyfftw.FFTW(temp2, ffsf, direction='FFTW_FORWARD', axes=[0],
-                         flags=flags, threads=threads)
-    temp3 = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
-    res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-    ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD', axes=[0],
-                              flags=flags, threads=threads)
-    
-    for k in ProgressBar(list(range(len(Dico)))):
+        ndico = Dico[0].shape[0]
+        s = Nz+ndico-1
+        if ndico/2==ndico//2:
+            cc1 = ndico//2-1
+            cc2 = -ndico//2
+        else:
+            cc1 = ndico//2
+            cc2 = -ndico//2+1
         
-        # fftconvolve(cube_fsf[:,x,y], d_j)
-        d_j = Dico[k] - np.mean(Dico[k])
-        temp[:ndico] = d_j
-        temp[ndico:] = 0
-        fftd_j() # fd_j=fft(d_j)
+        logger.info('Compute the FFT planes...')
+        temp = pyfftw.empty_aligned(s, dtype='float64')
+        fd_j = pyfftw.empty_aligned(s//2+1, dtype='complex128')
+        flags=['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
+        fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
+                                 threads=threads)
+        temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
+        ffsf = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
+        fftfsf = pyfftw.FFTW(temp2, ffsf, direction='FFTW_FORWARD', axes=[0],
+                             flags=flags, threads=threads)
+        temp3 = pyfftw.empty_aligned((s//2+1, Ny, Nx), dtype='complex128')
+        res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
+        ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD', axes=[0],
+                                  flags=flags, threads=threads)
         
-        temp2[:Nz,:,:] = cube_fsf[:,:,:]
-        temp2[Nz:,:,:] = 0
-        fftfsf() # fsf = fft(cube_fsf)
-        temp3[:] = ffsf[:,:,:] * fd_j[:,np.newaxis, np.newaxis]
-        ifft_object()
-        cube_profile = res[cc1:cc2, :, :].copy()
+        for k in ProgressBar(list(range(len(Dico)))):
+            
+            # fftconvolve(cube_fsf[:,x,y], d_j)
+            d_j = Dico[k] - np.mean(Dico[k])
+            temp[:ndico] = d_j
+            temp[ndico:] = 0
+            fftd_j() # fd_j=fft(d_j)
+            
+            temp2[:Nz,:,:] = cube_fsf[:,:,:]
+            temp2[Nz:,:,:] = 0
+            fftfsf() # fsf = fft(cube_fsf)
+            temp3[:] = ffsf[:,:,:] * fd_j[:,np.newaxis, np.newaxis]
+            ifft_object()
+            cube_profile = res[cc1:cc2, :, :].copy()
+            
+            # fftconvolve(norm_fsf[:,x,y], d_j**2)
+            temp[:ndico] = d_j**2
+            temp[ndico:] = 0
+            fftd_j() # fprof=fft(d_j**2)
+            
+            temp2[:Nz,:,:] = norm_fsf[:,:,:]
+            temp2[Nz:,:,:] = 0
+            fftfsf() 
+            temp3[:] = ffsf[:] * fd_j[:,np.newaxis, np.newaxis]
+            ifft_object()
+            norm_profile = res[cc1:cc2,:,:].copy()
         
-        # fftconvolve(norm_fsf[:,x,y], d_j**2)
-        temp[:ndico] = d_j**2
-        temp[ndico:] = 0
-        fftd_j() # fprof=fft(d_j**2)
-        
-        temp2[:Nz,:,:] = norm_fsf[:,:,:]
-        temp2[Nz:,:,:] = 0
-        fftfsf() 
-        temp3[:] = ffsf[:] * fd_j[:,np.newaxis, np.newaxis]
-        ifft_object()
-        norm_profile = res[cc1:cc2,:,:].copy()
-        
-        norm_profile[norm_profile <= 0] = np.inf
-        tmp = cube_profile/np.sqrt(norm_profile)
-        profile[tmp > correl] = k
-        correl = np.maximum( correl, tmp)
-        correl_min = np.minimum( correl_min, tmp)
+            norm_profile[norm_profile <= 0] = np.inf
+            tmp = cube_profile/np.sqrt(norm_profile)
+            profile[tmp > correl] = k
+            correl = np.maximum( correl, tmp)
+            correl_min = np.minimum( correl_min, tmp)
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return correl, profile, correl_min
