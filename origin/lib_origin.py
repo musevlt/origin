@@ -230,7 +230,7 @@ def Compute_Segmentation_test(STD_in):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))    
     return Segmentation_test
 
-def Segmentation(Segmentation_test, pfa, clean=True, mask=None):
+def Segmentation(Segmentation_test, pfa, mask=None):
     """Generate from a 3D Cube a 2D map where sources and background are
     separated
 
@@ -241,9 +241,6 @@ def Segmentation(Segmentation_test, pfa, clean=True, mask=None):
 
     pfa                 :   float
                             Pvalue for the test which performs segmentation
-    
-    clean               : Bool
-                          if thresholding of test is to clean or not  
     mask                : array
                           a mask to convolve the sources with                           
 
@@ -257,13 +254,12 @@ def Segmentation(Segmentation_test, pfa, clean=True, mask=None):
     gamma =  stats.chi2.ppf(1-pfa, 1)
 
     # threshold - erosion and dilation to clean ponctual "source"
-    sources = Segmentation_test>gamma
-    if clean:
-        sources = binary_erosion(sources,border_value=1,iterations=1)
-        sources = binary_dilation(sources,iterations=1)
+    sources = Segmentation_test > gamma
+    sources = binary_erosion(sources, border_value=1, iterations=1)
+    sources = binary_dilation(sources, iterations=1)
     if mask is not None: 
-        sources = signal.fftconvolve(sources,mask,mode='same')      
-        sources = sources>1e-9         
+        sources = signal.fftconvolve(sources, mask, mode='same')      
+        sources = sources > 1e-9         
     # Label
     map_in = measurements.label(sources)[0]
 
@@ -480,7 +476,7 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
     t0 = time.time()  
     
     # convolution mask definition
-    radius=2        
+    radius = 2        
     dxy = 2 * radius
     x = np.linspace(-dxy,dxy,1 + (dxy)*2)
     y = np.linspace(-dxy,dxy,1 + (dxy)*2)
@@ -1325,32 +1321,30 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
     
-def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):   
+def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
     (zM, yM, xM) = (CatM['z0'], CatM['y0'], CatM['x0'])
     (zm, ym, xm) = catm
-    spat_size2 = int( spat_size/2 )
-    spect_size2 = int( spect_size/2 )
+    spat_rad = int( spat_size/2 )
+    spect_rad = int( spect_size/2 )
     for n,z in enumerate(zm):
-        y = ym[n]
-        x = xm[n]            
-        x1 = np.maximum(0, x-spat_size2)
-        x2 = np.minimum(Nx, x+spat_size2)
-        y1 = np.maximum(0, y-spat_size2)
-        y2 = np.minimum(Ny, y+spat_size2)
-        z1 = np.maximum(0, z-spect_size2)
-        z2 = np.minimum(Nz, z+spect_size2)            
-        mdata[z1:z2, y1:y2, x1:x2] = 0  
+        y0 = ym[n]
+        x0 = xm[n] 
+        x, y = np.meshgrid(np.arange(mdata.shape[2]),
+                           np.arange(mdata.shape[1]))
+        ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
+        z1 = np.maximum(0, z-spect_rad)
+        z2 = np.minimum(Nz, z+spect_rad)            
+        mdata[z1:z2, ksel] = 0  
 
     for n,z in enumerate(zM):
-        y = yM[n]
-        x = xM[n]            
-        x1 = np.maximum(0, x-spat_size2)
-        x2 = np.minimum(Nx, x+spat_size2)
-        y1 = np.maximum(0, y-spat_size2)
-        y2 = np.minimum(Ny, y+spat_size2)
-        z1 = np.maximum(0, z-spect_size2)
-        z2 = np.minimum(Nz, z+spect_size2)            
-        Mdata[z1:z2, y1:y2, x1:x2] = 0   
+        y0 = yM[n]
+        x0 = xM[n]            
+        x, y = np.meshgrid(np.arange(mdata.shape[2]),
+                           np.arange(mdata.shape[1]))
+        ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
+        z1 = np.maximum(0, z-spect_rad)
+        z2 = np.minimum(Nz, z+spect_rad)            
+        Mdata[z1:z2, ksel] = 0   
     
     return Mdata, mdata 
 
@@ -1951,7 +1945,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     """
 
     # Label
-    map_in = Segmentation(segmentation_test, pfa) #LPI toujours clean=True, param clean a virer toujours True
+    map_in = Segmentation(segmentation_test, pfa)
 #    gamma =  stats.chi2.ppf(1-pfa, 1)
 #    map_in = (segmentation_test>gamma)*1.
 #    map_in[segmentation_test**2 == 0] = -1

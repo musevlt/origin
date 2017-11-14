@@ -50,7 +50,7 @@ def test_origin():
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step07_detection_lost()
+    my_origin.step07_detection_lost(catalog='complementary')
     my_origin.write()
     
     # estimation
