@@ -664,6 +664,8 @@ def area_growing(label, mask):
     
     # start by smaller    
     set_ind = np.argsort(np.sum(label,axis=(1,2)))
+    # closure horizon    
+    niter = 20
     
     label_out = label.copy()    
     nlab = label_out.shape[0]            
