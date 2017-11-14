@@ -1399,11 +1399,9 @@ class ORIGIN(object):
             CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct, 
                       self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny, 
                       self.param['spat_size'], self.param['spect_size'])   
-            purity =  self.param['purity'] # to be logic needs to have same purity
-            self._loginfo('complementary catalog, needs to have same purity than the correlation one')
-        else:
-            if purity is None:
-                purity = self.param['purity']        
+
+        if purity is None:
+            purity = self.param['purity']        
 
         self._loginfo('Threshold computed with purity = %.1f'%purity)    
         
