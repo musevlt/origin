@@ -1360,7 +1360,7 @@ class ORIGIN(object):
         ' (%d lines)'%len(self.Cat0))
         self._loginfo('07 Done')  
         
-    def step07_detection_lost(self, purity=None, NbSubcube=1, catalog='additional'):
+    def step07_detection_lost(self, purity=None, catalog='additional'):
         """create first catalog which contains:
         ['x', 'y', 'z', 'ID', 'ra', 'dec', 'lbda', 
         'T_GLR', 'profile', 'seg_label']
@@ -1370,7 +1370,6 @@ class ORIGIN(object):
         purity : float
                  if the estimated purity is not good
                  user purity to choose in the 
-        NbSubcube : to perform max loc computation on subcube, glued                     
         catalog : type of output catalog
                   'additional' : second catalog independent from Cat0
                   'complementary' : second catalog Complementary of Cat0                  
@@ -2068,7 +2067,7 @@ class ORIGIN(object):
         ax.set_xlabel('Threshold')
         ax2.set_ylabel('Purity')
         ax.set_ylabel('Number of detections')
-        ax.set_title('%s - threshold %f' %threshold)
+        ax.set_title('threshold %f' %threshold)
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
         ax.legend(h1+h2, l1+l2, loc=2)                      
