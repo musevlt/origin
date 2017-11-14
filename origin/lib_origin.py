@@ -641,7 +641,7 @@ def Convexline(points, snx, sny):
     return lab_out      
 
 
-def area_growing(label,mask):
+def area_growing(label, mask):
     """Growing and merging of all areas
 
     Parameters
@@ -664,12 +664,11 @@ def area_growing(label,mask):
     
     # start by smaller    
     set_ind = np.argsort(np.sum(label,axis=(1,2)))
-    # closure horizon    
-    niter = 20
     
     label_out = label.copy()    
     nlab = label_out.shape[0]            
-    while True:          
+    while True:
+        s = np.sum(label_out)          
         for n in set_ind:
             cu_lab = label_out[n,:,:]
             ind = np.delete(np.arange(nlab),n)
@@ -679,7 +678,7 @@ def area_growing(label,mask):
             cu_lab = binary_dilation(cu_lab,iterations=niter+1)
             cu_lab = binary_erosion(cu_lab,border_value=1,iterations=niter)    
             label_out[n,:,:] = cu_lab*border    
-        if np.sum(label_out) == np.sum(mask):
+        if np.sum(label_out) == np.sum(mask) or np.sum(label_out) ==s:
             break
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))   
