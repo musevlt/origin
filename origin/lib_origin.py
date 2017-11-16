@@ -1322,30 +1322,24 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
     
+def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad):
+    x, y = np.meshgrid(np.arange(data.shape[2]), np.arange(data.shape[1]))
+    ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
+    z1 = np.maximum(0, z0-spect_rad)
+    z2 = np.minimum(data.shape[0], z0+spect_rad)            
+    data[z1:z2, ksel] = 0  
+    
+    
 def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
     (zM, yM, xM) = (CatM['z0'], CatM['y0'], CatM['x0'])
     (zm, ym, xm) = catm
     spat_rad = int( spat_size/2 )
     spect_rad = int( spect_size/2 )
+    
     for n,z in enumerate(zm):
-        y0 = ym[n]
-        x0 = xm[n] 
-        x, y = np.meshgrid(np.arange(mdata.shape[2]),
-                           np.arange(mdata.shape[1]))
-        ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
-        z1 = np.maximum(0, z-spect_rad)
-        z2 = np.minimum(Nz, z+spect_rad)            
-        mdata[z1:z2, ksel] = 0  
-
+        _mask_circle_region(mdata, xm[n], ym[n], z, spat_rad, spect_rad)     
     for n,z in enumerate(zM):
-        y0 = yM[n]
-        x0 = xM[n]            
-        x, y = np.meshgrid(np.arange(mdata.shape[2]),
-                           np.arange(mdata.shape[1]))
-        ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
-        z1 = np.maximum(0, z-spect_rad)
-        z2 = np.minimum(Nz, z+spect_rad)            
-        Mdata[z1:z2, ksel] = 0   
+        _mask_circle_region(Mdata, xM[n], yM[n], z, spat_rad, spect_rad)          
     
     return Mdata, mdata 
 
@@ -1794,8 +1788,8 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc,MinLoc,thresh,spat_size,spect_size,filte
     locm = ( MinLoc>thresh )        
     
     if filter_act:
-        spat_size2 = int(spat_size/2)
-        spect_size2 = int(spect_size/2)        
+        spat_rad = int(spat_size/2)
+        spect_rad = int(spect_size/2)        
         
         LM = locM.copy()
         if both:
@@ -1803,29 +1797,12 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc,MinLoc,thresh,spat_size,spect_size,filte
         
         zm,ym,xm = np.where( locm )   
         for n,z in enumerate(zm):
-            y = ym[n]
-            x = xm[n]            
-            x1 = np.maximum(0,x-spat_size2)
-            x2 = np.minimum(nx,x+spat_size2)
-            y1 = np.maximum(0,y-spat_size2)
-            y2 = np.minimum(ny,y+spat_size2)
-            z1 = np.maximum(0,z-spect_size2)
-            z2 = np.minimum(nz,z+spect_size2)            
-            LM[z1:z2,y1:y2,x1:x2] = 0
+            _mask_circle_region(LM, xm[n], ym[n], z, spat_rad, spect_rad)           
             
         if both:            
             zm,ym,xm = np.where( locM )   
             for n,z in enumerate(zm):
-                y = ym[n]
-                x = xm[n]            
-                x1 = np.maximum(0,x-spat_size2)
-                x2 = np.minimum(nx,x+spat_size2)
-                y1 = np.maximum(0,y-spat_size2)
-                y2 = np.minimum(ny,y+spat_size2)
-                z1 = np.maximum(0,z-spect_size2)
-                z2 = np.minimum(nz,z+spect_size2)            
-                Lm[z1:z2,y1:y2,x1:x2] = 0            
-                   
+                _mask_circle_region(Lm, xm[n], ym[n], z, spat_rad, spect_rad)
             
         zM,yM,xM = np.where( LM>0 )
         if both:
