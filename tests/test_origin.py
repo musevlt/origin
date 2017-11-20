@@ -50,27 +50,21 @@ def test_origin():
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step07_detection_lost(catalog='complementary')
+    my_origin.step08_detection_lost()
     my_origin.write()
     
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
-    my_origin.step08_compute_spectra()
+    my_origin.step09_compute_spectra()
     my_origin.write()
-
-    # Distance maximum between 2 different lines (in pixels)
-#    deltaz = 1
-#    my_origin = ORIGIN.load('tmp2')
-#    my_origin.step09_spatiospectral_merging(deltaz=deltaz)
-#    my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
     cat = my_origin.step10_write_sources(ncpu=1)
     cat = my_origin.step10_write_sources(ncpu=2, overwrite=True)
-    assert (len(cat) == 5) 
+    assert (len(cat) == 8) 
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 5)
+    assert (len(cat) == 8)
     
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')

@@ -44,9 +44,9 @@ Usage
  
  >  orig.step07_detection()
  
- >  orig.step07_detection_lost()
+ >  orig.step08_detection_lost()
     
- >  orig.step08_compute_spectra()
+ >  orig.step09_compute_spectra()
     
  >  nsources = orig.step10_write_sources()
  

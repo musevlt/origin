@@ -2558,7 +2558,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     return Cat2, Cat_est_line_raw, Cat_est_line_var
 
-def Purity_Estimation(Cat_in, correl, purity_curves, purity_index): 
+def Purity_Estimation(Cat_in, data, purity_curves, purity_index): 
     """Function to compute the estimated purity for each line.
 
     Parameters
@@ -2566,11 +2566,11 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index):
     Cat_in     : astropy.Table
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
-    correl     : array
-                 Origin Correlation data
-    purity_curves     : array
+    data     : array, array
+                 Origin data
+    purity_curves     : array, array
                           purity curves related to area
-    purity_index      : array
+    purity_index      : array, array
                           index of purity curves related to area             
 
     Returns
@@ -2592,15 +2592,16 @@ def Purity_Estimation(Cat_in, correl, purity_curves, purity_index):
     for n,src in enumerate(Cat1_2):
         y = src['y1']
         x = src['x1'] 
-        z = src['z1']         
-        seuil = purity_index
-        fidel = purity_curves
-        value = correl[z,y,x]
+        z = src['z1']
+        i = src['comp']
+        seuil = purity_index[i]
+        fidel = purity_curves[i]
+        value = data[i][z,y,x]
         if value>seuil[(fidel==1).tolist().index(True)]:
             fid_tmp = 1
         else:
             fid_ind = (seuil-value>0).tolist().index(True)
-            # interpolation of correl value on purity curve
+            # interpolation of data value on purity curve
             fidel[fid_ind-1]
             x2 = seuil[fid_ind]
             x1 = seuil[fid_ind-1]
@@ -2918,7 +2919,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
                      param, path, name, i, ra, dec, x_centroid,
                      y_centroid, seg_label, wave_pix, GLR, num_profil,
                      nb_lines, Cat_est_line_data, Cat_est_line_var,
-                     y, x, flux, purity, src_vers, author):
+                     y, x, flux, purity, comp, src_vers, author):
     """Function to create the final source
 
     Parameters
@@ -2977,15 +2978,11 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     if 'threshold_list' in param.keys():
         th = param['threshold_list']
         for i,th in enumerate(param['threshold_list']):
-            src.header['OR_THL%02d'%i] = (th, 'OR input Threshold per area')
+            src.header['OR_THL%02d'%i] = ('%0.2f'%th, 'OR input Threshold per area')
     if 'neighboors' in param.keys():
         src.OR_NG = (param['neighboors'], 'OR input Neighboors')          
     if 'nbsubcube' in param.keys():
         src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes for the spatial segmentation')                        
-    if 'purity' in param.keys():
-        src.OR_PURI = (param['purity'], 'OR input Purity')
-    if 'threshold_option' in param.keys():
-        src.OR_THP = (param['threshold_option'], 'OR input Threshold option')
     if 'pfa' in param.keys():
         src.OR_PFA = (param['pfa'], 'OR input PFA')
     if 'grid_dxy' in param.keys():
@@ -2994,8 +2991,17 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_DZ = (param['deltaz'], 'OR input Deltaz')
     if 'pfa_merging' in param.keys():
         src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
-    if 'threshold' in param.keys():
-        src.OR_TH = (param['threshold'], 'OR threshold')
+    src.COMP_CAT = (comp[0], 'OR complemantary catalog')
+    if comp[0]:
+        if 'threshold2' in param.keys():
+            src.OR_TH = ('%0.2f'%param['threshold2'], 'OR threshold')
+        if 'purity2' in param.keys():
+            src.OR_PURI = ('%0.2f'%param['purity2'], 'OR input Purity')
+    else:
+        if 'threshold' in param.keys():
+            src.OR_TH = ('%0.2f'%param['threshold'], 'OR threshold')
+        if 'purity' in param.keys():
+            src.OR_PURI = ('%0.2f'%param['purity'], 'OR input Purity')
     
     # WHITE IMAGE
     src.add_white_image(cube)
@@ -3139,10 +3145,11 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         x = E['x1']
         flux = E['flux']
         purity = E['purity']
+        comp = E['comp']
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
                           wave_pix, GLR, num_profil, nb_lines,
                           Cat_est_line_data, Cat_est_line_var,
-                          y, x, flux, purity,
+                          y, x, flux, purity, comp,
                           src_vers, author)
         sources_arglist.append(source_arglist)
 

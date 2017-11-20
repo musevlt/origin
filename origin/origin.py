@@ -16,7 +16,7 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 from __future__ import absolute_import, division
 
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, vstack
 import glob
 import logging
 import matplotlib.pyplot as plt
@@ -169,7 +169,8 @@ class ORIGIN(object):
                  cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
                  cube_local_min, continuum,
-                 mapThresh, areamap, imawhite, imadct, imastd, zm, ym, xm):
+                 mapThresh, areamap, imawhite, imadct, imastd, zm, ym, xm,
+                 Cat2, Pval_r_comp, index_pval_comp, Det_M_comp, Det_m_comp):
         #loggers
         setup_logging(name='origin', level=logging.DEBUG,
                            color=False,
@@ -373,13 +374,17 @@ class ORIGIN(object):
             self.det_correl_min = None
         # step8
         self.Cat1 = Cat1
-        self.spectra = spectra
+        self.Pval_r_comp = Pval_r_comp
+        self.index_pval_comp = index_pval_comp
+        self.Det_M_comp = Det_M_comp
+        self.Det_m_comp = Det_m_comp
         # step9
-#        self.Cat2 = Cat2
-#        if self.Cat2 is not None:
-#            self.Cat2b = self._Cat2b()
-#        else:
-#            self.Cat2b = None
+        self.spectra = spectra
+        self.Cat2 = Cat2
+        if self.Cat2 is not None:
+            self.Cat2b = self._Cat2b()
+        else:
+            self.Cat2b = None
         
         self._loginfo('00 Done')
         
@@ -428,7 +433,9 @@ class ORIGIN(object):
                    segmentation_test=None, segmentation_map_threshold=None, 
                    cube_local_min=None,
                    continuum=None, mapThresh=None, areamap=None, imawhite=None,
-                   imadct=None, imastd=None, zm=None, ym=None, xm=None)
+                   imadct=None, imastd=None, zm=None, ym=None, xm=None,
+                   Cat2=None, Pval_r_comp=None, index_pval_comp=None,
+                   Det_M_comp=None, Det_m_comp=None)
         
     @classmethod
     def load(cls, folder, newname=None):
@@ -631,12 +638,30 @@ class ORIGIN(object):
             xm = np.loadtxt('%s/xm.txt'%folder, ndmin=1).astype(np.int)
         else:
             xm = None
-        # step8
+         # step8
+        if os.path.isfile('%s/Pval_r_comp.txt'%folder):
+            Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt'%folder).astype(np.float)
+        else:
+            Pval_r_comp = None
+        if os.path.isfile('%s/index_pval_comp.txt'%folder):
+            index_pval_comp = np.loadtxt('%s/index_pval_comp.txt'%folder)\
+            .astype(np.float) 
+        else:
+            index_pval_comp = None
+        if os.path.isfile('%s/Det_M_comp.txt'%folder):
+            Det_M_comp = np.loadtxt('%s/Det_M_comp.txt'%folder).astype(np.int)
+        else:
+            Det_M_comp = None
+        if os.path.isfile('%s/Det_min_comp.txt'%folder):
+            Det_m_comp = np.loadtxt('%s/Det_min_comp.txt'%folder).astype(np.int)
+        else:
+            Det_m_comp = None
         if os.path.isfile('%s/Cat1.fits'%folder):
             Cat1 = Table.read('%s/Cat1.fits'%folder)
-            _format_cat(Cat1, 1)
+            _format_cat(Cat1, 0)
         else:
             Cat1 = None
+        #step09
         if os.path.isfile('%s/spectra.fits'%folder):
             spectra = []
             fspectra = fits.open('%s/spectra.fits'%folder)
@@ -646,8 +671,7 @@ class ORIGIN(object):
                                         ext=('DATA%d'%i, 'STAT%d'%i)))
             fspectra.close()
         else:
-            spectra = None
-            
+            spectra = None            
         if os.path.isfile('%s/continuum.fits'%folder):
             continuum = []
             fcontinuum = fits.open('%s/continuum.fits'%folder)
@@ -660,6 +684,11 @@ class ORIGIN(object):
             continuum = None            
         
         # step9
+        if os.path.isfile('%s/Cat2.fits'%folder):
+            Cat2 = Table.read('%s/Cat2.fits'%folder)
+            _format_cat(Cat2, 1)
+        else:
+            Cat2 = None
         if os.path.isfile('%s/segmentation_map_threshold.fits'%folder):
             segmentation_map_threshold = Image('%s'%folder + \
             '/segmentation_map_threshold.fits')
@@ -691,7 +720,10 @@ class ORIGIN(object):
                    segmentation_map_threshold=segmentation_map_threshold,
                    cube_local_min=cube_local_min, continuum=continuum,
                    mapThresh=mapThresh, areamap=areamap, imawhite=ima_white,
-                   imadct=ima_dct, imastd=ima_std, zm=zm, ym=ym, xm=xm)
+                   imadct=ima_dct, imastd=ima_std, zm=zm, ym=ym, xm=xm,
+                   Cat2=Cat2, Pval_r_comp=Pval_r_comp,
+                   index_pval_comp=index_pval_comp, Det_M_comp=Det_M_comp,
+                   Det_m_comp=Det_m_comp)
                    
     def _loginfo(self, logstr):
         self._log_file.info(logstr) 
@@ -841,10 +873,24 @@ class ORIGIN(object):
             np.savetxt('%s/zm.txt'%(path2), self.det_correl_min[0])
             np.savetxt('%s/ym.txt'%(path2), self.det_correl_min[1])
             np.savetxt('%s/xm.txt'%(path2), self.det_correl_min[2])
+        if self.Pval_r_comp is not None:
+            np.savetxt('%s/Pval_r_comp.txt'%(path2), self.Pval_r_comp)
+        if self.index_pval_comp is not None:
+            np.savetxt('%s/index_pval_comp.txt'%(path2), self.index_pval_comp)
+        if self.Det_M_comp is not None:
+            np.savetxt('%s/Det_M_comp.txt'%(path2), self.Det_M_comp)
+        if self.Det_m_comp is not None:
+            np.savetxt('%s/Det_min_comp.txt'%(path2), self.Det_m_comp)
         
         # step8
         if self.Cat1 is not None:
             self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
+            
+        # step9
+        if self.Cat2 is not None:
+            self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
+        if self.Cat2b is not None:
+            self.Cat2b.write('%s/Cat2b.fits'%path2, overwrite=True)
         if self.spectra is not None:
             hdulist = fits.HDUList([fits.PrimaryHDU()])
             for i in range(len(self.spectra)):
@@ -1349,35 +1395,30 @@ class ORIGIN(object):
                                            self.param['tol_spat'],
                                            self.param['tol_spec'], False,
                                            self.cube_profile._data,
-                                           self.wcs, self.wave)     
+                                           self.wcs, self.wave)
                                 
         _format_cat(self.Cat0, 0)
         self._loginfo('Save the catalogue in self.Cat0' + \
         ' (%d lines)'%len(self.Cat0))
         self._loginfo('07 Done')  
         
-    def step07_detection_lost(self, purity=None, catalog='additional'):
-        """create first catalog which contains:
-        ['x', 'y', 'z', 'ID', 'ra', 'dec', 'lbda', 
-        'T_GLR', 'profile', 'seg_label']
+    def step08_detection_lost(self, purity=None):
+        """
 
         Parameters
         ----------
         purity : float
-                 if the estimated purity is not good
-                 user purity to choose in the 
-        catalog : type of output catalog
-                  'additional' : second catalog independent from Cat0
-                  'complementary' : second catalog Complementary of Cat0                  
+                 purity to automatically compute the threshold 
+                 If None, previous purity is used
         Returns
         -------
-        self.Cat0 : astropy.Table
+        self.Cat1 : astropy.Table
                     Catalogue of the referent voxels for each group.
-                    Columns: x y z ra dec lbda T_GLR profile
+                    Columns: x y z ra dec lbda T_GLR profile comp
                     Coordinates are in pixels.
         """        
 
-        self._loginfo('Step 07 bis - Thresholding and spatio-spectral merging')  
+        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')  
         
         if self.Cat0 is None:
             raise IOError('Run the step 07 to initialize Cat0')        
@@ -1390,22 +1431,23 @@ class ORIGIN(object):
                                self.mask, intx, inty, self.param['NbSubcube'],
                                self.param['neighboors'])
         
-        if catalog=='complementary': 
-            cube_local_max_faint_dct, cube_local_min_faint_dct = \
-            CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct, 
-                      self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny, 
-                      self.param['spat_size'], self.param['spect_size'])   
+        # complementary catalog
+        cube_local_max_faint_dct, cube_local_min_faint_dct = \
+        CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct, 
+                  self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny, 
+                  self.param['spat_size'], self.param['spect_size'])   
 
         if purity is None:
-            purity = self.param['purity']        
+            purity = self.param['purity']  
+        self.param['purity2'] = purity
 
         self._loginfo('Threshold computed with purity = %.1f'%purity)    
         
         self.cube_local_max_faint_dct = cube_local_max_faint_dct
         self.cube_local_min_faint_dct = cube_local_min_faint_dct
     
-        self.ThresholdPval2, self.Pval_r2, self.index_pval2, \
-        segmap2, self.Det_M2, self.Det_m2 = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, \
+        segmap2, self.Det_M_comp, self.Det_m_comp = Compute_threshold_purity(
                                            purity, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
@@ -1416,8 +1458,10 @@ class ORIGIN(object):
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
                                            True)
+        self.param['threshold2'] =  threshold2                                     
+        self._loginfo('Threshold: %.1f '%threshold2)
         
-        self.Catcomp, inut = Create_local_max_cat(self.ThresholdPval2, 
+        Catcomp, inut = Create_local_max_cat(threshold2, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
                                            segmap2, 
@@ -1427,16 +1471,21 @@ class ORIGIN(object):
                                            self.param['tol_spec'],
                                            False,
                                            self.cube_profile._data,
-                                           self.wcs, self.wave)      
+                                           self.wcs, self.wave)
                                            
-        #LPI a merger avec Cat0
-        #LPI si filter(complematary) a additionner sinon a merger
-        #(utiliser spatio spectral merging avec indicateur pour origin des sources)
+        # merging
+        self.Cat0['comp'] = 0
+        Catcomp['comp'] = 1
+        Catcomp['ID'] += self.Cat0['ID'].max()
+        self.Cat1 = vstack([self.Cat0, Catcomp])                                  
+        _format_cat(self.Cat1, 0)
+        self._loginfo('Save the catalogue in self.Cat1' + \
+        ' (%d lines)'%len(self.Cat1))
         
-        self._loginfo('07 Done')
+        self._loginfo('08 Done')
         
         
-    def step08_compute_spectra(self, grid_dxy=0):
+    def step09_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1450,32 +1499,33 @@ class ORIGIN(object):
 
         Returns
         -------
-        self.Cat1    : astropy.Table
+        self.Cat2    : astropy.Table
                        Catalogue of parameters of detected emission lines.
                        Columns: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile
                                 residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._loginfo('Step08 - Lines estimation (grid_dxy=%d)' %(grid_dxy))
+        self._loginfo('Step09 - Lines estimation (grid_dxy=%d)' %(grid_dxy))
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat0 is None:
-            raise IOError('Run the step 07 to initialize self.Cat0 catalogs')
+            raise IOError('Run the step 08 to initialize self.Cat1 catalog')
             
-        self.Cat1, Cat_est_line_raw_T, Cat_est_line_var_T = \
-        Estimation_Line(self.Cat0, self.cube_raw, self.var, self.PSF, \
+        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = \
+        Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF, \
                      self.wfields, self.wcs, self.wave, size_grid = grid_dxy, \
                      criteria = 'flux', order_dct = 30, horiz_psf = 1, \
                      horiz = 5)
             
         self._loginfo('Purity estimation')    
-        self.Cat1 = Purity_Estimation(self.Cat1, self.cube_correl.data, 
-                                        self.Pval_r, self.index_pval)
-                   
-        _format_cat(self.Cat1, 1)
-        self._loginfo('Save the updated catalogue in self.Cat1' + \
-        ' (%d lines)'%len(self.Cat1))
+        self.Cat2 = Purity_Estimation(self.Cat2,
+                                      [self.cube_correl.data, self.cube_std.data], 
+                                      [self.Pval_r, self.Pval_r_comp],
+                                      [self.index_pval, self.index_pval_comp])                  
+        _format_cat(self.Cat2, 1)
+        self._loginfo('Save the updated catalogue in self.Cat2' + \
+        ' (%d lines)'%len(self.Cat2))
         
         self.spectra = [] 
         for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
@@ -1485,62 +1535,8 @@ class ORIGIN(object):
         self._loginfo('Save the estimated spectrum of each line in ' + \
         'self.spectra')
         
-        self._loginfo('08 Done')
-#        self.Cat2b = self._Cat2b()
-
-#    def step09_spatiospectral_merging(self, deltaz=20, pfa=0.05):
-#        """Construct a catalogue of sources by spatial merging of the
-#        detected emission lines in a circle with a diameter equal to
-#        the mean over the wavelengths of the FWHM of the FSF.
-#        Then, merge the detected emission lines distants in an estimated source 
-#        area.
-#
-#        Parameters
-#        ----------
-#        deltaz : integer
-#                 Distance maximum between 2 different lines
-#        pfa    : float
-#                 Pvalue for the test which performs segmentation                 
-#
-#        Returns
-#        -------
-#        self.Cat2 : astropy.Table
-#                    Catalogue
-#                    Columns: ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
-#                    T_GLR profile residual flux num_line purity seg_label
-#        self.segmentation_map_spatspect : `~mpdaf.obj.Image`
-#                                          Segmentation map
-#        """
-#        self._loginfo('Step09 Spatio spectral merging ' + \
-#        '(deltaz=%d, pfa=%d)'%(deltaz, pfa))
-#        if self.wfields is None:
-#            fwhm = self.FWHM_PSF
-#        else:
-#            fwhm = np.max(np.array(self.FWHM_PSF)) # to be improved
-#        self.param['deltaz'] = deltaz
-#        self.param['pfa_merging'] = pfa
-#        
-#        if self.Cat1 is None:
-#            raise IOError('Run the step 08 to initialize self.Cat1')
-#
-#        cat = Spatial_Merging_Circle(self.Cat1, fwhm, self.wcs)
-#        self.Cat2, segmap = SpatioSpectral_Merging(cat, pfa,
-#                                           self.segmentation_test.data, \
-#                                           self.cube_correl.data, \
-#                                           self.var, deltaz, self.wcs)
-#        self.segmentation_map_spatspect = Image(data=segmap,
-#                                    wcs=self.wcs, mask=np.ma.nomask)
-#        self._loginfo('Save the segmentation map for spatio-spectral ' + \
-#        'merging in self.segmentation_map_spatspect')  
-#        
-#        _format_cat(self.Cat2, 2)
-#        self._loginfo('Save the updated catalogue in self.Cat2' + \
-#        ' and self.Cat2b' + \
-#        '(%d objects, %d lines)'%(np.unique(self.Cat2['ID']).shape[0],
-#          len(self.Cat2)))
-#          
-#        self.Cat2b = self._Cat2b()
-#        self._loginfo('09 Done')
+        self._loginfo('09 Done')
+        self.Cat2b = self._Cat2b()
         
     def _Cat2b(self):
         from astropy.table import MaskedColumn
@@ -1617,7 +1613,7 @@ class ORIGIN(object):
         self._loginfo('Step 10 - Sources creation')
         self._loginfo('Add RA-DEC to the catalogue')
         if self.Cat1 is None:
-            raise IOError('Run the step 09 to initialize self.Cat1')
+            raise IOError('Run the step 09 to initialize self.Cat2')
 
         # path
         if path is not None and not os.path.exists(path):
@@ -1644,7 +1640,7 @@ class ORIGIN(object):
             raise IOError('Run the step 05 to initialize self.cube_correl')
         if self.spectra is None:
             raise IOError('Run the step 08 to initialize self.spectra')
-        nsources = Construct_Object_Catalogue(self.Cat1, self.spectra,
+        nsources = Construct_Object_Catalogue(self.Cat2, self.spectra,
                                               self.cube_correl,
                                               self.wave, self.FWHM_profiles,
                                               path_src, self.name, self.param,
