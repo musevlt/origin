@@ -156,9 +156,6 @@ class ORIGIN(object):
                              Catalog returned by step07_compute_spectra.
         spectra            : list of `~mpdaf.obj.Spectrum`
                              Estimated lines. Result of step06_compute_spectra.
-        continuum          : list of `~mpdaf.obj.Spectrum`
-                             Roughly Estimated continuum. 
-                             Result of step07_compute_spectra.                             
     """
     
     def __init__(self, path, name, filename,  fieldmap, profiles, PSF, FWHM_PSF,
@@ -168,7 +165,7 @@ class ORIGIN(object):
                  Cat1, spectra, param, cube_std, var,
                  cube_local_max, cont_dct,
                  segmentation_test, segmentation_map_threshold,
-                 cube_local_min, continuum,
+                 cube_local_min,
                  mapThresh, areamap, imawhite, imadct, imastd, zm, ym, xm,
                  Cat2, Pval_r_comp, index_pval_comp, Det_M_comp, Det_m_comp):
         #loggers
@@ -432,7 +429,7 @@ class ORIGIN(object):
                    cube_local_max=None,cont_dct=None,
                    segmentation_test=None, segmentation_map_threshold=None, 
                    cube_local_min=None,
-                   continuum=None, mapThresh=None, areamap=None, imawhite=None,
+                   mapThresh=None, areamap=None, imawhite=None,
                    imadct=None, imastd=None, zm=None, ym=None, xm=None,
                    Cat2=None, Pval_r_comp=None, index_pval_comp=None,
                    Det_M_comp=None, Det_m_comp=None)
@@ -672,18 +669,6 @@ class ORIGIN(object):
             fspectra.close()
         else:
             spectra = None            
-        if os.path.isfile('%s/continuum.fits'%folder):
-            continuum = []
-            fcontinuum = fits.open('%s/continuum.fits'%folder)
-            for i in range(len(fcontinuum)//2):
-                continuum.append(Spectrum('%s/continuum.fits'%folder,
-                                        hdulist=fcontinuum,
-                                        ext=('DATA%d'%i, 'STAT%d'%i)))
-            fcontinuum.close()
-        else:
-            continuum = None            
-        
-        # step9
         if os.path.isfile('%s/Cat2.fits'%folder):
             Cat2 = Table.read('%s/Cat2.fits'%folder)
             _format_cat(Cat2, 1)
@@ -718,7 +703,7 @@ class ORIGIN(object):
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_test=segmentation_test,
                    segmentation_map_threshold=segmentation_map_threshold,
-                   cube_local_min=cube_local_min, continuum=continuum,
+                   cube_local_min=cube_local_min,
                    mapThresh=mapThresh, areamap=areamap, imawhite=ima_white,
                    imadct=ima_dct, imastd=ima_std, zm=zm, ym=ym, xm=xm,
                    Cat2=Cat2, Pval_r_comp=Pval_r_comp,
