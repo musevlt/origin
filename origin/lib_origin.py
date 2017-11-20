@@ -48,7 +48,7 @@ import pyfftw
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
-from scipy.spatial import KDTree, ConvexHull
+from scipy.spatial import ConvexHull
 from scipy.sparse.linalg import svds
 from six.moves import range, zip
 
@@ -1994,7 +1994,7 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
     -------
     Cat_ref : astropy.Table
               Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : x y z ra dec lba T_GLR profile
+              Columns of Cat_ref : ID ra dec lba x0 y0 z0 profile seglabel T_GLR
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -2020,10 +2020,10 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
     dec = skycrd[:, 0]
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
-    Cat_ref = Table([idout, ra, dec, lbda, xpixRef, ypixRef, zpixRef, correl_max,
-                     profile_max,seg_label],
-                    names=('ID', 'ra', 'dec', 'lbda','x0', 'y0', 'z0', 'T_GLR',
-                           'profile','seg_label'))
+    Cat_ref = Table([idout, ra, dec, lbda, xpixRef, ypixRef, zpixRef,
+                     profile_max,seg_label, correl_max,],
+                    names=('ID', 'ra', 'dec', 'lbda','x0', 'y0', 'z0',
+                           'profile','seg_label', 'T_GLR'))
     Cat_ref.sort('ID')
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat_ref, (zm, ym, xm)
@@ -2538,9 +2538,9 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
     col_flux = Column(name='flux', data=Cat2_flux5)
     col_res = Column(name='residual', data=Cat2_res_min5)
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
-    col_x = Column(name='x1', data=Cat2_x_grid)
-    col_y = Column(name='y1', data=Cat2_y_grid)
-    col_z = Column(name='z1', data=Cat2_z_grid)
+    col_x = Column(name='x', data=Cat2_x_grid)
+    col_y = Column(name='y', data=Cat2_y_grid)
+    col_z = Column(name='z', data=Cat2_z_grid)
 
     Cat2.add_columns([col_x, col_y, col_z, col_res, col_flux, col_num],
                      indexes=[4, 5, 6, 8, 8, 8])
@@ -2581,9 +2581,9 @@ def Purity_Estimation(Cat_in, data, purity_curves, purity_index):
     purity = []
     
     for n,src in enumerate(Cat1_2):
-        y = src['y1']
-        x = src['x1'] 
-        z = src['z1']
+        y = src['y']
+        x = src['x'] 
+        z = src['z']
         i = src['comp']
         seuil = purity_index[i]
         fidel = purity_curves[i]
@@ -2605,268 +2605,6 @@ def Purity_Estimation(Cat_in, data, purity_curves, purity_index):
     Cat1_2.add_columns([col_fid])
     return Cat1_2
 
-
-def Spatial_Merging_Circle(Cat0, fwhm_fsf, wcs):
-    """Construct a catalogue of sources by spatial merging of the detected
-    emission lines in a circle with a diameter equal to the mean over the
-    wavelengths of the FWHM of the FSF
-
-    Parameters
-    ----------
-    Cat0     : astropy.Table
-               catalogue
-               Columns of Cat0:
-               ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
-                       flux num_line purity
-    fwhm_fsf : float
-               The mean over the wavelengths of the FWHM of the FSF
-    wcs      : `mpdaf.obj.WCS`
-               RA-DEC coordinates.
-
-    Returns
-    -------
-    CatF : astropy.Table
-           Columns of CatF:
-           ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
-                    T_GLR profile residual flux num_line purity
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
-    colF = []
-    colF_id = []
-    colF_x = []
-    colF_y = []
-    colF_xc = []
-    colF_yc = []
-    colF_nlines = []
-
-    points = np.empty((len(Cat0), 2))
-    points[:, 0] = Cat0['x1'].data
-    points[:, 1] = Cat0['y1'].data
-
-    col_tglr = Cat0['T_GLR'].data
-    col_id = np.arange(len(Cat0))
-
-    t = KDTree(points)
-    r = t.query_ball_tree(t, fwhm_fsf / 2)
-    r = [list(x) for x in set(tuple(x) for x in r)]
-
-    centroid = np.array([np.sum(col_tglr[r[i]][:, np.newaxis] * points[r[i]],
-                                axis=0) \
-                            / np.sum(col_tglr[r[i]]) for i in range(len(r))])
-    unique_centroid = np.array(list(set(tuple(p) for p in centroid)))
-
-    t_centroid = KDTree(unique_centroid)
-    r = t_centroid.query_ball_tree(t, fwhm_fsf / 2)
-
-    sorted_lists = sorted(zip(r, unique_centroid), key=lambda t: len(t[0]),
-                          reverse=True)
-    r = [p[0] for p in sorted_lists]
-    unique_centroid = [p[1] for p in sorted_lists]
-
-    used_lines = []
-
-    for i in range(len(r)):
-        # Number of lines for this source
-        lines = [l for l in r[i] if col_id[l] not in used_lines]
-        if len(lines) > 0:
-            # Number of this source
-            num_source = i + 1
-
-            used_lines += lines
-            nb_lines = len(lines)
-            # To fulfill each line of the catalogue
-            n_S = np.resize(num_source, nb_lines)
-            # Coordinates of the center of the circle
-            x_c = np.resize(unique_centroid[i][0], nb_lines)
-            y_c = np.resize(unique_centroid[i][1], nb_lines)
-            # Centroid weighted by the T_GLR of voxels in each group
-            centroid = np.sum(col_tglr[lines][:, np.newaxis] * points[lines],
-                              axis=0) / np.sum(col_tglr[lines])
-            # To fulfill each line of the catalogue
-            x_centroid = np.resize(centroid[0], nb_lines)
-            y_centroid = np.resize(centroid[1], nb_lines)
-            # Number of lines for this source
-            nb_lines = np.resize(int(nb_lines), nb_lines)
-            # New catalogue of detected emission lines merged in sources
-            colF.append(col_id[lines])
-            colF_id.append(n_S)
-            colF_x.append(x_c)
-            colF_y.append(y_c)
-            colF_xc.append(x_centroid)
-            colF_yc.append(y_centroid)
-            colF_nlines.append(nb_lines)
-
-    CatF = Cat0[np.concatenate(colF)].copy()
-    col_id = Column(name='ID', data=np.concatenate(colF_id))
-    colF_xc = np.concatenate(colF_xc)
-    col_xc = Column(name='x2', data=colF_xc)
-    colF_yc = np.concatenate(colF_yc)
-    col_yc = Column(name='y2', data=colF_yc)
-    col_nlines = Column(name='nb_lines', data=np.concatenate(colF_nlines))
-    # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(colF_yc, colF_xc)]
-    skycrd = wcs.pix2sky(pixcrd)
-    CatF['ra'] = skycrd[:, 1]
-    CatF['dec']= skycrd[:, 0]
-    CatF.add_columns([col_id, col_xc, col_yc, col_nlines],
-                     indexes=[0, 5, 7, 9])
-
-    nid = len(np.unique(CatF['ID']))
-    logger.info('%d sources identified in catalog after spatial merging', nid)
-    logger.debug('%s executed in %1.1fs' % (whoami(), time.time() - t0))
-
-    return CatF
-
-
-
-
-def SpatioSpectral_Merging(cat_in, pfa, segmentation_test, cor_in, var_in , 
-                           deltaz, wcs): 
-    """Merge the detected emission lines distants to less than deltaz
-    spectral channel in a source area
-
-    Parameters
-    ---------
-    Cat          : astropy.Table
-                   Catalogue of detected emission lines
-                   Columns of Cat:
-                   ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
-                    T_GLR profile residual flux num_line purity
-    pfa          : Pvalue for the test which performs segmentation
-    segmentation_test : array
-                        Test on estimated continuum for segmentation  
-    cor_in       : Array
-                   Correlation Cube
-    var_in       : Array
-                   Variance Cube given or computed in preprocessing step
-
-    deltaz       : integer
-                   Distance maximum between 2 different lines
-
-    Returns
-    -------
-    CatF : astropy.Table
-           Catalogue
-           Columns of CatF:
-           ID ra dec lbda x0 x1 x2 y0 y1 y2 z0 z1 nb_lines
-                    T_GLR profile residual flux num_line purity seg_label
-    map_in       : Array
-                   segmentation map           
-
-    Date  : June, 23 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
-    nl,ny,nx = cor_in.shape
-
-    # label
-    map_in = Segmentation(segmentation_test, pfa) 
-
-    # MAX Spectra for sources with same ID
-    _id = []
-    _area = []
-    _specmax = []
-    for id_src in np.unique(cat_in['ID']):
-        cat_src = cat_in[cat_in['ID']==id_src]
-        mean_x = int(np.mean(cat_src['x1']))
-        mean_y = int(np.mean(cat_src['y1']))
-        max_spectre = np.amax(cor_in[:,cat_src['y1'], cat_src['x1']], axis=1)
-        area = map_in[mean_y, mean_x]
-
-        _id.append(id_src)
-        _area.append(area)
-        _specmax.append(np.argmax(max_spectre))
-
-    _area = np.asarray(_area)
-    _id = np.asarray(_id)
-    _specmax = np.asarray(_specmax)
-
-    # analyze per area
-    # we skip background and when a single source is detected in an area
-    _area2 = []
-    _id2 = []
-    _specmax2 = []
-    for a_n in np.unique(_area):
-        a_n = int(a_n)
-        if a_n > 0:
-            ID = _id[_area==a_n]
-            if len(ID)>1:
-                _area2.append(a_n)
-                _id2.append(ID)
-                _specmax2.append(_specmax[_area==a_n])
-
-    # for each area with several sources
-    # make comparison and give unique ID
-    id_cal = []
-    for area, id_cp, listcopy in zip(_area2, _id2, _specmax2):
-        while len(listcopy)>0:
-
-            loc = listcopy[0]
-            idloc = id_cp[0]
-            oth = listcopy[1:]
-            idoth = id_cp[1:]
-
-            arg = np.where( np.abs( loc - oth ) < deltaz )[0]
-
-            id_cal.append( (idloc,idloc) )
-
-            if arg.sum()>0:  # MATCH LOOP on found
-                for n in arg:
-                    id_cal.append( (idoth[n],idloc) )
-                listcopy = np.delete(listcopy,1+arg)
-                id_cp = np.delete(id_cp,1+arg)
-
-            listcopy = np.delete(listcopy,0)
-            id_cp = np.delete(id_cp,0)
-
-    #% Process the catalog
-    cat_out = cat_in.copy()
-    ID_tmp = cat_out['ID']
-
-    ID_arr = np.array(id_cal)
-    #col_old_id = Column(name='ID_old', data=cat_in['ID'])
-    for n in ID_arr:
-        for m in range(len(ID_tmp)):
-            if ID_tmp[m] == n[0]:
-                ID_tmp[m] = n[1]
-
-    cat_out['ID'] = ID_tmp
-
-    xc = np.zeros(len(cat_in))
-    yc = np.zeros(len(cat_in))
-    seg = np.zeros(len(cat_in), dtype=np.int)
-
-    # Spatial Centroid and label of the segmentation map
-    for ind_id_src in np.unique(cat_out['ID']):
-        ind_id_src = int(ind_id_src)
-        x = np.mean( cat_out[cat_out['ID']==ind_id_src]['x1'] )
-        y = np.mean( cat_out[cat_out['ID']==ind_id_src]['y1'] )
-        seg_label = map_in[int(y), int(x)]
-        xc[cat_out['ID']==ind_id_src] = x
-        yc[cat_out['ID']==ind_id_src] = y
-        seg[cat_out['ID']==ind_id_src] = seg_label
-
-    cat_out['x2'] = xc
-    cat_out['y2'] = yc
-    pixcrd = [[p, q] for p, q in zip(yc, xc)]
-    skycrd = wcs.pix2sky(pixcrd)
-    cat_out['ra'] = skycrd[:, 1]
-    cat_out['dec']= skycrd[:, 0]
-
-    #save the label of the segmentation map
-    col_seg_label = Column(name='seg_label', data=seg)
-    cat_out.add_columns([col_seg_label])
-    
-    nid = len(np.unique(cat_out['ID']))
-    logger.info('%d sources identified in catalog after spectral merging', nid)
-    logger.debug('%s executed in %1.1fs' % (whoami(), time.time() - t0))
-    
-    return cat_out, map_in
-    
 def estimate_spectrum(nb_lines, wave_pix, num_profil, fwhm_profiles, 
                       Cat_est_line_data, Cat_est_line_var, corr_line):
     """
@@ -2964,8 +2702,6 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_PFAT = (param['pfa_test'], 'OR input PFA test')
     if 'itermax' in param.keys():
         src.OR_ITMAX = (param['itermax'], 'OR input Maximum number of iterations')
-    if 'threshold_test' in param.keys(): # To be removed
-        src.OR_THV = (param['threshold_test'], 'OR input Threshold')
     if 'threshold_list' in param.keys():
         th = param['threshold_list']
         for i,th in enumerate(param['threshold_list']):
@@ -2975,24 +2711,30 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     if 'nbsubcube' in param.keys():
         src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes for the spatial segmentation')                        
     if 'pfa' in param.keys():
-        src.OR_PFA = (param['pfa'], 'OR input PFA')
+        src.OR_PFA = (param['pfa'], 'OR input PFA for the test which performs segmentation ')
+    if 'tol_spat' in param.keys():
+        src.OR_DXY = (param['tol_spat'], 'spatial tolerance for the spatial merging (distance in pixels)')
+    if 'tol_spec' in param.keys():
+        src.OR_DZ = (param['tol_spec'], 'spectral tolerance for the spatial merging (distance in pixels)')
+    if 'spat_size' in param.keys():
+        src.OR_SXY = (param['spat_size'], 'spatiale size of the spatiale filter')                
+    if 'spect_size' in param.keys():
+        src.OR_SZ = (param['spect_size'], 'spectral lenght of the spectral filter')
     if 'grid_dxy' in param.keys():
         src.OR_DXY = (param['grid_dxy'], 'OR input Grid Nxy')
-    if 'deltaz' in param.keys():
-        src.OR_DZ = (param['deltaz'], 'OR input Deltaz')
-    if 'pfa_merging' in param.keys():
-        src.OR_PFAM = (param['pfa_merging'], 'OR input PFA merging')
     src.COMP_CAT = (comp[0], 'OR complemantary catalog')
     if comp[0]:
         if 'threshold2' in param.keys():
             src.OR_TH = ('%0.2f'%param['threshold2'], 'OR threshold')
         if 'purity2' in param.keys():
             src.OR_PURI = ('%0.2f'%param['purity2'], 'OR input Purity')
+        cols[3] = 'STD'
     else:
         if 'threshold' in param.keys():
             src.OR_TH = ('%0.2f'%param['threshold'], 'OR threshold')
         if 'purity' in param.keys():
             src.OR_PURI = ('%0.2f'%param['purity'], 'OR input Purity')
+        cols[3] = 'GLR'
     
     # WHITE IMAGE
     src.add_white_image(cube)
@@ -3085,8 +2827,8 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     unone = u.dimensionless_unscaled
 
     cols = ['LBDA_ORI', 'FWHM_ORI', 'FLUX_ORI', 'GLR', 'PROF','PURITY']
-    units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone, unone]
-    fmt = ['.2f', '.2f', '.1f', '.1f', '.1e', 'd', '.2f']
+    units = [u.Angstrom, u.Angstrom, uflux, unone, unone, unone]
+    fmt = ['.2f', '.2f', '.1f', '.1f', 'd', '.2f']
     desc = None
 
     step_wave = wave.get_step(unit=u.angstrom)
@@ -3117,13 +2859,12 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         E = Cat[Cat['ID'] == i]
         ra = E['ra'][0]
         dec = E['dec'][0]
-        x_centroid = E['x1'][0]
-        y_centroid = E['y1'][0]
+        x_centroid = E['x'][0]
+        y_centroid = E['y'][0]
         seg_label = E['seg_label'][0]
         # Lines of this group
-        E.sort('z1')
-        wave_pix = E['z1'].data
-        GLR = E['T_GLR']
+        E.sort('z')
+        wave_pix = E['z'].data
         num_profil = E['profile'].data
         # Number of lines in this group
         nb_lines = len(E)
@@ -3132,11 +2873,15 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         for j in range(nb_lines):
             Cat_est_line_data[j,:] = Cat_est_line[E['num_line'][j]]._data
             Cat_est_line_var[j,:] = Cat_est_line[E['num_line'][j]]._var
-        y = E['y1']
-        x = E['x1']
+        y = E['y']
+        x = E['x']
         flux = E['flux']
         purity = E['purity']
         comp = E['comp']
+        if comp[0]:
+            GLR = E['STD']
+        else:
+            GLR = E['T_GLR']
         source_arglist = (i, ra, dec, x_centroid, y_centroid, seg_label,
                           wave_pix, GLR, num_profil, nb_lines,
                           Cat_est_line_data, Cat_est_line_var,
