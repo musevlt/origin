@@ -1246,8 +1246,8 @@ class ORIGIN(object):
         self._loginfo('05 Done')
         
     def step06_compute_purity_threshold(self, purity=.9, pfa=0.05, tol_spat=3,
-                                        tol_spec=5, filter_act=True, 
-                                        spat_size=19, spect_size=10):        
+                                        tol_spec=5, spat_size=19,
+                                        spect_size=10):        
         """find the threshold  for a given purity
 
         Parameters
@@ -1262,8 +1262,6 @@ class ORIGIN(object):
                    TODO en fonction du FWHM
         tol_spec : integer
                    spectral tolerance for the spatial merging (distance in pixels)
-        filter_act : bool
-                     activate or deactivate the spatio spectral filter 
         spat_size : int
                 spatiale size of the spatiale filter                
         spect_size : int
@@ -1290,7 +1288,6 @@ class ORIGIN(object):
         self.param['pfa'] = pfa
         self.param['tol_spat'] = tol_spat
         self.param['tol_spec'] = tol_spec
-        self.param['filter_act'] = filter_act
         self.param['spat_size'] = spat_size
         self.param['spect_size'] = spect_size
 
@@ -1303,7 +1300,7 @@ class ORIGIN(object):
                                            self.cube_local_min.data,                                            
                                            self.segmentation_test.data, pfa, 
                                            spat_size, spect_size, 
-                                           tol_spat, tol_spec, filter_act)
+                                           tol_spat, tol_spec, True)
         self.param['threshold'] = threshold                                       
         self._loginfo('Threshold: %.1f '%threshold)
      
@@ -1350,8 +1347,7 @@ class ORIGIN(object):
                                            self.param['spat_size'],
                                            self.param['spect_size'], 
                                            self.param['tol_spat'],
-                                           self.param['tol_spec'],
-                                           self.param['filter_act'],
+                                           self.param['tol_spec'], False,
                                            self.cube_profile._data,
                                            self.wcs, self.wave)     
                                 
@@ -1419,7 +1415,7 @@ class ORIGIN(object):
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
-                                           self.param['filter_act'])
+                                           True)
         
         self.Catcomp, inut = Create_local_max_cat(self.ThresholdPval2, 
                                            cube_local_max_faint_dct,
@@ -1429,7 +1425,7 @@ class ORIGIN(object):
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
-                                           self.param['filter_act'],
+                                           False,
                                            self.cube_profile._data,
                                            self.wcs, self.wave)      
                                            
