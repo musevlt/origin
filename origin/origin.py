@@ -164,7 +164,7 @@ class ORIGIN(object):
                  cube_profile, Cat0, Pval_r, index_pval, Det_M, Det_m,
                  Cat1, spectra, param, cube_std, var,
                  cube_local_max, cont_dct,
-                 segmentation_test, segmentation_map_threshold,
+                 segmentation_test, segmap,
                  cube_local_min,
                  mapThresh, areamap, imawhite, imadct, imastd, zm, ym, xm,
                  Cat2, Pval_r_comp, index_pval_comp, Det_M_comp, Det_m_comp):
@@ -357,7 +357,7 @@ class ORIGIN(object):
         self.cube_profile = cube_profile
         self.maxmap = maxmap
         # step6
-        self.segmentation_map_threshold = segmentation_map_threshold    
+        self.segmap = segmap    
         self.mapThresh = mapThresh
         self.Pval_r = Pval_r
         self.index_pval = index_pval
@@ -427,7 +427,7 @@ class ORIGIN(object):
                    Cat1=None, spectra=None,
                    param=None, cube_std=None, var=None,
                    cube_local_max=None,cont_dct=None,
-                   segmentation_test=None, segmentation_map_threshold=None, 
+                   segmentation_test=None, segmap=None, 
                    cube_local_min=None,
                    mapThresh=None, areamap=None, imawhite=None,
                    imadct=None, imastd=None, zm=None, ym=None, xm=None,
@@ -674,11 +674,10 @@ class ORIGIN(object):
             _format_cat(Cat2, 1)
         else:
             Cat2 = None
-        if os.path.isfile('%s/segmentation_map_threshold.fits'%folder):
-            segmentation_map_threshold = Image('%s'%folder + \
-            '/segmentation_map_threshold.fits')
+        if os.path.isfile('%s/segmap.fits'%folder):
+            segmap = Image('%s'%folder + '/segmap.fits')
         else:
-            segmentation_map_threshold = None
+            segmap = None
             
         if os.path.isfile('%s/mapThresh.fits'%folder):
             mapThresh = Image('%s/mapThresh.fits'%folder)
@@ -702,7 +701,7 @@ class ORIGIN(object):
                    param=param,
                    cube_local_max=cube_local_max, cont_dct=cont_dct,
                    segmentation_test=segmentation_test,
-                   segmentation_map_threshold=segmentation_map_threshold,
+                   segmap=segmap,
                    cube_local_min=cube_local_min,
                    mapThresh=mapThresh, areamap=areamap, imawhite=ima_white,
                    imadct=ima_dct, imastd=ima_std, zm=zm, ym=ym, xm=xm,
@@ -837,9 +836,9 @@ class ORIGIN(object):
             self.cube_local_min.write('%s/cube_local_min.fits'%path2) 
 
         # step6                       
-        if self.segmentation_map_threshold is not None:
-            self.segmentation_map_threshold.write('%s'%path2 + \
-            '/segmentation_map_threshold.fits')  
+        if self.segmap is not None:
+            self.segmap.write('%s'%path2 + \
+            '/segmap.fits')  
         if self.mapThresh is not None:
             self.mapThresh.write('%s/mapThresh.fits'%path2)
         if self.Pval_r is not None:
@@ -912,8 +911,7 @@ class ORIGIN(object):
                                  Mean of DCT continuum cube along the
                                  wavelength axis
         self.segmentation_test : `~mpdaf.obj.Image`
-                                 2D map where sources and background are
-                                 separated
+                                 Test for segmentation
         """
         self._loginfo('Step 01 - Preprocessing, dct order=%d'%dct_order)
             
@@ -938,7 +936,7 @@ class ORIGIN(object):
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
                          mask=np.ma.nomask)
         self.ima_dct = self.cont_dct.mean(axis=0)
-        self._loginfo('Segmentation map saved in self.segmentation_test')
+        self._loginfo('Test for segmentation saved in self.segmentation_test')
         self.segmentation_test = Image(data=segmentation_test, 
                                       wcs=self.wcs, mask=np.ma.nomask)        
         self._loginfo('01 Done')
@@ -1300,7 +1298,7 @@ class ORIGIN(object):
                      
         Returns
         -------
-        self.segmentation_map_threshold : `~mpdaf.obj.Image`
+        self.segmap : `~mpdaf.obj.Image`
                                           Segmentation map for threshold
         """
         self._loginfo('Step 06 - Compute Purity threshold')  
@@ -1324,21 +1322,21 @@ class ORIGIN(object):
 
         # Pval_r=purity curves
         # Det = nb de detections
-        threshold, self.Pval_r, self.index_pval, \
-        segmap, self.Det_M, self.Det_m = Compute_threshold_purity(
-                                           purity, 
-                                           self.cube_local_max.data,
-                                           self.cube_local_min.data,                                            
-                                           self.segmentation_test.data, pfa, 
-                                           spat_size, spect_size, 
-                                           tol_spat, tol_spec, True)
+
+        # segmentation map
+        segmap = Segmentation(self.segmentation_test.data, pfa)
+        self.segmap = Image(data=segmap,
+                                    wcs=self.wcs, mask=np.ma.nomask)
+        self._loginfo('Save the segmentation map in self.segmap')
+
+        threshold, self.Pval_r, self.index_pval, self.Det_M, self.Det_m = \
+        Compute_threshold_purity(purity, self.cube_local_max.data,
+                                 self.cube_local_min.data, segmap, spat_size,
+                                 spect_size, tol_spat, tol_spec, True)
         self.param['threshold'] = threshold                                       
         self._loginfo('Threshold: %.1f '%threshold)
      
-        self.segmentation_map_threshold = Image(data=segmap,
-                                    wcs=self.wcs, mask=np.ma.nomask) #TODO a supprimer si on garde celle du step02
-        self._loginfo('Save the segmentation map for threshold in ' + \
-        'self.segmentation_map_threshold')          
+                  
         
         self._loginfo('06 Done')
         
@@ -1374,7 +1372,7 @@ class ORIGIN(object):
         self.Cat0, self.det_correl_min = Create_local_max_cat(self.param['threshold'], 
                                            self.cube_local_max.data,
                                            self.cube_local_min.data,                                            
-                                           self.segmentation_map_threshold.data, 
+                                           self.segmap.data, 
                                            self.param['spat_size'],
                                            self.param['spect_size'], 
                                            self.param['tol_spat'],
@@ -1431,13 +1429,12 @@ class ORIGIN(object):
         self.cube_local_max_faint_dct = cube_local_max_faint_dct
         self.cube_local_min_faint_dct = cube_local_min_faint_dct
     
-        threshold2, self.Pval_r_comp, self.index_pval_comp, \
-        segmap2, self.Det_M_comp, self.Det_m_comp = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_M_comp, \
+        self.Det_m_comp = Compute_threshold_purity(
                                            purity, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
-                                           self.segmentation_test.data,
-                                           self.param['pfa'], 
+                                           self.segmap._data, 
                                            self.param['spat_size'],
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
@@ -1449,7 +1446,7 @@ class ORIGIN(object):
         Catcomp, inut = Create_local_max_cat(threshold2, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
-                                           segmap2, 
+                                           self.segmap._data, 
                                            self.param['spat_size'],
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
@@ -1631,7 +1628,7 @@ class ORIGIN(object):
                                               path_src, self.name, self.param,
                                               src_vers, author,
                                               self.path, self.maxmap,
-                                              self.segmentation_map_threshold,
+                                              self.segmap,
                                               ncpu)                                            
                                               
         # create the final catalog
@@ -1903,21 +1900,18 @@ class ORIGIN(object):
         
     def plot_segmentation(self, pfa=5e-2, step=9, maxmap=True, ax=None, **kwargs):
         """ Plot the 2D segmentation map associated to a PFA
-        This function draw the labels od the segmentation map which is used, 
+        This function draw the labels of the segmentation map which is computed, 
         not with the same pfa, in :
-            - self.step02_areas() to compute the automatic areas splitting for 
+            - the step02 to compute the automatic areas splitting for 
             the PCA
-            - step06 ans step07 to compute the threshold of the 
-            local maxima of correlations
-            - self.step09_spatiospectral_merging() to merge the detected lines
-            from the same sources.
+            - the step06 to compute the threshold of the local maxima
             
         Parameters
         ----------
         pfa  : float
                Pvalue for the test which performs segmentation
         step : int
-               The Segmentation map as used in this step: (2/6/9)
+               The Segmentation map as used in this step: (2/6)
         maxmap : bool
                  If true, segmentation map is plotted as contours on the maxmap
         ax   : matplotlib.Axes
@@ -1943,18 +1937,12 @@ class ORIGIN(object):
             r = np.sqrt(xv**2 + yv**2)
             disk = (np.abs(r)<=radius)  
             mask = disk 
-            clean = True 
         elif step == 6:
             mask = None 
-            clean = False 
-        elif step == 9:
-            mask = None 
-            clean = True
         else:
-            raise IOError('sept must be equal to 2 or 6 or 9')
+            raise IOError('sept must be equal to 2 or 6')
             
-        map_in = Segmentation(self.segmentation_test.data, pfa, \
-                              clean=clean, mask=mask)
+        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
                               
         if maxmap:
             self.maxmap[self.maxmap._data == 0] = np.ma.masked
@@ -1966,35 +1954,6 @@ class ORIGIN(object):
                 kwargs['cmap'] = 'jet'
             ima.plot(title='Labels of segmentation, pfa: %f' %(pfa), ax=ax,
                      **kwargs)
-
-
-#    def plot_thresholdVsPFA_background(self, purity=.9, 
-#                                   pfaset=np.linspace(1e-3,0.5,41), ax=None):
-#        """Draw threshold of local maxima as a function of the segmentation
-#        map using PFA to create source/background mask of step05.
-#        
-#        Parameters
-#        ----------
-#        purity : the purity for wich the function is plotted
-#        pfaset : the list of PFA to test
-#        ax : matplotlib.Axes
-#             The Axes instance in which the image is drawn
-#        """       
-#        
-#        cube_local_max = self.cube_local_max.data
-#        cube_local_min = self.cube_local_min.data
-#        test = self.segmentation_test.data
-#        
-#        threshold = \
-#        thresholdVsPFA_purity(test,cube_local_max,cube_local_min,purity,pfaset)
-#            
-#        if ax is None:
-#            ax = plt.gca()  
-#        
-#        ax.plot(pfaset,threshold,'-o')              
-#        ax.set_xlabel('PFA')
-#        ax.set_ylabel('Threshold')        
-#        ax.set_title('Purity %f' %purity)
         
     def plot_purity(self, ax=None, log10=True):
         """Draw number of sources per threshold computed in step06

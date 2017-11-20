@@ -1875,7 +1875,7 @@ def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,f
     return est_purity , det_m, det_M   
 
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
-                           segmentation_test, pfa, spat_size, spect_size, \
+                           segmap, spat_size, spect_size, \
                            tol_spat, tol_spec, filter_act):
     """Compute threshold values corresponding to a given purity
 
@@ -1887,9 +1887,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
                      cube of local maxima from maximum correlation
     cube_Local_min : array
                      cube of local maxima from minus minimum correlation
-    segmentation_test : array
-                        Test on estimated continuum for segmentation
-    pfa       : Pvalue for the test which performs segmentation
+    segmap: array
+            segmentation map
     spat_size : int
                 spatiale size of the spatiale filter                
     spect_size : int
@@ -1911,8 +1910,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
              The purity function
     index_pval: array
                 index value to plot
-    map_in    : array
-                Segmentation map
     det_m     : array
                 Number of detections (-DATA)
     det_M     : array
@@ -1921,12 +1918,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
-
-    # Label
-    map_in = Segmentation(segmentation_test, pfa)
-#    gamma =  stats.chi2.ppf(1-pfa, 1)
-#    map_in = (segmentation_test>gamma)*1.
-#    map_in[segmentation_test**2 == 0] = -1
     # initialization
     det_m = []
     det_M = []    
@@ -1939,7 +1930,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
         est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
                                                     cube_local_min, \
                                                     thresh,spat_size,\
-                                                    spect_size,map_in,\
+                                                    spect_size, segmap,\
                                                     tol_spat,tol_spec, \
                                                     filter_act) 
 
@@ -1965,7 +1956,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     tan_theta = b/a
     threshold = (purity-y1)/tan_theta + x1
     
-    return threshold, Pval_r, index_pval, map_in, det_m, det_M    
+    return threshold, Pval_r, index_pval, det_m, det_M    
 
 
 
