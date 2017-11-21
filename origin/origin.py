@@ -1411,12 +1411,6 @@ class ORIGIN(object):
         if self.cube_local_max is None:
             raise IOError('Run the step 05 to initialize ' + \
             'self.cube_local_max and self.cube_local_min')
-        
-
-        self._loginfo('Estimation of threshold with purity = %.1f'%purity)
-
-            
-        self._loginfo('PFA = %.2f '%pfa)
             
         self.param['purity'] = purity
         self.param['pfa'] = pfa
@@ -1426,12 +1420,13 @@ class ORIGIN(object):
         self.param['spect_size'] = spect_size
 
         # segmentation map
+        self._loginfo('Segmentation map computation (pfa=%.2f)...'%pfa)
         segmap = Segmentation(self.segmentation_test.data, pfa)
         self.segmap = Image(data=segmap,
                                     wcs=self.wcs, mask=np.ma.nomask)
         self._loginfo('Save the segmentation map in self.segmap')
 
-        self._loginfo('Threshold computed with purity = %.1f'%purity)
+        self._loginfo('Estimation of threshold with purity = %.1f'%purity)
         threshold, self.Pval_r, self.index_pval, self.Det_M, self.Det_m = \
         Compute_threshold_purity(purity, self.cube_local_max.data,
                                  self.cube_local_min.data, segmap, spat_size,
