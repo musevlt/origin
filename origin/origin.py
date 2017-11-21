@@ -1431,6 +1431,7 @@ class ORIGIN(object):
                                     wcs=self.wcs, mask=np.ma.nomask)
         self._loginfo('Save the segmentation map in self.segmap')
 
+        self._loginfo('Threshold computed with purity = %.1f'%purity)
         threshold, self.Pval_r, self.index_pval, self.Det_M, self.Det_m = \
         Compute_threshold_purity(purity, self.cube_local_max.data,
                                  self.cube_local_min.data, segmap, spat_size,

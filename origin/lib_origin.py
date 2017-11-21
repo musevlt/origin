@@ -1926,7 +1926,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     thresh_min = np.median(np.amax(cube_local_max,axis=0))*1.1
     
     index_pval = np.arange(thresh_max,thresh_min,-.5)
-    for thresh in index_pval:
+    for thresh in ProgressBar(list(index_pval)):
         est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
                                                     cube_local_min, \
                                                     thresh,spat_size,\
@@ -2003,8 +2003,9 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
     t0 = time.time()
 
     
-
+    logger.info('Thresholding...')
     zM,yM,xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(cube_local_max,cube_local_min,thresh,spat_size,spect_size,filter_act)
+    logger.info('Spatio-spectral merging...')
     if len(zM)>1000:
         xpixRef,ypixRef,zpixRef,seg_label,idout,iout2M = spatiospectral_merging(zM,yM,xM,segmentation_map,tol_spat,tol_spec)
     else:
