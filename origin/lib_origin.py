@@ -2370,7 +2370,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     
                     maxz = z0  - 5 + z_est
                     zest[dy,dx] = maxz
-                    ind_z5 = np.arange(maxz-5,maxz+5)
+                    ind_z5 = np.arange(max(0,maxz-5),min(maxz+5,nl))
                     #ind_z10 = np.arange(maxz-10,maxz+10)
                     ind_hrz = slice(maxz-horiz,maxz+horiz)
 
