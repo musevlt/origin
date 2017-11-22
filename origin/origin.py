@@ -778,8 +778,8 @@ class ORIGIN(object):
             from astropy.table import MaskedColumn
             cat = self.Cat2.group_by('ID')
             lmax = max([len(g['lbda']) for g in cat.groups])
-            ncat = Table(names=['ID','RA','DEC','NLINE','SEG'],
-                         dtype=['i4','f4','f4','i4','i4'], masked=True)
+            ncat = Table(names=['ID','RA','DEC','NLINE','SEG', 'COMP'],
+                         dtype=['i4','f4','f4','i4','i4','i4'], masked=True)
             for l in range(lmax):
                 ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
                                              format='.2f'))
@@ -796,7 +796,7 @@ class ORIGIN(object):
             for key, group in zip(cat.groups.keys,cat.groups):
                 dic = {'ID':key['ID'], 'RA':group['ra'].mean(),
                 'DEC':group['dec'].mean(), 'NLINE':len(group['lbda']),
-                'SEG':group['seg_label'][0]}
+                'SEG':group['seg_label'][0], 'COMP':group['comp'][0]}
                 ksort = group['T_GLR'].argsort()[::-1]
                 for k, (lbda, flux, tglr, std, eflux, purity) in \
                 enumerate(group['lbda','flux','T_GLR','STD','residual','purity'][ksort]):
