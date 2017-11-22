@@ -2021,6 +2021,10 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
     dec = skycrd[:, 0]
     lbda = wave.coord(zpixRef)
     # Catalogue of referent pixels
+    idout = np.asarray(idout)
+    oldIDs = np.unique(idout)
+    for oldID, newID in zip(oldIDs, np.arange(len(oldIDs))):
+        idout[idout==oldID] = newID
     Cat_ref = Table([idout, ra, dec, lbda, xpixRef, ypixRef, zpixRef,
                      profile_max,seg_label, correl_max,],
                     names=('ID', 'ra', 'dec', 'lbda','x0', 'y0', 'z0',
