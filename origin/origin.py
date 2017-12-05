@@ -1179,7 +1179,7 @@ class ORIGIN(object):
         
         self._loginfo('03 Done')              
         
-    def step04_compute_greedy_PCA(self, mixing=False, Noise_population=50,
+    def step04_compute_greedy_PCA(self, Noise_population=50,
                               itermax=100, threshold_list=None):
         """ Loop on each zone of the data cube and compute the greedy PCA.
         The test (test_fun) and the threshold (threshold_test) define the part
@@ -1197,11 +1197,6 @@ class ORIGIN(object):
 
         Parameters
         ----------
-                    
-        mixing              :   bool
-                                If True the output of PCA is mixed with its
-                                input according to the pvalue of a test based
-                                on the continuum of the faint (output PCA)
         
         Noise_population    :   float                
                                 Fraction of spectra used to estimate 
@@ -1244,13 +1239,11 @@ class ORIGIN(object):
         self._loginfo('   - Noise_population = %0.2f'%Noise_population)
         self._loginfo('   - List of threshold = ' + \
             " ".join("%.2f"%x for x in thr))     
-        self._loginfo('   - mixing = %d'%mixing)
         self._loginfo('   - Max number of iterations = %d'%itermax)
         
         self.param['threshold_list'] = thr
         self.param['Noise_population'] = Noise_population                
         self.param['itermax'] = itermax
-        self.param['mixing'] = mixing
         
         self._loginfo('Compute greedy PCA on each zone')    
         
@@ -1258,10 +1251,6 @@ class ORIGIN(object):
         Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
                                self.areamap._data, Noise_population,
                                thr, itermax, self.testO2)
-        if mixing:
-            continuum = np.sum(faint,axis=0)**2 / faint.shape[0]
-            pval = 1 - stats.chi2.cdf(continuum, 2) 
-            faint = pval*faint + (1-pval)*self.cube_std._data 
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,

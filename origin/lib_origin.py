@@ -2699,8 +2699,6 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         src.OR_EXP = (param['expmap'], 'OR input Exposure map')
     if 'dct_order' in param.keys():
         src.OR_DCT = (param['dct_order'], 'OR input DCT order')
-    if 'mixing' in param.keys():
-        src.OR_MIX = (np.int(param['mixing']), 'OR input Mixing option')
     if 'Noise_population' in param.keys():
         src.OR_FBG = (param['Noise_population'], 'OR input Fraction of spectra estimated as background')
     if 'pfa_test' in param.keys():
