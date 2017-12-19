@@ -51,6 +51,7 @@ from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import ConvexHull
 from scipy.sparse.linalg import svds
 from six.moves import range, zip
+from scipy.interpolate import interp1d
 
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
@@ -2554,7 +2555,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid = 1, \
 
     return Cat2, Cat_est_line_raw, Cat_est_line_var
 
-def Purity_Estimation(Cat_in, data, purity_curves, purity_index): 
+def Purity_Estimation(Cat_in, purity_curves, purity_index): 
     """Function to compute the estimated purity for each line.
 
     Parameters
@@ -2562,8 +2563,6 @@ def Purity_Estimation(Cat_in, data, purity_curves, purity_index):
     Cat_in     : astropy.Table
                  Catalogue of parameters of detected emission lines selected
                  with a narrow band test.
-    data     : array, array
-                 Origin data
     purity_curves     : array, array
                           purity curves related to area
     purity_index      : array, array
@@ -2583,29 +2582,21 @@ def Purity_Estimation(Cat_in, data, purity_curves, purity_index):
     """
     
     Cat1_2 = Cat_in.copy()
-    purity = []
+    purity = np.empty(len(Cat1_2))
     
-    for n,src in enumerate(Cat1_2):
-        y = src['y']
-        x = src['x'] 
-        z = src['z']
-        i = src['comp']
-        seuil = purity_index[i]
-        fidel = purity_curves[i]
-        value = data[i][z,y,x]
-        if value>seuil[(fidel==1).tolist().index(True)]:
-            fid_tmp = 1
-        else:
-            fid_ind = (seuil-value>0).tolist().index(True)
-            # interpolation of data value on purity curve
-            fidel[fid_ind-1]
-            x2 = seuil[fid_ind]
-            x1 = seuil[fid_ind-1]
-            y2 = fidel[fid_ind] 
-            y1 = fidel[fid_ind-1] 
-            fid_tmp = y1 + (value-x1)*(y2-y1)/(x2-x1)
-        purity.append(fid_tmp)
-        
+    #Comp=0
+    ksel = Cat1_2['comp']==0
+    f = interp1d( purity_index[0], purity_curves[0], bounds_error=False,
+                 fill_value="extrapolate")
+    tglr = Cat1_2['T_GLR'][ksel]
+    purity[ksel] = f(tglr.data.data)
+    #comp=1
+    ksel = Cat1_2['comp']==1
+    f = interp1d( purity_index[1], purity_curves[1], bounds_error=False,
+                 fill_value="extrapolate")
+    tglr = Cat1_2['STD'][ksel]
+    purity[ksel] = f(tglr.data.data)
+    
     col_fid = Column(name='purity', data=purity)
     Cat1_2.add_columns([col_fid])
     return Cat1_2

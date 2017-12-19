@@ -1594,7 +1594,6 @@ class ORIGIN(object):
             
         self._loginfo('Purity estimation')    
         self.Cat2 = Purity_Estimation(self.Cat2,
-                                      [self.cube_correl.data, self.cube_std.data], 
                                       [self.Pval_r, self.Pval_r_comp],
                                       [self.index_pval, self.index_pval_comp])                  
         _format_cat(self.Cat2, 2)
