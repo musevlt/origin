@@ -39,29 +39,34 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     my_origin.step05_compute_TGLR(ncpu=1)
     my_origin.write()
+    
+    #segmap
+    my_origin = ORIGIN.load('tmp')
+    my_origin.step06_compute_segmentation_map(pfa=0.05)
+    my_origin.write()
 
     # threshold applied on pvalues
     my_origin = ORIGIN.load('tmp')
-    my_origin.step06_compute_purity_threshold(pfa=0.05)
+    my_origin.step07_compute_purity_threshold()
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step07_detection()
+    my_origin.step08_detection()
     my_origin.write()
     
     my_origin = ORIGIN.load('tmp')
-    my_origin.step08_detection_lost()
+    my_origin.step09_detection_lost()
     my_origin.write()
     
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
-    my_origin.step09_compute_spectra()
+    my_origin.step10_compute_spectra()
     my_origin.write()
     
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
-    cat = my_origin.step10_write_sources(ncpu=1)
-    cat = my_origin.step10_write_sources(ncpu=2, overwrite=True)
+    cat = my_origin.step11_write_sources(ncpu=1)
+    cat = my_origin.step11_write_sources(ncpu=2, overwrite=True)
     assert (len(cat) == 8) 
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 8)

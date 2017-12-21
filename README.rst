@@ -40,15 +40,17 @@ Usage
     
  >  orig.step05_compute_TGLR()
  
- >  orig.step06_compute_purity_threshold()
+ > orig.step06_compute_segmentation_map(pfa=0.05)
  
- >  orig.step07_detection()
+ >  orig.step07_compute_purity_threshold()
  
- >  orig.step08_detection_lost()
+ >  orig.step08_detection()
+ 
+ >  orig.step09_detection_lost()
     
- >  orig.step09_compute_spectra()
+ >  orig.step10_compute_spectra()
     
- >  nsources = orig.step10_write_sources()
+ >  nsources = orig.step11_write_sources()
  
  
 3- Resulted detected sources can be load by using mpdaf
