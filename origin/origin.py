@@ -15,8 +15,10 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 
 from __future__ import absolute_import, division
 
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table, vstack
+import astropy.units as u
 import glob
 import logging
 import matplotlib.pyplot as plt
