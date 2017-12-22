@@ -1457,7 +1457,7 @@ class ORIGIN(object):
      
         self._loginfo('07 Done')
         
-    def step08_detection(self, threshold=None, filter_det=False):
+    def step08_detection(self, threshold=None, filter_det=True):
         """Detections on local maxima from max correlation + spatia-spectral
         merging in order to create the first catalog.
 
@@ -1497,7 +1497,7 @@ class ORIGIN(object):
         self._loginfo('08 Done')  
         
     def step09_detection_lost(self, purity=None, filter_thres=True,
-                              filter_det=False):
+                              filter_det=True):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1 

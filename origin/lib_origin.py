@@ -1323,12 +1323,16 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
     
-def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad):
+def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad, thrdata=None, mthrdata=None):
     x, y = np.meshgrid(np.arange(data.shape[2]), np.arange(data.shape[1]))
     ksel = ((x-x0)**2 + (y-y0)**2) < spat_rad**2
     z1 = np.maximum(0, z0-spect_rad)
-    z2 = np.minimum(data.shape[0], z0+spect_rad)            
-    data[z1:z2, ksel] = 0  
+    z2 = np.minimum(data.shape[0], z0+spect_rad)
+    if thrdata is None or mthrdata is None:          
+        data[z1:z2, ksel] = 0
+    else:
+        ksel2 = (thrdata[z1:z2, ksel]<=mthrdata[z0,y0,x0])
+        data[z1:z2, ksel][ksel2] = 0
     
     
 def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
@@ -1797,13 +1801,13 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc,MinLoc,thresh,spat_size,spect_size,filte
             Lm = locm.copy()        
         
         zm,ym,xm = np.where( locm )   
-        for n,z in enumerate(zm):
-            _mask_circle_region(LM, xm[n], ym[n], z, spat_rad, spect_rad)           
+        for x, y, z in zip(xm, ym, zm):
+            _mask_circle_region(LM, x, y, z, spat_rad, spect_rad, MaxLoc, MinLoc)           
             
         if both:            
             zm,ym,xm = np.where( locM )   
-            for n,z in enumerate(zm):
-                _mask_circle_region(Lm, xm[n], ym[n], z, spat_rad, spect_rad)
+            for x, y, z in zip(xm, ym, zm):
+                _mask_circle_region(Lm, x, y, z, spat_rad, spect_rad, MinLoc, MaxLoc)
             
         zM,yM,xM = np.where( LM>0 )
         if both:
