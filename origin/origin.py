@@ -778,8 +778,9 @@ class ORIGIN(object):
             from astropy.table import MaskedColumn
             cat = self.Cat2.group_by('ID')
             lmax = max([len(g['lbda']) for g in cat.groups])
-            ncat = Table(names=['ID','RA','DEC','NLINE','SEG', 'COMP'],
-                         dtype=['i4','f4','f4','i4','i4','i4'], masked=True)
+            ncat = Table(names=['ID','RA','DEC','DLINE','NLINE','SEG', 'COMP'],
+                         dtype=['i4','f4','f4','f4','i4','i4','i4'], masked=True)
+            ncat['DLINE'].format = '.2f'
             for l in range(lmax):
                 ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
                                              format='.2f'))
@@ -794,8 +795,15 @@ class ORIGIN(object):
                 ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
                                              format='.2f'))
             for key, group in zip(cat.groups.keys,cat.groups):
-                dic = {'ID':key['ID'], 'RA':group['ra'].mean(),
-                'DEC':group['dec'].mean(), 'NLINE':len(group['lbda']),
+                # compute average ra,dec and peak-to-peak distance in arcsec
+                mra = group['ra'].mean()
+                mdec = group['dec'].mean()
+                c0 = SkyCoord([mra], [mdec], unit=(u.deg, u.deg))
+                c = SkyCoord([group['ra']], [group['dec']], unit=(u.deg, u.deg))
+                dist = c0.separation(c)
+                ptp = dist.arcsec.ptp()
+                dic = {'ID':key['ID'], 'RA':mra,
+                'DEC':mdec, 'DLINE':ptp, 'NLINE':len(group['lbda']),
                 'SEG':group['seg_label'][0], 'COMP':group['comp'][0]}
                 ksort = group['T_GLR'].argsort()[::-1]
                 for k, (lbda, flux, tglr, std, eflux, purity) in \
