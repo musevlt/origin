@@ -1584,7 +1584,7 @@ class ORIGIN(object):
         Cat0 = self.Cat0.copy()
         Cat0['comp'] = 0
         Catcomp['comp'] = 1
-        Catcomp['ID'] += Cat0['ID'].max()
+        Catcomp['ID'] += (Cat0['ID'].max() + 1)
         self.Cat1 = vstack([Cat0, Catcomp]) 
         _format_cat(self.Cat1, 1)
         self._loginfo('Save the catalogue in self.Cat1' + \
