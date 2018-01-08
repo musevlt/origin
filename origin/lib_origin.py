@@ -2596,6 +2596,10 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
                  fill_value="extrapolate")
     tglr = Cat1_2['STD'][ksel]
     purity[ksel] = f(tglr.data.data)
+    # The purity by definition cannot be > 1 and < 0, if the interpolation
+    # gives a value outside these limits, replace by 1 or 0
+    purity[purity<0] = 0
+    purity[purity>1] = 1
     
     col_fid = Column(name='purity', data=purity)
     Cat1_2.add_columns([col_fid])
