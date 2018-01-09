@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     package_data={'origin': ['Dico_FWHM_2_12.fits']},
     zip_safe=False,
-    install_requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'mpdaf', 'six', 'pyfftw'],
+    install_requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'mpdaf',
+                      'six', 'pyfftw', 'joblib', 'PyYAML'],
     tests_require=['pytest'],
 )
