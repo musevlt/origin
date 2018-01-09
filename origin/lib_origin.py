@@ -1871,13 +1871,20 @@ def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,f
         xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging(zm,ym,xm,map_in,tol_spat,tol_spec)
     else:
         xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging_mat(zm,ym,xm,map_in,tol_spat,tol_spec)
-        
-    det_m, det_M = len(np.unique(iout1m)) , len(np.unique(iout1M))
-    if len(np.unique(iout1M))>0:
+    # purity computed on the background (aout==0)
+    det_m, det_M = len(np.unique(iout1m[aoutm==0])) , len(np.unique(iout1M[aoutM==0]))
+    if len(np.unique(iout1M[aoutM==0]))>0:
         est_purity = 1 - det_m / det_M      
     else:
-        est_purity = 0     
-    return est_purity , det_m, det_M   
+        est_purity = 0
+
+    # for information, purity on the brigth sources
+#    det_m, det_M = len(np.unique(iout1m[aoutm!=0])) , len(np.unique(iout1M[aoutM!=0]))
+#    if len(np.unique(iout1M))>0:
+#        src_purity = 1 - det_m / det_M      
+#    else:
+#        src_purity = 0
+    return est_purity , det_m, det_M
 
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
                            segmap, spat_size, spect_size, \
