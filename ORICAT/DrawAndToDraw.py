@@ -366,7 +366,7 @@ def find_ym_yM(ID, correl1, correl2, position, freq):
 # for one source:
 
 
-def draw_1_ID_Corr(TheIDs, correl1, correl2, freq, Line, Name, position, ym_yM_xm_xM,\
+def draw_1_ID_Corr(TheIDs, correl1, correl2, freq, Line, Name, position, ym_yM_xm_xM,
                    SNR, DIST, radec, Line_Band, Peak_Thresh, snr_thresh):
 
     ID_gt, ID_o1, ID_o2 = TheIDs
@@ -805,8 +805,8 @@ def MatchNoMatch(img1, img2, ID, position, sat_tresh, colormap, name=''):
     return figmatch
 
 
-def matchimg(ID, position, max_map, wcorrel1, wcorrel2, wcube_std, \
-             sat_tresh_list=(1, 1), save=False, path='', show=True,\
+def matchimg(ID, position, max_map, wcorrel1, wcorrel2, wcube_std,
+             sat_tresh_list=(1, 1), save=False, path='', show=True,
              colormap='gray_r'):
 
     im1l = (max_map, wcorrel1)
@@ -853,7 +853,7 @@ def redname(nam):
         return nam[:-9]
 
 
-def drawfromcand(num, ax, cand, dl, cu_position, position, Name, Line, match,\
+def drawfromcand(num, ax, cand, dl, cu_position, position, Name, Line, match,
                  size_inpix, colorsrc, method, sy, h, t):
 
     gtor = 'Origin' if colorsrc == 'red' else 'Ground Truth'

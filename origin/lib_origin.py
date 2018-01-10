@@ -883,7 +883,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             # remove spectral mean from residual data
             mean_in_pca = np.mean(x_red, axis=1)
             x_red_nomean = x_red.copy()
-            x_red_nomean -= np.repeat(mean_in_pca[:, np.newaxis], \
+            x_red_nomean -= np.repeat(mean_in_pca[:, np.newaxis],
                                       x_red.shape[1], axis=1)
 
             # sparse svd if nb spectrum > 1 else normal svd
@@ -903,7 +903,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 U, s, V = svds(x_red_nomean, k=1)
 
             # orthogonal projection
-            xest = np.dot(np.dot(U, np.transpose(U)), \
+            xest = np.dot(np.dot(U, np.transpose(U)),
                           np.reshape(faint, (nl, nynx)))
             faint -= np.reshape(xest, (nl, nynx))
 
@@ -983,7 +983,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     return histO2, frecO2, thresO2, mea, std
 
 
-def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
+def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
                               intx, inty, NbSubcube, threads):
     """Function to compute the cube of GLR test values per zone
     obtained with the given PSF and dictionary of spectral profile.
@@ -1051,7 +1051,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico, \
             mini_cube = cube[:, y1:y2, x1:x2]
             mini_sigma = sigma[:, y1:y2, x1:x2]
 
-            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat, \
+            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat,
                                             weights, Dico, threads)
 
             correl[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
@@ -1138,7 +1138,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         nfields = len(PSF_Moffat)
         PSF_Moffat_m = []
         for n in range(nfields):
-            PSF_Moffat_m.append(PSF_Moffat[n] \
+            PSF_Moffat_m.append(PSF_Moffat[n]
                                 - np.mean(PSF_Moffat[n], axis=(1, 2))[:, np.newaxis, np.newaxis])
         # build a weighting map per PSF and convolve
         cube_fsf = np.empty(shape)
@@ -1252,7 +1252,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     return correl, profile, correl_min
 
 
-def Compute_local_max_zone(correl, correl_min, mask, intx, inty, \
+def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
                            NbSubcube, neighboors):
     """Function to compute the local max of T_GLR values for each zone
 
@@ -1351,7 +1351,7 @@ def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
     return Mdata, mdata
 
 
-def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
+def Compute_localmax(correl_temp_edge, correl_temp_edge_min,
                      mask_temp_edge, neighboors):
     """Function to compute the local maxima of the maximum correlation and
     local maxima of minus the minimum correlation
@@ -1385,7 +1385,7 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min, \
 
     # local maxima of minus minimum correlation
     minus_correl_min = - correl_temp_edge_min
-    Max_filter = filters.maximum_filter(minus_correl_min,\
+    Max_filter = filters.maximum_filter(minus_correl_min,
                                         size=(conn, conn, conn))
     Local_min_mask = (minus_correl_min == Max_filter)
     Local_min_mask[mask_temp_edge] = 0
@@ -1419,7 +1419,7 @@ def itersrc_mat(cat, coord, spatdist, area, tol_spat, tol_spec, n, iin, id_cu, I
                         cat = [xout, yout, zout, aout, iout]
                         coord = [z, y, x]
                         xout, yout, zout, aout, iout, spatdist, iin = \
-                            itersrc_mat(cat, coord, spatdist, area, tol_spat, \
+                            itersrc_mat(cat, coord, spatdist, area, tol_spat,
                                         tol_spec, indn, iin, id_cu, IDorder)
 
                         spatdist[indn, :] = np.inf
@@ -1436,7 +1436,7 @@ def itersrc_mat(cat, coord, spatdist, area, tol_spat, tol_spec, n, iin, id_cu, I
                     cat = [xout, yout, zout, aout, iout]
                     coord = [z, y, x]
                     xout, yout, zout, aout, iout, spatdist, iin = \
-                        itersrc_mat(cat, coord, spatdist, area, tol_spat, \
+                        itersrc_mat(cat, coord, spatdist, area, tol_spat,
                                     tol_spec, indn, iin, id_cu, IDorder)
 
                     spatdist[indn, :] = np.inf
@@ -1610,7 +1610,7 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
                         cat = [xout, yout, zout, aout, iout]
                         coord = [z, y, x]
                         xout, yout, zout, aout, iout, spatdist, iin = \
-                            itersrc(cat, coord, area, tol_spat, \
+                            itersrc(cat, coord, area, tol_spat,
                                     tol_spec, indn, iin, id_cu, IDorder)
 
                 else:
@@ -1624,7 +1624,7 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
                     cat = [xout, yout, zout, aout, iout]
                     coord = [z, y, x]
                     xout, yout, zout, aout, iout, spatdist, iin = \
-                        itersrc(cat, coord, area, tol_spat, \
+                        itersrc(cat, coord, area, tol_spat,
                                 tol_spec, indn, iin, id_cu, IDorder)
 
     return xout, yout, zout, aout, iout, spatdist, iin
@@ -1887,8 +1887,8 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol
     return est_purity, det_m, det_M
 
 
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
-                             segmap, spat_size, spect_size, \
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
+                             segmap, spat_size, spect_size,
                              tol_spat, tol_spec, filter_act, bkgrd):
     """Compute threshold values corresponding to a given purity
 
@@ -1940,11 +1940,11 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
 
     index_pval = np.arange(thresh_max, thresh_min, -.5)
     for thresh in ProgressBar(list(index_pval)):
-        est_purity, det_mit, det_Mit = purity_iter(cube_local_max,\
-                                                   cube_local_min, \
-                                                   thresh, spat_size,\
-                                                   spect_size, segmap,\
-                                                   tol_spat, tol_spec, \
+        est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
+                                                   cube_local_min,
+                                                   thresh, spat_size,
+                                                   spect_size, segmap,
+                                                   tol_spat, tol_spec,
                                                    filter_act, bkgrd)
 
         Pval_r.append(est_purity)
@@ -1972,8 +1972,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
     return threshold, Pval_r, index_pval, det_m, det_M
 
 
-def Create_local_max_cat(thresh, cube_local_max, cube_local_min, \
-                         segmentation_map, spat_size, spect_size, \
+def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
+                         segmentation_map, spat_size, spect_size,
                          tol_spat, tol_spec, filter_act, profile, wcs, wave):
     """ Function which extract detection and performs  spatio spectral merging
     at same time for a given purity and segmentation map
@@ -2276,7 +2276,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     return estimated_line, estimated_var
 
 
-def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
+def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
                  size_grid, y0, x0, z0, NY, NX, horiz_psf,
                  criteria, order_dct):
     """Function to compute the estimated emission line and the optimal
@@ -2372,11 +2372,11 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz, \
                     var = var_in[:, dy:sizpsf + dy, dx:sizpsf + dx]
                     if weight_in is not None:
                         wgt = np.array(weight_in)[:, dy:sizpsf + dy, dx:sizpsf + dx]
-                        psf = np.sum(np.repeat(wgt[:, np.newaxis, :, :], nl, \
+                        psf = np.sum(np.repeat(wgt[:, np.newaxis, :, :], nl,
                                                axis=1) * psf, axis=0)
 
                     # estimate Full Line and theoretic variance
-                    deconv_met, varest_met = method_PCA_wgt(r1, var, psf, \
+                    deconv_met, varest_met = method_PCA_wgt(r1, var, psf,
                                                             order_dct)
 
                     z_est = peakdet(deconv_met[ind_max], 3)
@@ -2454,8 +2454,8 @@ def peakdet(v, delta):
     return out
 
 
-def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1, \
-                    criteria='flux', order_dct=30, horiz_psf=1, \
+def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
+                    criteria='flux', order_dct=30, horiz_psf=1,
                     horiz=5):
     """Function to compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
@@ -2524,12 +2524,12 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1, \
         x0 = src['x0']
         z0 = src['z0']
 
-        red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,\
+        red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
 
-        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,  \
-                                                         red_var, red_psf, red_wgt, horiz,  \
-                                                         size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,\
+        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,
+                                                         red_var, red_psf, red_wgt, horiz,
+                                                         size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,
                                                          order_dct)
 
         Cat2_x_grid.append(x)

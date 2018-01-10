@@ -595,7 +595,7 @@ def redsearchpeaks(peak, freq, lin, band=50):
     return out
 
 
-def LineNameSearch(ID, correl1, correl2, freq, Line, Name, position,\
+def LineNameSearch(ID, correl1, correl2, freq, Line, Name, position,
                    Line_Band=50, Peak_Thresh=8):
 
     # define new entry in the dictionnary

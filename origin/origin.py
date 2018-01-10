@@ -301,7 +301,7 @@ class ORIGIN(object):
         # map fileds in the case of MUSE mosaic
         self.wfields = None
         if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header ' + \
+            self._loginfo('Compute FSFs from the datacube FITS header ' +
                           'keywords')
             Nfsf = 13
             if 'FSFMODE' in cub.primary_header:
@@ -317,7 +317,7 @@ class ORIGIN(object):
                     # mean of the fwhm of the FSF in pixel
                     self.FWHM_PSF = np.mean(fwhm_pix)
                     self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-                    self._loginfo('mean FWHM of the FSFs = %.2f pixels'\
+                    self._loginfo('mean FWHM of the FSFs = %.2f pixels'
                                   % self.FWHM_PSF)
                 else:  # mosaic: one FSF cube per field
                     self.PSF = []
@@ -328,7 +328,7 @@ class ORIGIN(object):
                         # mean of the fwhm of the FSF in pixel
                         fwhm = np.mean(fwhm_pix[i])
                         self.FWHM_PSF.append(fwhm)
-                        self._loginfo('mean FWHM of the FSFs' + \
+                        self._loginfo('mean FWHM of the FSFs' +
                                       ' (field %d) = %.2f pixels' % (i, fwhm))
                     self._loginfo('Compute weight maps from field map %s' % fieldmap)
                     fmap = FieldsMap(fieldmap, nfields=nfields)
@@ -336,7 +336,7 @@ class ORIGIN(object):
                     self.wfields = fmap.compute_weights()
                     self.param['FWHM PSF'] = self.FWHM_PSF
             else:
-                raise IOError('PSF are not described in the FITS header' + \
+                raise IOError('PSF are not described in the FITS header' +
                               'of the cube')
 
         else:
@@ -350,7 +350,7 @@ class ORIGIN(object):
                 if not cubePSF.shape[1] % 2:
                     raise IOError('The spatial size of the PSF must be odd.')
                 if cubePSF.shape[0] != self.Nz:
-                    raise IOError('PSF and data cube have not the same' + \
+                    raise IOError('PSF and data cube have not the same' +
                                   'dimensions along the spectral axis.')
                 self.PSF = cubePSF._data
                 # mean of the fwhm of the FSF in pixel
@@ -368,7 +368,7 @@ class ORIGIN(object):
                     # weighted field map
                     self._loginfo('Load weight maps from %s' % fieldmap[n])
                     self.wfields.append(Image(fieldmap[n])._data)
-                    self._loginfo('mean FWHM of the FSFs' + \
+                    self._loginfo('mean FWHM of the FSFs' +
                                   ' (field %d) = %.2f pixels' % (n, FWHM_PSF[n]))
 
         # additional images
@@ -874,14 +874,14 @@ class ORIGIN(object):
         # PSF
         if type(self.PSF) is list:
             for i, psf in enumerate(self.PSF):
-                Cube(data=psf, mask=np.ma.nomask).write('%s' % path2 + \
+                Cube(data=psf, mask=np.ma.nomask).write('%s' % path2 +
                                                         '/cube_psf_%02d.fits' % i)
         else:
-            Cube(data=self.PSF, mask=np.ma.nomask).write('%s' % path2 + \
+            Cube(data=self.PSF, mask=np.ma.nomask).write('%s' % path2 +
                                                          '/cube_psf.fits')
         if self.wfields is not None:
             for i, wfield in enumerate(self.wfields):
-                Image(data=wfield, mask=np.ma.nomask).write('%s' % path2 + \
+                Image(data=wfield, mask=np.ma.nomask).write('%s' % path2 +
                                                             '/wfield_%02d.fits' % i)
 
         if self.ima_white is not None:
@@ -944,7 +944,7 @@ class ORIGIN(object):
 
         # step6
         if self.segmap is not None:
-            self.segmap.write('%s' % path2 + \
+            self.segmap.write('%s' % path2 +
                               '/segmap.fits')
         if self.Pval_r is not None:
             np.savetxt('%s/Pval_r.txt' % (path2), self.Pval_r)
@@ -1069,7 +1069,7 @@ class ORIGIN(object):
         self._loginfo('02 - Areas creation')
 
         if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' + \
+            raise IOError('Run the step 01 to initialize ' +
                           'self.segmentation_test')
 
         self._loginfo('   - pfa of the test = %0.2f' % pfa)
@@ -1095,13 +1095,13 @@ class ORIGIN(object):
 
             self._loginfo('First segmentation of %d^2 square' % NbSubcube)
             self._loginfo('Squares segmentation and fusion')
-            square_cut_fus = area_segmentation_square_fusion(nexpmap, \
+            square_cut_fus = area_segmentation_square_fusion(nexpmap,
                                                              MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
 
             self._loginfo('Sources fusion')
             square_src_fus, src = \
-                area_segmentation_sources_fusion(self.segmentation_test.data, \
-                                                 square_cut_fus, pfa, \
+                area_segmentation_sources_fusion(self.segmentation_test.data,
+                                                 square_cut_fus, pfa,
                                                  self.Ny, self.Nx)
 
             self._loginfo('Convex envelope')
@@ -1176,7 +1176,7 @@ class ORIGIN(object):
 
             testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp,
                                                                     pfa_test)
-            self._loginfo('Area %d, estimation mean/std/threshold:' % area_ind \
+            self._loginfo('Area %d, estimation mean/std/threshold:' % area_ind
                           + ' %f/%f/%f' % (mea, std, tO2))
             self.testO2.append(testO2)
             self.histO2.append(hO2)
@@ -1244,7 +1244,7 @@ class ORIGIN(object):
             thr = threshold_list
 
         self._loginfo('   - Noise_population = %0.2f' % Noise_population)
-        self._loginfo('   - List of threshold = ' + \
+        self._loginfo('   - List of threshold = ' +
                       " ".join("%.2f" % x for x in thr))
         self._loginfo('   - Max number of iterations = %d' % itermax)
 
@@ -1262,7 +1262,7 @@ class ORIGIN(object):
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
                                mask=np.ma.nomask)
-        self._loginfo('Save the numbers of iterations used by the' + \
+        self._loginfo('Save the numbers of iterations used by the' +
                       ' testO2 for each spaxel in self.mapO2')
 
         self.mapO2 = Image(data=mapO2, wcs=self.wcs)
@@ -1312,7 +1312,7 @@ class ORIGIN(object):
         self.cube_local_min    : `~mpdaf.obj.Cube`
                                  Local maxima from minus min correlation
         """
-        self._loginfo('Step 05 - GLR test(NbSubcube=%d' % NbSubcube +\
+        self._loginfo('Step 05 - GLR test(NbSubcube=%d' % NbSubcube +
                       ', neighboors=%d)' % neighboors)
 
         if self.cube_faint is None:
@@ -1329,7 +1329,7 @@ class ORIGIN(object):
                                                        self.var, self.PSF, self.wfields,
                                                        self.profiles, ncpu)
         else:
-            correl, profile, cm = Correlation_GLR_test_zone( \
+            correl, profile, cm = Correlation_GLR_test_zone(
                 self.cube_faint._data, self.var, self.PSF, self.wfields,
                 self.profiles, intx, inty, NbSubcube, ncpu)
 
@@ -1338,7 +1338,7 @@ class ORIGIN(object):
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                                 mask=np.ma.nomask)
 
-        self._loginfo('Save the number of profile associated to the TGLR' + \
+        self._loginfo('Save the number of profile associated to the TGLR' +
                       ' in self.cube_profile')
         profile[self.mask] = 0
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
@@ -1354,11 +1354,11 @@ class ORIGIN(object):
                                                                 intx, inty, NbSubcube,
                                                                 neighboors)
         self._loginfo('Save self.cube_local_max from max correlations')
-        self.cube_local_max = Cube(data=cube_local_max, \
+        self.cube_local_max = Cube(data=cube_local_max,
                                    wave=self.wave,
                                    wcs=self.wcs, mask=np.ma.nomask)
         self._loginfo('Save self.cube_local_min from min correlations')
-        self.cube_local_min = Cube(data=cube_local_min, \
+        self.cube_local_min = Cube(data=cube_local_min,
                                    wave=self.wave,
                                    wcs=self.wcs, mask=np.ma.nomask)
 
@@ -1381,7 +1381,7 @@ class ORIGIN(object):
         self._loginfo('Step 06 - Compute Purity threshold')
 
         if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' + \
+            raise IOError('Run the step 01 to initialize ' +
                           'self.segmentation_test')
 
         self.param['pfa'] = pfa
@@ -1429,7 +1429,7 @@ class ORIGIN(object):
         self._loginfo('Step 07 - Compute Purity threshold')
 
         if self.cube_local_max is None:
-            raise IOError('Run the step 05 to initialize ' + \
+            raise IOError('Run the step 05 to initialize ' +
                           'self.cube_local_max and self.cube_local_min')
         if self.segmap is None:
             raise IOError('Run the step 06 to initialize self.segmap')
@@ -1486,7 +1486,7 @@ class ORIGIN(object):
                                  self.wave)
 
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0' + \
+        self._loginfo('Save the catalogue in self.Cat0' +
                       ' (%d lines)' % len(self.Cat0))
         self._loginfo('08 Done')
 
@@ -1580,7 +1580,7 @@ class ORIGIN(object):
         Catcomp['ID'] += (Cat0['ID'].max() + 1)
         self.Cat1 = vstack([Cat0, Catcomp])
         _format_cat(self.Cat1, 1)
-        self._loginfo('Save the catalogue in self.Cat1' + \
+        self._loginfo('Save the catalogue in self.Cat1' +
                       ' (%d lines)' % len(self.Cat1))
 
         self._loginfo('09 Done')
@@ -1613,8 +1613,8 @@ class ORIGIN(object):
             raise IOError('Run the step 09 to initialize self.Cat1 catalog')
 
         self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = \
-            Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF, \
-                            self.wfields, self.wcs, self.wave, size_grid=grid_dxy, \
+            Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF,
+                            self.wfields, self.wcs, self.wave, size_grid=grid_dxy,
                             criteria='flux', order_dct=30, horiz_psf=1, horiz=5)
 
         self._loginfo('Purity estimation')
@@ -1622,7 +1622,7 @@ class ORIGIN(object):
                                       [self.Pval_r, self.Pval_r_comp],
                                       [self.index_pval, self.index_pval_comp])
         _format_cat(self.Cat2, 2)
-        self._loginfo('Save the updated catalogue in self.Cat2' + \
+        self._loginfo('Save the updated catalogue in self.Cat2' +
                       ' (%d lines)' % len(self.Cat2))
 
         self.spectra = []
@@ -1630,7 +1630,7 @@ class ORIGIN(object):
             spe = Spectrum(data=data, var=vari, wave=self.wave,
                            mask=np.ma.nomask)
             self.spectra.append(spe)
-        self._loginfo('Save the estimated spectrum of each line in ' + \
+        self._loginfo('Save the estimated spectrum of each line in ' +
                       'self.spectra')
 
         self._loginfo('10 Done')
@@ -1888,7 +1888,7 @@ class ORIGIN(object):
                 mea = self.meaO2[area - 1]
                 std = self.stdO2[area - 1]
             else:
-                raise IOError('pfa_test param is None: set a value or run' + \
+                raise IOError('pfa_test param is None: set a value or run' +
                               ' the Step03')
         else:
             if self.cube_std is None:
@@ -2082,7 +2082,7 @@ class ORIGIN(object):
             ax2.plot(threshold, purity, 'xr')
 
         ym, yM = ax.get_ylim()
-        ax.plot([threshold, threshold], [ym, yM], 'r', alpha=.25, lw=2, \
+        ax.plot([threshold, threshold], [ym, yM], 'r', alpha=.25, lw=2,
                 label='automatic threshold')
 
         ax.set_ylim((ym, yM))
