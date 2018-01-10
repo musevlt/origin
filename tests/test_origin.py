@@ -9,8 +9,9 @@ import shutil
 from mpdaf.sdetect import Source, Catalog
 from origin import ORIGIN
 
-MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)), 
+MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                         'minicube.fits')
+
 
 def test_origin():
     """test ORIGIN"""
@@ -22,15 +23,15 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     my_origin.step01_preprocessing()
     my_origin.write()
-    
+
     my_origin = ORIGIN.load('tmp')
     my_origin.step02_areas()
     my_origin.write()
-    
+
     my_origin = ORIGIN.load('tmp')
     my_origin.step03_compute_PCA_threshold()
     my_origin.write()
-    
+
     my_origin = ORIGIN.load('tmp')
     my_origin.step04_compute_greedy_PCA()
     my_origin.write()
@@ -39,8 +40,8 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     my_origin.step05_compute_TGLR(ncpu=1)
     my_origin.write()
-    
-    #segmap
+
+    # segmap
     my_origin = ORIGIN.load('tmp')
     my_origin.step06_compute_segmentation_map(pfa=0.05)
     my_origin.write()
@@ -49,28 +50,28 @@ def test_origin():
     my_origin = ORIGIN.load('tmp')
     my_origin.step07_compute_purity_threshold()
     my_origin.write()
-    
+
     my_origin = ORIGIN.load('tmp')
     my_origin.step08_detection()
     my_origin.write()
-    
+
     my_origin = ORIGIN.load('tmp')
     my_origin.step09_detection_lost()
     my_origin.write()
-    
+
     # estimation
     my_origin = ORIGIN.load('tmp', newname='tmp2')
     my_origin.step10_compute_spectra()
     my_origin.write()
-    
+
     # list of source objects
     my_origin = ORIGIN.load('tmp2')
     cat = my_origin.step11_write_sources(ncpu=1)
     cat = my_origin.step11_write_sources(ncpu=2, overwrite=True)
-    assert (len(cat) == 9) 
+    assert (len(cat) == 9)
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 9)
-    
+
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
     Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
