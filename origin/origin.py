@@ -1402,7 +1402,7 @@ class ORIGIN(object):
         
     def step07_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
-                                        spect_size=10, filter_thres=True):        
+                                        spect_size=10):        
         """find the threshold  for a given purity
 
         Parameters
@@ -1451,13 +1451,13 @@ class ORIGIN(object):
         Compute_threshold_purity(purity, self.cube_local_max.data,
                                  self.cube_local_min.data, self.segmap.data,
                                  spat_size, spect_size, tol_spat, tol_spec,
-                                 filter_thres)
+                                 True, True)
         self.param['threshold'] = threshold                                       
         self._loginfo('Threshold: %.1f '%threshold)
      
         self._loginfo('07 Done')
         
-    def step08_detection(self, threshold=None, filter_det=True):
+    def step08_detection(self, threshold=None):
         """Detections on local maxima from max correlation + spatia-spectral
         merging in order to create the first catalog.
 
@@ -1488,7 +1488,7 @@ class ORIGIN(object):
                              self.cube_local_min.data, self.segmap.data, 
                              self.param['spat_size'], self.param['spect_size'], 
                              self.param['tol_spat'], self.param['tol_spec'],
-                             filter_det, self.cube_profile._data, self.wcs,
+                             True, self.cube_profile._data, self.wcs,
                              self.wave)
                                 
         _format_cat(self.Cat0, 0)
@@ -1496,8 +1496,7 @@ class ORIGIN(object):
         ' (%d lines)'%len(self.Cat0))
         self._loginfo('08 Done')  
         
-    def step09_detection_lost(self, purity=None, filter_thres=True,
-                              filter_det=True):
+    def step09_detection_lost(self, purity=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1 
@@ -1564,7 +1563,7 @@ class ORIGIN(object):
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
-                                           filter_thres)
+                                           True, False)
         self.param['threshold2'] =  threshold2                                     
         self._loginfo('Threshold: %.1f '%threshold2)
         
@@ -1576,7 +1575,7 @@ class ORIGIN(object):
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
-                                           filter_det,
+                                           True,
                                            self.cube_profile._data,
                                            self.wcs, self.wave)
         Catcomp.rename_column('T_GLR', 'STD')                                   

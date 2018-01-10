@@ -1821,7 +1821,7 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc,MinLoc,thresh,spat_size,spect_size,filte
     else:
         return zM,yM,xM
     
-def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,filter_act):
+def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,filter_act, bkgrd):
     
     """Compute the purity values corresponding to a threshold
 
@@ -1871,24 +1871,25 @@ def purity_iter(locM,locm,thresh,spat_size,spect_size,map_in,tol_spat,tol_spec,f
         xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging(zm,ym,xm,map_in,tol_spat,tol_spec)
     else:
         xoutm,youtm,zoutm,aoutm,iout1m,iout2m = spatiospectral_merging_mat(zm,ym,xm,map_in,tol_spat,tol_spec)
-    # purity computed on the background (aout==0)
-    det_m, det_M = len(np.unique(iout1m[aoutm==0])) , len(np.unique(iout1M[aoutM==0]))
-    if len(np.unique(iout1M[aoutM==0]))>0:
-        est_purity = 1 - det_m / det_M      
+    if bkgrd:
+        # purity computed on the background (aout==0)
+        det_m, det_M = len(np.unique(iout1m[aoutm==0])) , len(np.unique(iout1M[aoutM==0]))
+        if len(np.unique(iout1M[aoutM==0]))>0:
+            est_purity = 1 - det_m / det_M      
+        else:
+            est_purity = 0
     else:
-        est_purity = 0
+        det_m, det_M = len(np.unique(iout1m)) , len(np.unique(iout1M))
+        if len(np.unique(iout1M))>0:
+            est_purity = 1 - det_m / det_M      
+        else:
+            est_purity = 0
 
-    # for information, purity on the brigth sources
-#    det_m, det_M = len(np.unique(iout1m[aoutm!=0])) , len(np.unique(iout1M[aoutM!=0]))
-#    if len(np.unique(iout1M))>0:
-#        src_purity = 1 - det_m / det_M      
-#    else:
-#        src_purity = 0
     return est_purity , det_m, det_M
 
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
                            segmap, spat_size, spect_size, \
-                           tol_spat, tol_spec, filter_act):
+                           tol_spat, tol_spec, filter_act, bkgrd):
     """Compute threshold values corresponding to a given purity
 
     Parameters
@@ -1944,7 +1945,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
                                                     thresh,spat_size,\
                                                     spect_size, segmap,\
                                                     tol_spat,tol_spec, \
-                                                    filter_act) 
+                                                    filter_act, bkgrd) 
 
         Pval_r.append(est_purity)
         det_m.append(det_mit)
