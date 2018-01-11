@@ -35,16 +35,16 @@ import astropy.units as u
 import logging
 import numpy as np
 import os.path
+import pyfftw
 import sys
-import time
 
 from astropy.table import Table, Column
 from astropy.utils.console import ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
+from functools import wraps
 from joblib import Parallel, delayed
-import pyfftw
 from scipy import signal, stats
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
@@ -52,6 +52,7 @@ from scipy.spatial import ConvexHull
 from scipy.sparse.linalg import svds
 from six.moves import range, zip
 from scipy.interpolate import interp1d
+from time import time
 
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
@@ -59,6 +60,23 @@ from mpdaf.sdetect import Source
 __version__ = '3.0 beta'
 
 
+def whoami():
+    return sys._getframe(1).f_code.co_name
+
+
+def timeit(f):
+    """Decorator which prints the execution time of a function."""
+    @wraps(f)
+    def timed(*args, **kw):
+        logger = logging.getLogger(__name__)
+        t0 = time()
+        result = f(*args, **kw)
+        logger.debug('%s executed in %0.1fs', whoami(), time() - t0)
+        return result
+    return timed
+
+
+@timeit
 def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     """Function to compute the limits in pixels for each zone.
     Each zone is computed from the left to the right and the top to the bottom
@@ -82,8 +100,6 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     Date  : Dec,10 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
     # Segmentation of the rows vector in Nbsubcube parts from the right to the
     # left
     inty = np.linspace(Ny, 0, NbSubcube + 1, dtype=np.int)
@@ -95,7 +111,6 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
         inty += start[0]
         intx += start[1]
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return inty, intx
 
 
@@ -123,6 +138,7 @@ def continuum(D0, D0T, var, w_raw_var):
     return np.dot(np.dot(np.dot(D0, A), D0T), w_raw_var)
 
 
+@timeit
 def dct_residual(w_raw, order, var, approx):
     """Function to compute the residual of the DCT on raw data.
 
@@ -145,9 +161,6 @@ def dct_residual(w_raw, order, var, approx):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     nl = w_raw.shape[0]
     D0 = DCTMAT(nl, order)
     if approx:
@@ -165,10 +178,10 @@ def dct_residual(w_raw, order, var, approx):
     #            cont[:,i,j] = np.dot(np.dot(np.dot(D0,A),D0T), w_raw_var[:,i,j])
 
     Faint = w_raw - cont
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Faint, cont
 
 
+@timeit
 def Compute_Standardized_data(cube_dct, mask, var):
     """Function to compute the standardized data.
 
@@ -193,20 +206,13 @@ def Compute_Standardized_data(cube_dct, mask, var):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     nl, ny, nx = cube_dct.shape
-
     cube_dct[mask] = np.nan
-
     mean_lambda = np.nanmean(cube_dct, axis=(1, 2))
-
     var[mask] = np.inf
 
     STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) / np.sqrt(var)
     STD[mask] = 0
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return STD
 
 
@@ -315,6 +321,7 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
     return label
 
 
+@timeit
 def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     """Function to create non square area based on continuum test. The full
     2D image is first segmented in subcube. The area are fused in case they
@@ -347,9 +354,6 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     Date  : Sept,13 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     # square area index with borders
     Vert = np.sum(nexpmap, axis=1)
     Hori = np.sum(nexpmap, axis=0)
@@ -360,7 +364,7 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     start = (y1, x1)
     inty, intx = Spatial_Segmentation(Nx, Ny, NbSubcube, start=start)
 
-    #% FUSION square AREA
+    # % FUSION square AREA
     label = []
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
@@ -376,13 +380,10 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
                     label.append(label_tmp)
 
     label = np.array(label)
-
-    label = fusion_areas(label, MinS, MaxS)
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return label
+    return fusion_areas(label, MinS, MaxS)
 
 
+@timeit
 def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
     """Function to create non square area based on continuum test. Thanks
     to the continuum test, detected sources are fused with associated area.
@@ -416,9 +417,6 @@ def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
 
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     # compute the sources label
     nlab = labsrc.max()
     sources = np.zeros((nlab, Ny, Nx))
@@ -445,10 +443,10 @@ def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
             # delete the source
             sources[n, :, :] = 0
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return label, np.sum(sources_save, axis=0)
 
 
+@timeit
 def area_segmentation_convex_fusion(label, src):
     """Function to compute the convex enveloppe of the sources inside
     each area is then done. Finally all the convex enveloppe growth until
@@ -470,9 +468,6 @@ def area_segmentation_convex_fusion(label, src):
     Date  : Sept,13 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     label_fin = []
     # for each label
     for lab_n in range(label.shape[0]):
@@ -499,7 +494,6 @@ def area_segmentation_convex_fusion(label, src):
             label_out *= lab
             label_fin.append(label_out)
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return np.array(label_fin)
 
 
@@ -574,6 +568,7 @@ def Convexline(points, snx, sny):
     return lab_out
 
 
+@timeit
 def area_growing(label, mask):
     """Growing and merging of all areas
 
@@ -592,9 +587,6 @@ def area_growing(label, mask):
     Date  : Sept,13 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
     # start by smaller
     set_ind = np.argsort(np.sum(label, axis=(1, 2)))
     # closure horizon
@@ -616,11 +608,10 @@ def area_growing(label, mask):
         if np.sum(label_out) == np.sum(mask) or np.sum(label_out) == s:
             break
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-
     return label_out
 
 
+@timeit
 def area_segmentation_final(label, MinS, MaxS):
     """Merging of small areas and give index
 
@@ -641,9 +632,6 @@ def area_segmentation_final(label, MinS, MaxS):
     Date  : Sept,13 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     # if an area is too small
     label = fusion_areas(label, MinS, MaxS, option='var')
 
@@ -654,6 +642,7 @@ def area_segmentation_final(label, MinS, MaxS):
     return areamap
 
 
+@timeit
 def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
                            threshold_test, itermax, testO2):
     """Function to compute the PCA on each zone of a data cube.
@@ -685,8 +674,6 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1], cube_std.shape[2]))
     # Spatial segmentation
@@ -707,7 +694,6 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
             nstop += kstop
             bar.update()
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_faint, mapO2, nstop
 
 
@@ -778,7 +764,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
+    logger = logging.getLogger(__name__)
 
     faint = cube_in.copy()
 
@@ -896,7 +882,7 @@ def Compute_thresh_PCA_hist(test, threshold_test):
     Date  : July, 06 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
+    logger = logging.getLogger(__name__)
     test_v = np.ravel(test)
     c = test_v[test_v > 0]
     histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
@@ -958,7 +944,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
     Date  : Jul, 4 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
+    logger = logging.getLogger(__name__)
     # initialization
     # size psf
     if weights is None:
@@ -1005,6 +991,7 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
     return correl, profile, correl_min
 
 
+@timeit
 def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
@@ -1036,8 +1023,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     Date  : July, 6 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
+    logger = logging.getLogger(__name__)
     # data cube weighted by the MUSE covariance
     cube_var = cube / np.sqrt(sigma)
     # Inverse of the MUSE covariance
@@ -1151,8 +1137,8 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
                              flags=flags, threads=threads)
         temp3 = pyfftw.empty_aligned((s // 2 + 1, Ny, Nx), dtype='complex128')
         res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-        ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD', axes=[0],
-                                  flags=flags, threads=threads)
+        ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD',
+                                  axes=[0], flags=flags, threads=threads)
 
         for k in ProgressBar(list(range(len(Dico)))):
 
@@ -1187,10 +1173,10 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
             correl = np.maximum(correl, tmp)
             correl_min = np.minimum(correl_min, tmp)
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return correl, profile, correl_min
 
 
+@timeit
 def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
                            NbSubcube, neighboors):
     """Function to compute the local max of T_GLR values for each zone
@@ -1224,8 +1210,6 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
     # initialization
     cube_Local_max = np.zeros(correl.shape)
     cube_Local_min = np.zeros(correl.shape)
@@ -1252,15 +1236,15 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
             correl_temp_edge_min = correl_min[:, y1:y2, x1:x2]
             mask_temp_edge = mask[:, y1:y2, x1:x2]
             # Cube of pvalues for each zone
-            cube_Local_max_temp, cube_Local_min_temp = \
-                Compute_localmax(correl_temp_edge, correl_temp_edge_min, mask_temp_edge, neighboors)
+            cube_Local_max_temp, cube_Local_min_temp = Compute_localmax(
+                correl_temp_edge, correl_temp_edge_min, mask_temp_edge,
+                neighboors)
 
             cube_Local_max[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] =\
                 cube_Local_max_temp[:, y11:y22, x11:x22]
             cube_Local_min[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] =\
                 cube_Local_min_temp[:, y11:y22, x11:x22]
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return cube_Local_max, cube_Local_min
 
 
@@ -1761,7 +1745,8 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
         return zM, yM, xM
 
 
-def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol_spec, filter_act, bkgrd):
+def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat,
+                tol_spec, filter_act, bkgrd):
     """Compute the purity values corresponding to a threshold
 
     Parameters
@@ -1800,15 +1785,20 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
 
-    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(locM, locm, thresh, spat_size, spect_size, filter_act)
+    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(
+        locM, locm, thresh, spat_size, spect_size, filter_act)
     if len(zM) > 1000:
-        xoutM, youtM, zoutM, aoutM, iout1M, iout2M = spatiospectral_merging(zM, yM, xM, map_in, tol_spat, tol_spec)
+        xoutM, youtM, zoutM, aoutM, iout1M, iout2M = spatiospectral_merging(
+            zM, yM, xM, map_in, tol_spat, tol_spec)
     else:
-        xoutM, youtM, zoutM, aoutM, iout1M, iout2M = spatiospectral_merging_mat(zM, yM, xM, map_in, tol_spat, tol_spec)
+        xoutM, youtM, zoutM, aoutM, iout1M, iout2M = spatiospectral_merging_mat(
+            zM, yM, xM, map_in, tol_spat, tol_spec)
     if len(zm) > 1000:
-        xoutm, youtm, zoutm, aoutm, iout1m, iout2m = spatiospectral_merging(zm, ym, xm, map_in, tol_spat, tol_spec)
+        xoutm, youtm, zoutm, aoutm, iout1m, iout2m = spatiospectral_merging(
+            zm, ym, xm, map_in, tol_spat, tol_spec)
     else:
-        xoutm, youtm, zoutm, aoutm, iout1m, iout2m = spatiospectral_merging_mat(zm, ym, xm, map_in, tol_spat, tol_spec)
+        xoutm, youtm, zoutm, aoutm, iout1m, iout2m = spatiospectral_merging_mat(
+            zm, ym, xm, map_in, tol_spat, tol_spec)
     if bkgrd:
         # purity computed on the background (aout==0)
         det_m, det_M = len(np.unique(iout1m[aoutm == 0])), len(np.unique(iout1M[aoutM == 0]))
@@ -1826,6 +1816,7 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol
     return est_purity, det_m, det_M
 
 
+@timeit
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                              segmap, spat_size, spect_size,
                              tol_spat, tol_spec, filter_act, bkgrd,
@@ -1879,8 +1870,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
 
-    logger = logging.getLogger('origin')
-    t0 = time.time()
+    logger = logging.getLogger(__name__)
     # initialization
     det_m = []
     det_M = []
@@ -1961,11 +1951,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         detect = np.interp(threshold, Tval_r, det_M)
         logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f', threshold, detect, purity)
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-
     return threshold, Pval_r, Tval_r, det_m, det_M
 
 
+@timeit
 def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
                          segmentation_map, spat_size, spect_size,
                          tol_spat, tol_spec, filter_act, profile, wcs, wave):
@@ -2005,16 +1994,18 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
+    logger = logging.getLogger(__name__)
 
     logger.info('Thresholding...')
-    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(cube_local_max, cube_local_min, thresh, spat_size, spect_size, filter_act)
+    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(
+        cube_local_max, cube_local_min, thresh, spat_size, spect_size, filter_act)
     logger.info('Spatio-spectral merging...')
     if len(zM) > 1000:
-        xpixRef, ypixRef, zpixRef, seg_label, idout, iout2M = spatiospectral_merging(zM, yM, xM, segmentation_map, tol_spat, tol_spec)
+        xpixRef, ypixRef, zpixRef, seg_label, idout, iout2M = spatiospectral_merging(
+            zM, yM, xM, segmentation_map, tol_spat, tol_spec)
     else:
-        xpixRef, ypixRef, zpixRef, seg_label, idout, iout2M = spatiospectral_merging_mat(zM, yM, xM, segmentation_map, tol_spat, tol_spec)
+        xpixRef, ypixRef, zpixRef, seg_label, idout, iout2M = spatiospectral_merging_mat(
+            zM, yM, xM, segmentation_map, tol_spat, tol_spec)
 
     correl_max = cube_local_max[zpixRef, ypixRef, xpixRef]
     profile_max = profile[zpixRef, ypixRef, xpixRef]
@@ -2035,7 +2026,6 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
                     names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
                            'profile', 'seg_label', 'T_GLR'))
     Cat_ref.sort('ID')
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Cat_ref, (zm, ym, xm)
 
 
@@ -2379,7 +2369,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
                     maxz = z0 - 5 + z_est
                     zest[dy, dx] = maxz
                     ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 5, nl))
-                    #ind_z10 = np.arange(maxz-10,maxz+10)
+                    # ind_z10 = np.arange(maxz-10,maxz+10)
                     ind_hrz = slice(maxz - horiz, maxz + horiz)
 
                     lin_est[:, dy, dx] = deconv_met
@@ -2399,7 +2389,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
                     # compute flux
                     fest_00[dy, dx] = np.sum(deconv_met[ind_hrz])
                     fest_05[dy, dx] = np.sum(deconv_met[ind_z5])
-                    #fest_10[dy,dx] = np.sum(deconv_met[ind_z10])
+                    # fest_10[dy,dx] = np.sum(deconv_met[ind_z10])
 
     if criteria == 'flux':
         wy, wx = np.where(fest_00 == fest_00.max())
@@ -2412,9 +2402,9 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     z = zest[wy, wx]
 
     flux_est_5 = float(fest_05[wy, wx])
-    #flux_est_10 = float( fest_10[wy,wx] )
+    # flux_est_10 = float( fest_10[wy,wx] )
     MSE_5 = float(mse_5[wy, wx])
-    #MSE_10 = float( mse_10[wy,wx] )
+    # MSE_10 = float( mse_10[wy,wx] )
     estimated_line = lin_est[:, wy, wx]
     estimated_variance = var_est[:, wy, wx]
 
@@ -2433,7 +2423,8 @@ def peakdet(v, delta):
     ind = []
 
     # find all local maxima
-    ind = [n - delta for n in range(delta, nv + delta) if mv[n] > mv[n - 1] and mv[n] > mv[n + 1]]
+    ind = [n - delta for n in range(delta, nv + delta)
+           if mv[n] > mv[n - 1] and mv[n] > mv[n + 1]]
 
     # take the maximum and closest from original estimation
     indi = np.array(ind, dtype=int)
@@ -2447,6 +2438,7 @@ def peakdet(v, delta):
     return out
 
 
+@timeit
 def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
                     criteria='flux', order_dct=30, horiz_psf=1,
                     horiz=5):
@@ -2500,10 +2492,7 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
 
-    logger = logging.getLogger('origin')
-    t0 = time.time()
     # Initialization
-
     NL, NY, NX = RAW.shape
     Cat2_x_grid = []
     Cat2_y_grid = []
@@ -2520,10 +2509,10 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
 
-        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(red_dat,
-                                                         red_var, red_psf, red_wgt, horiz,
-                                                         size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria,
-                                                         order_dct)
+        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(
+            red_dat, red_var, red_psf, red_wgt, horiz,
+            size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria, order_dct
+        )
 
         Cat2_x_grid.append(x)
         Cat2_y_grid.append(y)
@@ -2554,8 +2543,6 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
 
     Cat2.add_columns([col_x, col_y, col_z, col_res, col_flux, col_num],
                      indexes=[4, 5, 6, 8, 8, 8])
-
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
 
     return Cat2, Cat_est_line_raw, Cat_est_line_var
 
@@ -2666,7 +2653,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     ----------
     """
 
-    logger = logging.getLogger('origin')
+    logger = logging.getLogger(__name__)
     logger.info('{}/{} source ID {}'.format(k + 1, ktot, i))
     cube = Cube(filename)
     cubevers = cube.primary_header.get('CUBE_V', '')
@@ -2777,7 +2764,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         # FWHM in arcsec of the profile
         profile_num = num_profil[j]
         profil_FWHM = step_wave * fwhm_profiles[profile_num]
-        #profile_dico = Dico[profile_num]
+        # profile_dico = Dico[profile_num]
         fl = flux[j]
         pu = purity[j]
         vals = [w[j], profil_FWHM, fl, GLR[j], profile_num, pu]
@@ -2803,6 +2790,7 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     src.write('%s/%s-%05d.fits' % (path, name, src.ID))
 
 
+@timeit
 def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                path_src, name, param, src_vers, author, path,
                                maxmap, segmap, ncpu=1):
@@ -2821,14 +2809,14 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     wave              : `mpdaf.obj.WaveCoord`
                         Spectral coordinates
     fwhm_profiles     : array
-                        List of fwhm values (in pixels) of the input spectra profiles (DICO).
+                        List of fwhm values (in pixels) of the input spectra
+                        profiles (DICO).
 
 
     Date  : Dec, 16 2015
     Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
+    logger = logging.getLogger(__name__)
     uflux = u.erg / (u.s * u.cm**2)
     unone = u.dimensionless_unscaled
 
@@ -2898,16 +2886,18 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     if ncpu > 1:
         # run in parallel
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
-            delayed(Construct_Object)(k, len(sources_arglist), cols, units, desc,
-                                      fmt, step_wave, origin, filename,
-                                      f_maxmap, f_segmap, f_correl, fwhm_profiles,
-                                      param, path_src, name,
+            delayed(Construct_Object)(k, len(sources_arglist), cols, units,
+                                      desc, fmt, step_wave, origin, filename,
+                                      f_maxmap, f_segmap, f_correl,
+                                      fwhm_profiles, param, path_src, name,
                                       *source_arglist)
 
-            for k, source_arglist in enumerate(sources_arglist))
+            for k, source_arglist in enumerate(sources_arglist)
+        )
         # print error messages if any
         for msg in errmsg:
-            if msg is None: continue
+            if msg is None:
+                continue
             logger.error(msg)
     else:
         for k, source_arglist in enumerate(sources_arglist):
@@ -2916,7 +2906,6 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                                    maxmap, segmap, correl, fwhm_profiles,
                                    param, path_src, name,
                                    *source_arglist)
-
             if msg is not None:
                 logger.error(msg)
 
@@ -2927,9 +2916,4 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     if os.path.isfile('%s/tmp_cube_correl.fits' % path2):
         os.remove('%s/tmp_cube_correl.fits' % path2)
 
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return len(np.unique(Cat['ID']))
-
-
-def whoami():
-    return sys._getframe(1).f_code.co_name
