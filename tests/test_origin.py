@@ -69,6 +69,7 @@ def test_origin():
     cat = my_origin.step11_write_sources(ncpu=1)
     cat = my_origin.step11_write_sources(ncpu=2, overwrite=True)
     assert (len(cat) == 9)
+
     cat = Catalog.read('tmp2/tmp2.fits')
     assert (len(cat) == 9)
 
@@ -86,5 +87,13 @@ def test_origin():
     cNz, cNy, cNx = src.cubes['MUSE_CUBE'].shape
     assert(cNy == Ny)
     assert(cNx == Nx)
-    shutil.rmtree('tmp')
-    shutil.rmtree('tmp2')
+
+    # Cleanup (try to close opened files)
+    for h in my_origin._log_file.handlers:
+        h.close()
+
+    try:
+        shutil.rmtree('tmp')
+        shutil.rmtree('tmp2')
+    except OSError:
+        print('Failed to remove tmp directories')

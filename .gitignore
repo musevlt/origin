@@ -11,3 +11,4 @@ dist/
 doc/api/
 doc/_build/
 htmlcov/
+.ipynb_checkpoints/
