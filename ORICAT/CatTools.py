@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Thu Dec 15 10:57:20 2016
@@ -16,23 +15,23 @@ import numpy as np
 
 
 def CREATE_ID(cat0, cat1, cat2, Radius=.5):
-    ''' Create ID correspondance between catalogs ground truth for 2 methods. 
-    Return ID with columns corresponding to : 
-        ID1: ID in Ground truth (cat0) 
+    ''' Create ID correspondance between catalogs ground truth for 2 methods.
+    Return ID with columns corresponding to :
+        ID1: ID in Ground truth (cat0)
         ID2: ID in first method (cat1)
         ID3: ID in second method (cat2)
 
-        If cat0, cat1 and cat2 match (catalog.match): 
-            they have source which are closer than "radius" 
+        If cat0, cat1 and cat2 match (catalog.match):
+            they have source which are closer than "radius"
             ID = [ID1,ID2,ID3]
-        If a ground truth source is not found by any methods: 
-            ID = [ID1,0,0] 
+        If a ground truth source is not found by any methods:
+            ID = [ID1,0,0]
         or similarly if only one method find the ground truth:
             ID = [ID1,ID2,0] or ID = [ID1,0,ID2]
-        If there is correspondance between the two method, if they find 
+        If there is correspondance between the two method, if they find
         the same source which is not in the ground truth:
             ID = [0,ID2,ID3]
-        If only one method find a source which is not in the ground truth: 
+        If only one method find a source which is not in the ground truth:
             ID = [0,ID2,0] or ID = [0,0,ID3]'''
 
     cat1cat0match, cat1cat0nomatch1, cat1cat0nomatch2 = cat1.match(cat0, Radius)
@@ -367,7 +366,7 @@ def pixFromRaDec(cat, ID, sky2pix):
 
 
 def RaDec2Pix(ID, redcat_gt, redcat_o1, redcat_o2, sky2pix):
-    ''' return all the y,x pixels position for Ground truth and from 
+    ''' return all the y,x pixels position for Ground truth and from
     catalogs for the two methods. y,x are computed from Ra Dec data'''
     position = {}
     position['gt'] = {}

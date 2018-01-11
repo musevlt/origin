@@ -1,5 +1,4 @@
 
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Mar 24 15:37:27 2017
@@ -159,7 +158,6 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.write()
 
 
-# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #"""
 # Created on Fri Mar 24 15:37:27 2017
