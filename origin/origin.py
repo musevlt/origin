@@ -60,6 +60,9 @@ from .lib_origin import Spatial_Segmentation, \
     __version__
 
 
+CURDIR = os.path.dirname(os.path.abspath(__file__))
+
+
 def _format_cat(Cat, i):
     try:
         Cat['ra'].format = '.3f'
@@ -72,7 +75,7 @@ def _format_cat(Cat, i):
             Cat['residual'].format = '.3f'
             Cat['flux'].format = '.1f'
             Cat['purity'].format = '.3f'
-    except:
+    except Exception:
         logger = logging.getLogger('origin')
         logger.info('Invalid format for the Catalog')
 
@@ -231,9 +234,8 @@ class ORIGIN(object):
                  Det_M_comp, Det_m_comp, Cat1, spectra, Cat2):
         # loggers
         setup_logging(name='origin', level=logging.DEBUG,
-                           color=False,
-                           fmt='%(name)s[%(levelname)s]: %(message)s',
-                           stream=sys.stdout)
+                      color=False, fmt='%(name)s[%(levelname)s]: %(message)s',
+                      stream=sys.stdout)
 
         if os.path.exists('%s/%s/%s.log' % (path, name, name)):
             setup_logfile(name='origfile', level=logging.DEBUG,
@@ -254,10 +256,7 @@ class ORIGIN(object):
         # init
         self.path = path
         self.name = name
-        if param is None:
-            self.param = {}
-        else:
-            self.param = param
+        self.param = param or {}
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s' % filename)
@@ -282,16 +281,15 @@ class ORIGIN(object):
         # List of spectral profile
         self.param['profiles'] = profiles
         if profiles is None:
-            DIR = os.path.dirname(__file__)
-            profiles = DIR + '/Dico_FWHM_2_12.fits'
+            profiles = CURDIR + '/Dico_FWHM_2_12.fits'
         self._loginfo('Load dictionary of spectral profile %s' % profiles)
         self.profiles = []
         self.FWHM_profiles = []
-        fprof = fits.open(profiles)
-        for hdu in fprof[1:]:
-            self.profiles.append(hdu.data)
-            self.FWHM_profiles.append(hdu.header['FWHM'])
-        fprof.close()
+        with fits.open(profiles) as fprof:
+            for hdu in fprof[1:]:
+                self.profiles.append(hdu.data)
+                self.FWHM_profiles.append(hdu.header['FWHM'])
+
         # check that the profiles have the same size
         if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
             raise IOError('The profiles must have the same size')
@@ -301,7 +299,7 @@ class ORIGIN(object):
         # map fileds in the case of MUSE mosaic
         self.wfields = None
         if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header ' +
+            self._loginfo('Compute FSFs from the datacube FITS header '
                           'keywords')
             Nfsf = 13
             if 'FSFMODE' in cub.primary_header:
@@ -430,7 +428,8 @@ class ORIGIN(object):
         self._loginfo('00 Done')
 
     @classmethod
-    def init(cls, cube, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None, name='origin'):
+    def init(cls, cube, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
+             name='origin'):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -496,9 +495,8 @@ class ORIGIN(object):
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
 
-        stream = open('%s/%s.yaml' % (folder, name), 'r')
-        param = yaml.load(stream)
-        stream.close()
+        with open('%s/%s.yaml' % (folder, name), 'r') as stream:
+            param = yaml.load(stream)
 
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -695,12 +693,11 @@ class ORIGIN(object):
         # step10
         if os.path.isfile('%s/spectra.fits' % folder):
             spectra = []
-            fspectra = fits.open('%s/spectra.fits' % folder)
-            for i in range(len(fspectra) // 2):
-                spectra.append(Spectrum('%s/spectra.fits' % folder,
-                                        hdulist=fspectra,
-                                        ext=('DATA%d' % i, 'STAT%d' % i)))
-            fspectra.close()
+            with fits.open('%s/spectra.fits' % folder) as fspectra:
+                for i in range(len(fspectra) // 2):
+                    spectra.append(Spectrum('%s/spectra.fits' % folder,
+                                            hdulist=fspectra,
+                                            ext=('DATA%d' % i, 'STAT%d' % i)))
         else:
             spectra = None
         if os.path.isfile('%s/Cat2.fits' % folder):
@@ -728,9 +725,9 @@ class ORIGIN(object):
                    Det_m_comp=Det_m_comp, Cat1=Cat1, spectra=spectra,
                    Cat2=Cat2)
 
-    def _loginfo(self, logstr):
-        self._log_file.info(logstr)
-        self._log_stdout.info(logstr)
+    def _loginfo(self, *args):
+        self._log_file.info(*args)
+        self._log_stdout.info(*args)
 
     @property
     def ima_dct(self):
@@ -855,9 +852,8 @@ class ORIGIN(object):
                 os.makedirs(path2)
 
         # parameters in .yaml
-        stream = open('%s/%s.yaml' % (path2, self.name), 'w')
-        yaml.dump(self.param, stream)
-        stream.close()
+        with open('%s/%s.yaml' % (path2, self.name), 'w') as stream:
+            yaml.dump(self.param, stream)
 
         # log file
         currentlog = self._log_file.handlers[0].baseFilename
