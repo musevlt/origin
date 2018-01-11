@@ -176,13 +176,10 @@ def Compute_Standardized_data(cube_dct, mask, var):
     ----------
     cube_dct:   array
                 output of dct_residual
-
     mask  :   array
              Mask array (expmap==0)
-
     var     : array
               variance array
-
     newvar  : boolean
               if true, variance is re-estimated
 
@@ -190,7 +187,6 @@ def Compute_Standardized_data(cube_dct, mask, var):
     -------
     STD     :   array
                 standardized data cube from cube dct
-
     VAR     :   array
                 cube of variance
 
@@ -205,11 +201,10 @@ def Compute_Standardized_data(cube_dct, mask, var):
     cube_dct[mask] = np.nan
 
     mean_lambda = np.nanmean(cube_dct, axis=(1, 2))
-    mean_lambda = mean_lambda[:, np.newaxis, np.newaxis] * np.ones((nl, ny, nx))
 
     var[mask] = np.inf
 
-    STD = (cube_dct - mean_lambda) / np.sqrt(var)
+    STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) / np.sqrt(var)
     STD[mask] = 0
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return STD
