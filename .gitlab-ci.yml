@@ -7,4 +7,4 @@ before_script:
   - pwd
 py36:
   script:
-    - tox -v
+    - tox -v -e py36
