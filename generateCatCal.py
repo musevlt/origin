@@ -19,7 +19,7 @@ import os
 
 #%%
 
-cubename   = '/Users/antonyschutz/Documents/ORIG/sdetect_origin/DATACUBE_UDF-10.fits'
+cubename = '/Users/antonyschutz/Documents/ORIG/sdetect_origin/DATACUBE_UDF-10.fits'
 
 
 caly1 = 116
@@ -50,9 +50,9 @@ calname = 'cat_cal.fits'
 
 NCUBE = 1
 orig = ORIGIN.init(cubename, NCUBE, [0, 0, 0, 0], name=name)
-orig.step00_init_calibrator( x = calx1, y = caly1, z = calz1, amp = 2, profil = 6 )
-orig.step00_init_calibrator( x = calx2, y = caly2, z = calz2, amp = 1, profil = 6 ,Cat_cal='add')
-orig.step00_init_calibrator( x = calx3, y = caly3, z = calz3, amp = 1, profil = 6 ,Cat_cal='add')
-orig.step00_init_calibrator( x = calx4, y = caly4, z = calz4, amp = 1, profil = 6 ,Cat_cal='add')
-orig.step00_init_calibrator( x = calx5, y = caly5, z = calz5, amp = 1, profil = 6 ,Cat_cal='add')
-orig.step00_init_calibrator( random = 20, Cat_cal = 'add', save = True, name = calname )
+orig.step00_init_calibrator(x=calx1, y=caly1, z=calz1, amp=2, profil=6)
+orig.step00_init_calibrator(x=calx2, y=caly2, z=calz2, amp=1, profil=6, Cat_cal='add')
+orig.step00_init_calibrator(x=calx3, y=caly3, z=calz3, amp=1, profil=6, Cat_cal='add')
+orig.step00_init_calibrator(x=calx4, y=caly4, z=calz4, amp=1, profil=6, Cat_cal='add')
+orig.step00_init_calibrator(x=calx5, y=caly5, z=calz5, amp=1, profil=6, Cat_cal='add')
+orig.step00_init_calibrator(random=20, Cat_cal='add', save=True, name=calname)
