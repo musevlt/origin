@@ -657,7 +657,7 @@ class ORIGIN(object):
             xm = np.loadtxt('%s/xm.txt' % folder, ndmin=1).astype(np.int)
         else:
             xm = None
-         # step08
+        # step08
         if os.path.isfile('%s/Pval_r_comp.txt' % folder):
             Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt' % folder).astype(np.float)
         else:
@@ -752,19 +752,13 @@ class ORIGIN(object):
     def threshold_correl(self):
         """Estimated threshold used to detect lines on local maxima of max
         correl"""
-        if 'threshold' in self.param:
-            return self.param['threshold']
-        else:
-            return None
+        return self.param.get('threshold')
 
     @property
     def threshold_std(self):
         """Estimated threshold used to detect complementary lines on local
         maxima of std cube"""
-        if 'threshold2' in self.param:
-            return self.param['threshold2']
-        else:
-            return None
+        return self.param.get('threshold2')
 
     @property
     def Cat2b(self):
@@ -776,18 +770,18 @@ class ORIGIN(object):
                          dtype=['i4', 'f4', 'f4', 'f4', 'i4', 'i4', 'i4'], masked=True)
             ncat['DLINE'].format = '.2f'
             for l in range(lmax):
-                ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='FLUX{}'.format(l), dtype='f4',
-                                             format='.1f'))
-                ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='TGLR{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='STD{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
-                                             format='.2f'))
+                ncat.add_column(MaskedColumn(name='LBDA{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='FLUX{}'.format(l),
+                                             dtype='f4', format='.1f'))
+                ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='TGLR{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='STD{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='PURI{}'.format(l),
+                                             dtype='f4', format='.2f'))
             for key, group in zip(cat.groups.keys, cat.groups):
                 # compute average ra,dec and peak-to-peak distance in arcsec
                 mra = group['ra'].mean()
