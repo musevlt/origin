@@ -245,7 +245,7 @@ def Segmentation(Segmentation_test, pfa, mask=None):
     pfa                 :   float
                             Pvalue for the test which performs segmentation
     mask                : array
-                          a mask to convolve the sources with                           
+                          a mask to convolve the sources with
 
     Returns
     -------
@@ -271,7 +271,7 @@ def Segmentation(Segmentation_test, pfa, mask=None):
 
 def createradvar(cu, ot):
     """Function to compute the compactness of areas using variance of
-    position. The variance is computed on the position given by 
+    position. The variance is computed on the position given by
     adding one of the 'ot' to 'cu'
 
     Parameters
@@ -300,8 +300,8 @@ def createradvar(cu, ot):
 
 
 def fusion_areas(label, MinSize, MaxSize, option=None):
-    """Function which merge areas which have a surface less than 
-    MinSize if the size after merging is less than MaxSize. 
+    """Function which merge areas which have a surface less than
+    MinSize if the size after merging is less than MaxSize.
     The criteria of neighboor can be related to the minimum surface
     or to the compactness of the output area
 
@@ -315,7 +315,7 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
                 The size of areas above which they cant merge
     option  :   string
                 if 'var' the compactness criteria is used
-                if None the minimum surface criteria is used                
+                if None the minimum surface criteria is used
 
     Returns
     -------
@@ -375,23 +375,23 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
 
 
 def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
-    """Function to create non square area based on continuum test. The full 
+    """Function to create non square area based on continuum test. The full
     2D image is first segmented in subcube. The area are fused in case they
-    are too small. Thanks to the continuum test, detected sources are 
-    fused with associated area. The convex enveloppe of the sources inside 
+    are too small. Thanks to the continuum test, detected sources are
+    fused with associated area. The convex enveloppe of the sources inside
     each area is then done. Finally all the convex enveloppe growth until
     using all the pixels
 
     Parameters
     ----------
     nexpmap :   2D array
-                the active pixel of the image      
+                the active pixel of the image
     MinS    :   number
                 The size of areas under which they need to merge
     MaxS    :   number
-                The size of areas above which they cant merge                                       
+                The size of areas above which they cant merge
     NbSubcube : integer
-                Number of subcubes for the spatial segmentation    
+                Number of subcubes for the spatial segmentation
     Nx        : integer
                 Number of columns
     Ny        : integer
@@ -443,9 +443,9 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
 
 
 def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
-    """Function to create non square area based on continuum test. Thanks 
-    to the continuum test, detected sources are fused with associated area. 
-    The convex enveloppe of the sources inside 
+    """Function to create non square area based on continuum test. Thanks
+    to the continuum test, detected sources are fused with associated area.
+    The convex enveloppe of the sources inside
     each area is then done. Finally all the convex enveloppe growth until
     using all the pixels
 
@@ -455,11 +455,11 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
                         continuum test
     label :     array
                 label of fused square generated in
-                area_segmentation_square_fusion          
+                area_segmentation_square_fusion
     pfa   :     float
-                Pvalue for the test which performs segmentation                                  
+                Pvalue for the test which performs segmentation
     NbSubcube : integer
-                Number of subcubes for the spatial segmentation    
+                Number of subcubes for the spatial segmentation
     Nx        : integer
                 Number of columns
     Ny        : integer
@@ -519,7 +519,7 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
 
 
 def area_segmentation_convex_fusion(label, src):
-    """Function to compute the convex enveloppe of the sources inside 
+    """Function to compute the convex enveloppe of the sources inside
     each area is then done. Finally all the convex enveloppe growth until
     using all the pixels
 
@@ -573,7 +573,7 @@ def area_segmentation_convex_fusion(label, src):
 
 
 def Convexline(points, snx, sny):
-    """Function to compute the convex enveloppe of the sources inside 
+    """Function to compute the convex enveloppe of the sources inside
     each area is then done and full the polygone
 
     Parameters
@@ -700,7 +700,7 @@ def area_segmentation_final(label, MinS, MaxS):
     MinS    :   number
                 The size of areas under which they need to merge
     MaxS    :   number
-                The size of areas above which they cant merge 
+                The size of areas above which they cant merge
 
     Returns
     -------
@@ -741,7 +741,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     threshold_test   : list
                        User given list of threshold (not pfa) to apply
                        on each area, the list is of lenght NbAreas
-                       or of lenght 1.                               
+                       or of lenght 1.
     itermax          : integer
                        Maximum number of iterations
     testO2           : list of arrays
@@ -786,7 +786,7 @@ def Compute_PCA_threshold(faint, pfa_test):
     faint   :   array
                 The 3D cube data clean
     pfa_test         : float
-                       PFA of the test                       
+                       PFA of the test
 
     Returns
     -------
@@ -826,7 +826,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 the test to be performed on data
 
     Noise_population : float
-                       Fraction of spectra estimated as background                          
+                       Fraction of spectra estimated as background
     itermax          : integer
                        Maximum number of iterations
 
@@ -1527,50 +1527,50 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
 
 
 def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
-    """recursive function to perform the spatial merging. 
-    if neighborhood are close spatially to a lines: they are merged, 
+    """recursive function to perform the spatial merging.
+    if neighborhood are close spatially to a lines: they are merged,
     then the neighboor of the seed is analysed if they are enough close to
     the current line (a neighboor of the original seed) they are merged
-    only if the frequency is enough close (surrogate) if the frequency is 
-    different it is rejected. 
+    only if the frequency is enough close (surrogate) if the frequency is
+    different it is rejected.
     If two line (or a group of lines and a new line) are:
-        Enough close without a big spectral gap 
-        not in the same label (a group in background close to one source 
+        Enough close without a big spectral gap
+        not in the same label (a group in background close to one source
         inside a source label)
     the resulting ID is the ID of the source label and not the background
 
 
     Parameters
     ----------
-    cat     : kinda of catalog of the previously merged lines 
-              xout,yout,zout,aout,iout: 
+    cat     : kinda of catalog of the previously merged lines
+              xout,yout,zout,aout,iout:
               the 3D position, area label and ID for all analysed lines
-    coord   : the 3D position of the analysed line which become the current 
+    coord   : the 3D position of the analysed line which become the current
               seed
     area    : array
               list of area
 
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging                    
+               spectrale tolerance for the spectral merging
     n : int
         index of the original seed
     iin : 0-1
           index of (not) processed line
     id_cu : ID of the original seed
-    IDorder :   list in which the ID are processed, 
-                *** maybe to improve *** 
+    IDorder :   list in which the ID are processed,
+                *** maybe to improve ***
                 can be by the max max loc correl
-                can be by the closest distance        
+                can be by the closest distance
     Returns
     -------
     xout,yout,zout : array
                      the 3D position of the estimated lines
                      the same as z,y,x, they are not changed
 
-    aout : array 
+    aout : array
            the index of the label in map_in
     iout : array
            the ID after spatial and spatio spectral merging
@@ -1631,8 +1631,8 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
 
 
 def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
-    """perform the spatial and spatio spectral merging. 
-    The spectral merging give the same ID if several group of lines (from 
+    """perform the spatial and spatio spectral merging.
+    The spectral merging give the same ID if several group of lines (from
     spatiale merging) if they share at least one line frequency
 
     Parameters
@@ -1643,10 +1643,10 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
                 Segmentation map
 
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging                    
+               spectrale tolerance for the spectral merging
 
     Returns
     -------
@@ -1654,7 +1654,7 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
                      the 3D position of the estimated lines
                      the same as z,y,x, they are not changed
 
-    aout : array 
+    aout : array
            the index of the label in map_in
     iout : array
            the ID after spatial and spatio spectral merging
@@ -1747,7 +1747,7 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
     """Filter the correl>thresh in + DATA by the correl>thresh in - DATA
     if both = True do the same in opposite
 
-    if a line is detected at the z0,y0,x0 in the - data correlation for a 
+    if a line is detected at the z0,y0,x0 in the - data correlation for a
     threshold, the + data correl are cleaned from this line and vice versa
 
     Parameters
@@ -1757,23 +1757,23 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
     MinLoc : array
            cube of local maxima from minus minimum correlation
     thresh : float
-             a threshold value           
+             a threshold value
 
     spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
     spect_size : int
-                 spectral lenght of the spectral filter  
-    map_in  : array 
+                 spectral lenght of the spectral filter
+    map_in  : array
               labels of source segmentation basedd on continuum
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging                    
+               spectrale tolerance for the spectral merging
     filter_act : Bool
-                 activate or deactivate the spatio spectral filter 
+                 activate or deactivate the spatio spectral filter
                  default: True
-    both : Bool 
+    both : Bool
            if true the process is applied in both sense, otherwise it s applied
            only in detection purpose and not to compute the purity
 
@@ -1783,7 +1783,7 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
                The spatio spectral position of the lines in the + data correl
 
     zM,yM,xM : (optional) list of tuple of int
-               The spatio spectral position of the lines in the - data correl    
+               The spatio spectral position of the lines in the - data correl
     Date  : October, 25 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
@@ -1832,21 +1832,21 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol
     locm : array
            cube of local maxima from minus minimum correlation
     thresh : float
-             a threshold value           
+             a threshold value
 
     spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
     spect_size : int
-                 spectral lenght of the spectral filter  
-    map_in  : array 
+                 spectral lenght of the spectral filter
+    map_in  : array
               labels of source segmentation basedd on continuum
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging       
+               spectrale tolerance for the spectral merging
     filter_act : Bool
-                 activate or deactivate the spatio spectral filter 
+                 activate or deactivate the spatio spectral filter
                  default: True
     Returns
     -------
@@ -1903,17 +1903,17 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     segmap: array
             segmentation map
     spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
     spect_size : int
-                 spectral lenght of the spectral filter                
+                 spectral lenght of the spectral filter
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging              
+               spectrale tolerance for the spectral merging
 
     filter_act : Bool
-                 activate or deactivate the spatio spectral filter 
+                 activate or deactivate the spatio spectral filter
                  default: True
     Returns
     -------
@@ -1990,16 +1990,16 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
                         map of estimated continuum for segmentation
 
     spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
     spect_size : int
-                 spectral lenght of the spectral filter                
+                 spectral lenght of the spectral filter
     tol_spat : int
-               spatiale tolerance for the spatial merging 
+               spatiale tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging                   
+               spectrale tolerance for the spectral merging
     filter_act : Bool
-                 activate or deactivate the spatio spectral filter 
+                 activate or deactivate the spatio spectral filter
                  default: True
 
     Returns
@@ -2578,7 +2578,7 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
     purity_curves     : array, array
                           purity curves related to area
     purity_index      : array, array
-                          index of purity curves related to area             
+                          index of purity curves related to area
 
     Returns
     -------

@@ -3,10 +3,10 @@ ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
 This software has been developped by Carole Clastres under the supervision of
 David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL). From November 2016 the software is updated by 
+Laure Piqueras (CRAL). From November 2016 the software is updated by
 Antony Schutz.
 
-The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). 
+The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 Please contact Carole for more info at carole.clastres@univ-lyon1.fr
 Please contact Antony for more info at antonyschutz@gmail.com
 
@@ -82,11 +82,11 @@ class ORIGIN(object):
 
        This software has been developped by Carole Clastres under the
        supervision of David Mary (Lagrange institute, University of Nice).
-       From November 2016 the software is updated by Antony Schutz. 
+       From November 2016 the software is updated by Antony Schutz.
 
        The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
        Please contact Carole for more info at carole.clastres@univ-lyon1.fr
-       Please contact Antony for more info at antonyschutz@gmail.com      
+       Please contact Antony for more info at antonyschutz@gmail.com
 
        An Origin object is mainly composed by:
         - cube data (raw data and covariance)
@@ -107,7 +107,7 @@ class ORIGIN(object):
         cube_raw               : array (Nz, Ny, Nx)
                                  Raw data.
         var                    : array (Nz, Ny, Nx)
-                                 Variance.               
+                                 Variance.
         Nx                     : integer
                                  Number of columns
         Ny                     : integer
@@ -130,7 +130,7 @@ class ORIGIN(object):
                                  MUSE PSF (one per field)
         FWHM_PSF               : float or list of float
                                  Mean of the fwhm of the PSF in pixel (one per
-                                 field). 
+                                 field).
         imawhite               : `~mpdaf.obj.Image`
                                  White image
         self.cube_std          : `~mpdaf.obj.Cube`
@@ -139,7 +139,7 @@ class ORIGIN(object):
                                  DCT continuum. Result of step01.
         self.ima_std           : `~mpdaf.obj.Image`
                                  Mean of standardized data for PCA along the
-                                 wavelength axis. Result of step01. 
+                                 wavelength axis. Result of step01.
         self.ima_dct           : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis. Result of step01.
@@ -155,7 +155,7 @@ class ORIGIN(object):
         histO2                 : list of arrays (one per PCA area)
                                  PCA histogram (step03).
         binO2                  : list of arrays (one per PCA area)
-                                 Bins for the PCA histogram (step03).          
+                                 Bins for the PCA histogram (step03).
         thresO2                : list of float
                                  For each area, threshold value (step03).
         meaO2                  : list of float
@@ -163,7 +163,7 @@ class ORIGIN(object):
                                  estimate the threshold (step03).
         stdO2                  : list of float
                                  Scale parameter of the Gaussian fit used to
-                                 estimate the threshold (step03).                         
+                                 estimate the threshold (step03).
         cube_faint             : `~mpdaf.obj.Cube`
                                  Projection on the eigenvectors associated to
                                  the lower eigenvalues of the data cube
@@ -194,7 +194,7 @@ class ORIGIN(object):
         Det_M                  : List
                                  Number of detections in +DATA (step07).
         Det_m                  : List
-                                 Number of detections in -DATA  (step07).                                                      
+                                 Number of detections in -DATA  (step07).
         Cat0                   : astropy.Table
                                  Catalog returned by step08
         zm                     : array
@@ -213,13 +213,13 @@ class ORIGIN(object):
         Det_M_comp             : List
                                  Number of detections in +DATA (step09).
         Det_m_comp             : List
-                                 Number of detections in -DATA  (step09).                                
+                                 Number of detections in -DATA  (step09).
         Cat1                   : astropy.Table
-                                 Catalog returned by step09                                
+                                 Catalog returned by step09
         spectra                : list of `~mpdaf.obj.Spectrum`
                                  Estimated lines. Result of step10.
         Cat2                   : astropy.Table
-                                 Catalog returned by step10. 
+                                 Catalog returned by step10.
     """
 
     def __init__(self, path, name, param, filename, fieldmap, profiles, PSF,
@@ -485,13 +485,13 @@ class ORIGIN(object):
         Parameters
         ----------
         folder  : string
-                  Folder name (with the relative path) where the ORIGIN data 
+                  Folder name (with the relative path) where the ORIGIN data
                   have been stored.
         newname : string
                   New name for this session.
                   This parameter lets the user to load a previous session but
                   continue in a new one.
-                  If None, the user will continue the loaded session. 
+                  If None, the user will continue the loaded session.
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
@@ -994,7 +994,7 @@ class ORIGIN(object):
         self._loginfo("Current session saved in %s" % path2)
 
     def step01_preprocessing(self, dct_order=10):
-        """ Preprocessing of data, dct, standardization and noise compensation         
+        """ Preprocessing of data, dct, standardization and noise compensation
 
         Parameters
         ----------
@@ -1044,7 +1044,7 @@ class ORIGIN(object):
         self._loginfo('01 Done')
 
     def step02_areas(self, pfa=.2, minsize=100, maxsize=None):
-        """ Creation of automatic area         
+        """ Creation of automatic area
 
         Parameters
         ----------
@@ -1052,17 +1052,17 @@ class ORIGIN(object):
                     PFA of the segmentation test to estimates sources with
                     strong continuum
         minsize  :  int
-                    Lenght in pixel of the side of typical surface wanted                        
+                    Lenght in pixel of the side of typical surface wanted
                     enough big area to satisfy the PCA
         maxsize :   int
-                    Lenght in pixel of the side of maximum surface wanted                        
+                    Lenght in pixel of the side of maximum surface wanted
 
 
         Returns
         -------
 
         self.nbAreas    :   int
-                            number of areas                    
+                            number of areas
         self.areamap : `~mpdaf.obj.Image`
                        The map of areas
         """
@@ -1132,7 +1132,7 @@ class ORIGIN(object):
         Parameters
         ----------
         pfa_test            :   float
-                                Threshold of the test (default=0.01)  
+                                Threshold of the test (default=0.01)
 
         Returns
         -------
@@ -1141,7 +1141,7 @@ class ORIGIN(object):
         self.histO2  : lists of arrays (one per PCA area)
                        PCA histogram
         self.binO2   : lists of arrays (one per PCA area)
-                       bin for the PCA histogram          
+                       bin for the PCA histogram
         self.thresO2 : list of float
                        For each area, threshold value
         self.meaO2   : list of float
@@ -1191,23 +1191,23 @@ class ORIGIN(object):
                                   itermax=100, threshold_list=None):
         """ Loop on each zone of the data cube and compute the greedy PCA.
         The test (test_fun) and the threshold (threshold_test) define the part
-        of the each zone of the cube to segment in nuisance and background. 
-        A part of the background part (1/Noise_population %) is used to compute 
-        a mean background, a signature. 
-        The Nuisance part is orthogonalized to this signature in order to not 
+        of the each zone of the cube to segment in nuisance and background.
+        A part of the background part (1/Noise_population %) is used to compute
+        a mean background, a signature.
+        The Nuisance part is orthogonalized to this signature in order to not
         loose this part during the greedy process. SVD is performed on nuisance
-        in order to modelized the nuisance part and the principal eigen vector, 
+        in order to modelized the nuisance part and the principal eigen vector,
         only one, is used to perform the projection of the whole set of data:
         Nuisance and background. The Nuisance spectra which satisfied the test
-        are updated in the background computation and the background is so 
+        are updated in the background computation and the background is so
         cleaned from sources signature. The iteration stop when all the spectra
         satisfy the criteria
 
         Parameters
         ----------
 
-        Noise_population    :   float                
-                                Fraction of spectra used to estimate 
+        Noise_population    :   float
+                                Fraction of spectra used to estimate
                                 the background signature
 
         itermax             :   integer
@@ -1216,9 +1216,9 @@ class ORIGIN(object):
         threshold_list      :   list
                                 User given list of threshold (not pfa) to apply
                                 on each area, the list is of lenght nbAreas
-                                or of lenght 1. Before using this option 
+                                or of lenght 1. Before using this option
                                 make sure to have good correspondance between
-                                the Areas and the threshold in list. 
+                                the Areas and the threshold in list.
                                 Use: self.plot_areas() to be sure.
 
         Returns
@@ -1273,7 +1273,7 @@ class ORIGIN(object):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
-        The correlation can be computed per "area"  for low memory system. 
+        The correlation can be computed per "area"  for low memory system.
         Then a Loop on each zone of self.cube_correl is performed to
         compute for each zone:
 
@@ -1287,7 +1287,7 @@ class ORIGIN(object):
           channel.
 
         Parameters
-        ----------                    
+        ----------
         NbSubcube   :   integer
                         Number of sub-cubes for the spatial segmentation
                         If NbSubcube>1 the correlation and local maximas and
@@ -1371,7 +1371,7 @@ class ORIGIN(object):
         Parameters
         ----------
         pfa    : float
-                 Pvalue for the test which performs segmentation 
+                 Pvalue for the test which performs segmentation
 
         Returns
         -------
@@ -1402,14 +1402,14 @@ class ORIGIN(object):
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold        
+                 purity to automatically compute the threshold
         tol_spat : integer
                    spatial tolerance for the spatial merging (distance in pixels)
                    TODO en fonction du FWHM
         tol_spec : integer
                    spectral tolerance for the spatial merging (distance in pixels)
         spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
         spect_size : int
                  spectral lenght of the spectral filter
 
@@ -1493,12 +1493,12 @@ class ORIGIN(object):
     def step09_detection_lost(self, purity=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
-        merged with the catalog Cat0 in order to create the catalog Cat1 
+        merged with the catalog Cat0 in order to create the catalog Cat1
 
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold 
+                 purity to automatically compute the threshold
                  If None, previous purity is used
         Returns
         -------
@@ -1669,7 +1669,7 @@ class ORIGIN(object):
             - O.images: Dictionary that contains images: the white image
                         (MUSE_WHITE), the map of maxima along the wavelength
                         axis (MAXMAP), the segmentation map (SEG_ORIG) and
-                        narrow band images (NB_LINE_** and NB_CORR_**) 
+                        narrow band images (NB_LINE_** and NB_CORR_**)
             - O.cubes: Dictionary that contains the small data cube around the
                        source (MUSE-CUBE)
         """
@@ -1766,7 +1766,7 @@ class ORIGIN(object):
 
     def plot_step03_PCA_threshold(self, log10=False, ncol=3, legend=True,
                                   xlim=None, fig=None, **fig_kw):
-        """ Plot the histogram and the threshold for the starting point of the 
+        """ Plot the histogram and the threshold for the starting point of the
         PCA
 
         Parameters
@@ -1857,13 +1857,13 @@ class ORIGIN(object):
 
     def plot_PCA_threshold(self, area, pfa_test='step03', log10=False,
                            legend=True, xlim=None, ax=None):
-        """ Plot the histogram and the threshold for the starting point of the 
+        """ Plot the histogram and the threshold for the starting point of the
         PCA
 
         Parameters
         ----------
-        area      : integer in [1, nbAreas] 
-                    Area ID          
+        area      : integer in [1, nbAreas]
+                    Area ID
         pfa_test  : float or string
                     PFA of the test (if 'step03', the value set during step03
                     is used)
@@ -1872,7 +1872,7 @@ class ORIGIN(object):
         legend    : bool
                     If true, write pfa and threshold values as legend
         xlim      : (float, float)
-                    Set the data limits for the x-axis                  
+                    Set the data limits for the x-axis
         ax        : matplotlib.Axes
                     Axes instance in which the image is drawn
         """
@@ -1978,9 +1978,9 @@ class ORIGIN(object):
 
     def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
         """ Plot the 2D segmentation map associated to a PFA
-        This function draw the labels of the segmentation map which is computed, 
+        This function draw the labels of the segmentation map which is computed,
         not with the same pfa, in :
-            - the step02 to compute the automatic areas splitting for 
+            - the step02 to compute the automatic areas splitting for
             the PCA
             - the step06 to compute the threshold of the local maxima
 
@@ -2208,7 +2208,7 @@ class ORIGIN(object):
                 the Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
                  Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function. 
+                 the ``ax.imshow()`` function.
         """
         if self.wfields is None:
             fwhm = self.FWHM_PSF
