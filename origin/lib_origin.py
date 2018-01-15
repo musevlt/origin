@@ -45,7 +45,8 @@ from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
 from functools import wraps
 from joblib import Parallel, delayed
-from scipy import signal, stats
+from scipy import stats
+from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import ConvexHull
@@ -119,13 +120,13 @@ def DCTMAT(nl, order):
 
     Parameters
     ----------
-    dct_o   :   integer
-                order of the dct (spectral length)
+    order : int
+        order of the dct (spectral length)
 
     Returns
     -------
-    dct_m   :   array
-                DCT Matrix
+    array: DCT Matrix
+
     """
     yy, xx = np.mgrid[:nl, :order + 1]
     D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi * yy / nl))
@@ -557,7 +558,7 @@ def Convexline(points, snx, sny):
     mask = (np.abs(r) <= radius)
 
     # to close the lines
-    conv_lab = signal.fftconvolve(tmp, mask, mode='same') > 1e-9
+    conv_lab = fftconvolve(tmp, mask, mode='same') > 1e-9
 
     lab_out = conv_lab.copy()
     for n in range(conv_lab.shape[0]):
@@ -674,7 +675,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     Author: antony schutz (antonyschutz@gmail.com)
     """
     cube_faint = cube_std.copy()
-    mapO2 = np.zeros((cube_std.shape[1], cube_std.shape[2]))
+    mapO2 = np.zeros(cube_std.shape[1:])
     # Spatial segmentation
     nstop = 0
     with ProgressBar(NbArea) as bar:
@@ -687,8 +688,8 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
 
             thr = threshold_test[area_ind - 1]
             test = testO2[area_ind - 1]
-            cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(cube_temp, test, thr,
-                                                                Noise_population, itermax)
+            cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
+                cube_temp, test, thr, Noise_population, itermax)
             mapO2[ksel] = mO2
             nstop += kstop
             bar.update()
@@ -787,7 +788,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 break
             if tmp > itermax:
                 nstop += 1
-                logger.info('Warning iterations stopped at %d' % (tmp))
+                logger.info('Warning iterations stopped at %d' , tmp)
                 break
             # vector data
             test_v = np.ravel(test)
@@ -806,9 +807,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
 
             # remove spectral mean from residual data
             mean_in_pca = np.mean(x_red, axis=1)
-            x_red_nomean = x_red.copy()
-            x_red_nomean -= np.repeat(mean_in_pca[:, np.newaxis],
-                                      x_red.shape[1], axis=1)
+            x_red_nomean = x_red - mean_in_pca[:, np.newaxis]
 
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
@@ -827,9 +826,8 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 U, s, V = svds(x_red_nomean, k=1)
 
             # orthogonal projection
-            xest = np.dot(np.dot(U, np.transpose(U)),
-                          np.reshape(faint, (nl, nynx)))
-            faint -= np.reshape(xest, (nl, nynx))
+            xest = np.dot(np.dot(U, U.T), faint)
+            faint -= xest
 
             # test
             test = O2test(faint)
@@ -865,6 +863,7 @@ def O2test(Cube_in):
 
 def Compute_thresh_PCA_hist(test, threshold_test):
     """Function to compute greedy svd.
+
     Parameters
     ----------
     test :   array
@@ -893,7 +892,8 @@ def Compute_thresh_PCA_hist(test, threshold_test):
 
     coef = stats.norm.ppf(threshold_test)
     thresO2 = mod - sigma * coef
-    logger.debug('1st estimation mean/std/threshold: %f/%f/%f' % (mod, sigma, thresO2))
+    logger.debug('1st estimation mean/std/threshold: %f/%f/%f',
+                 mod, sigma, thresO2)
 
     x = (frecO2[1:] + frecO2[:-1]) / 2
     g1 = Gaussian1D(amplitude=histO2.max(), mean=mod, stddev=sigma)
@@ -960,7 +960,8 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
 
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
-            logger.info('Area %d,%d / (%d,%d)' % (numy + 1, numx + 1, NbSubcube, NbSubcube))
+            logger.info('Area %d,%d / (%d,%d)',
+                        numy + 1, numx + 1, NbSubcube, NbSubcube)
             # limits of each spatial zone
             x1 = np.maximum(0, intx[numx] - longxy)
             x2 = np.minimum(intx[numx + 1] + longxy, Nx)
@@ -1030,69 +1031,68 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
     # Dimensions of the data
     shape = cube_var.shape
-    Nz = cube_var.shape[0]
-    Ny = cube_var.shape[1]
-    Nx = cube_var.shape[2]
+    Nz, Ny, Nx = cube_var.shape
 
-    cube_fsf = np.empty(shape)
-    norm_fsf = np.empty(shape)
     if weights is None:  # one FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with the '
-                    'zero-mean FSF')
-        PSF_Moffat_m = PSF_Moffat \
-            - np.mean(PSF_Moffat, axis=(1, 2))[:, np.newaxis, np.newaxis]
+        logger.info('Step 1/3 Spatial convolution of the weighted data with '
+                    'the zero-mean FSF')
+        PSF_Moffat_m = np.ascontiguousarray(PSF_Moffat[:, ::-1, ::-1])
+        PSF_Moffat_m -= np.mean(PSF_Moffat_m, axis=(1, 2))[:, None, None]
+
+        cube_fsf = np.empty(shape)
         for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i, :, :] = signal.fftconvolve(cube_var[i, :, :],
-                                                   PSF_Moffat_m[i, :, :][::-1, ::-1],
-                                                   mode='same')
+            cube_fsf[i] = fftconvolve(cube_var[i], PSF_Moffat_m[i],
+                                      mode='same')
         del cube_var
-        PSF_Moffat_m = PSF_Moffat_m**2
+
+        PSF_Moffat_m **= 2
+
         # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
+        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
+                    'atoms')
+        norm_fsf = np.empty(shape)
         for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i, :, :] = signal.fftconvolve(inv_var[i, :, :],
-                                                   PSF_Moffat_m[i, :, :][::-1, ::-1],
-                                                   mode='same')
+            norm_fsf[i] = fftconvolve(inv_var[i], PSF_Moffat_m[i], mode='same')
         del PSF_Moffat_m, inv_var
     else:  # several FSF
         # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with the '
-                    'zero-mean FSF')
+        logger.info('Step 1/3 Spatial convolution of the weighted data with '
+                    'the zero-mean FSF')
         nfields = len(PSF_Moffat)
         PSF_Moffat_m = []
         for n in range(nfields):
-            PSF_Moffat_m.append(PSF_Moffat[n]
-                                - np.mean(PSF_Moffat[n], axis=(1, 2))[:, np.newaxis, np.newaxis])
+            PSF_m = np.ascontiguousarray(PSF_Moffat[n][:, ::-1, ::-1])
+            PSF_m -= np.mean(PSF_m, axis=(1, 2))[:, np.newaxis, np.newaxis]
+            PSF_Moffat_m.append(PSF_m)
+
         # build a weighting map per PSF and convolve
-        cube_fsf = np.empty(shape)
+        cube_fsf = np.zeros(shape, dtype=float)
         for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i, :, :] = 0
             for n in range(nfields):
-                cube_fsf[i, :, :] = cube_fsf[i, :, :] \
-                    + signal.fftconvolve(weights[n] * cube_var[i, :, :],
-                                         PSF_Moffat_m[n][i, :, :][::-1, ::-1],
-                                         mode='same')
+                cube_fsf[i] += fftconvolve(weights[n] * cube_var[i],
+                                           PSF_Moffat_m[n][i], mode='same')
         del cube_var
+
         for n in range(nfields):
-            PSF_Moffat_m[n] = PSF_Moffat_m[n]**2
+            PSF_Moffat_m[n] **= 2
+
         # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D atoms')
+        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
+                    'atoms')
+        norm_fsf = np.zeros(shape, dtype=float)
         for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i, :, :] = 0
             for n in range(nfields):
-                norm_fsf[i, :, :] = norm_fsf[i, :, :] \
-                    + signal.fftconvolve(weights[n] * inv_var[i, :, :],
-                                         PSF_Moffat_m[n][i, :, :][::-1, ::-1],
-                                         mode='same')
+                norm_fsf[i] += fftconvolve(weights[n] * inv_var[i],
+                                           PSF_Moffat_m[n][i], mode='same')
         del PSF_Moffat_m, inv_var
 
     # First cube of correlation values
     # initialization with the first profile
     logger.info('Step 3/3 Computing second cube of correlation values')
     profile = np.empty(shape, dtype=np.int)
-    correl = -np.inf * np.ones(shape)
-    correl_min = np.inf * np.ones(shape)
+    correl = np.full(shape, -np.inf)
+    correl_min = np.full(shape, np.inf)
 
     if threads == 1:
         for k in ProgressBar(list(range(len(Dico)))):
@@ -1101,11 +1101,10 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
             profile_square = d_j**2
             for y in range(Ny):
                 for x in range(Nx):
-                    cube_profile = signal.fftconvolve(cube_fsf[:, y, x], d_j,
-                                                      mode='same')
-                    norm_profile = signal.fftconvolve(norm_fsf[:, y, x],
-                                                      profile_square,
-                                                      mode='same')
+                    cube_profile = fftconvolve(cube_fsf[:, y, x], d_j,
+                                               mode='same')
+                    norm_profile = fftconvolve(norm_fsf[:, y, x],
+                                               profile_square, mode='same')
 
                     norm_profile[norm_profile <= 0] = np.inf
                     tmp = cube_profile / np.sqrt(norm_profile)

@@ -1138,12 +1138,7 @@ class ORIGIN(object):
         if self.areamap is None:
             raise IOError('Run the step 02 to initialize self.areamap ')
 
-        self.testO2 = []  # list of arrays
-        self.histO2 = []  # list of arrays
-        self.binO2 = []  # list of arrays
-        self.thresO2 = []
-        self.meaO2 = []
-        self.stdO2 = []
+        results = []
 
         for area_ind in range(1, self.nbAreas + 1):
             # limits of each spatial zone
@@ -1152,16 +1147,13 @@ class ORIGIN(object):
             # Data in this spatio-spectral zone
             cube_temp = self.cube_std._data[:, ksel]
 
-            testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp,
-                                                                    pfa_test)
-            self._loginfo('Area %d, estimation mean/std/threshold:' % area_ind
-                          + ' %f/%f/%f' % (mea, std, tO2))
-            self.testO2.append(testO2)
-            self.histO2.append(hO2)
-            self.binO2.append(fO2)
-            self.thresO2.append(tO2)
-            self.meaO2.append(mea)
-            self.stdO2.append(std)
+            res = Compute_PCA_threshold(cube_temp, pfa_test)
+            results.append(res)
+            self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f'
+                          % (area_ind, res[4], res[5], res[3]))
+
+        (self.testO2, self.histO2, self.binO2, self.thresO2, self.meaO2,
+         self.stdO2) = zip(*results)
 
         self._loginfo('03 Done')
 
@@ -1232,17 +1224,17 @@ class ORIGIN(object):
 
         self._loginfo('Compute greedy PCA on each zone')
 
-        faint, mapO2, nstop = \
-            Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
-                                   self.areamap._data, Noise_population,
-                                   thr, itermax, self.testO2)
+        faint, mapO2, nstop = Compute_GreedyPCA_area(
+            self.nbAreas, self.cube_std._data, self.areamap._data,
+            Noise_population, thr, itermax, self.testO2)
         if nstop > 0:
-            self._logwarning('The iterations have been reached the limit of %d in %d cases' % (itermax, nstop))
+            self._logwarning('The iterations have been reached the limit '
+                             'of %d in %d cases', itermax, nstop)
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
-                               mask=np.ma.nomask)
-        self._loginfo('Save the numbers of iterations used by the' +
+                               mask=np.ma.nomask, copy=False)
+        self._loginfo('Save the numbers of iterations used by the'
                       ' testO2 for each spaxel in self.mapO2')
 
         self.mapO2 = Image(data=mapO2, wcs=self.wcs)
@@ -1251,10 +1243,11 @@ class ORIGIN(object):
 
     def step05_compute_TGLR(self, NbSubcube=1, neighboors=26, ncpu=4):
         """Compute the cube of GLR test values.
+
         The test is done on the cube containing the faint signal
-        (self.cube_faint) and it uses the PSF and the spectral profile.
+        (``self.cube_faint``) and it uses the PSF and the spectral profile.
         The correlation can be computed per "area"  for low memory system.
-        Then a Loop on each zone of self.cube_correl is performed to
+        Then a Loop on each zone of ``self.cube_correl`` is performed to
         compute for each zone:
 
         - The local maxima distribution of each zone
@@ -1305,9 +1298,9 @@ class ORIGIN(object):
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
         if NbSubcube == 1:
-            correl, profile, cm = Correlation_GLR_test(self.cube_faint._data,
-                                                       self.var, self.PSF, self.wfields,
-                                                       self.profiles, ncpu)
+            correl, profile, cm = Correlation_GLR_test(
+                self.cube_faint._data, self.var, self.PSF, self.wfields,
+                self.profiles, ncpu)
         else:
             correl, profile, cm = Correlation_GLR_test_zone(
                 self.cube_faint._data, self.var, self.PSF, self.wfields,
@@ -1316,31 +1309,27 @@ class ORIGIN(object):
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[self.mask] = 0
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
-                                mask=np.ma.nomask)
+                                mask=np.ma.nomask, copy=False)
 
         self._loginfo('Save the number of profile associated to the TGLR' +
                       ' in self.cube_profile')
         profile[self.mask] = 0
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
-                                 mask=np.ma.nomask, dtype=int)
+                                 mask=np.ma.nomask, dtype=int, copy=False)
 
         self._loginfo('Save the map of maxima in self.maxmap')
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)
 
         self._loginfo('Compute p-values of local maximum of correlation values')
-        cube_local_max, cube_local_min = Compute_local_max_zone(correl, cm,
-                                                                self.mask,
-                                                                intx, inty, NbSubcube,
-                                                                neighboors)
+        cube_local_max, cube_local_min = Compute_local_max_zone(
+            correl, cm, self.mask, intx, inty, NbSubcube, neighboors)
         self._loginfo('Save self.cube_local_max from max correlations')
-        self.cube_local_max = Cube(data=cube_local_max,
-                                   wave=self.wave,
-                                   wcs=self.wcs, mask=np.ma.nomask)
+        self.cube_local_max = Cube(data=cube_local_max, wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask, copy=False)
         self._loginfo('Save self.cube_local_min from min correlations')
-        self.cube_local_min = Cube(data=cube_local_min,
-                                   wave=self.wave,
-                                   wcs=self.wcs, mask=np.ma.nomask)
+        self.cube_local_min = Cube(data=cube_local_min, wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask, copy=False)
 
         self._loginfo('05 Done')
 
@@ -1609,7 +1598,6 @@ class ORIGIN(object):
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
         write the final sources.
-
 
         Parameters
         ----------
