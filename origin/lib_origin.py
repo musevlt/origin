@@ -206,7 +206,6 @@ def Compute_Standardized_data(cube_dct, mask, var):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
-    nl, ny, nx = cube_dct.shape
     cube_dct[mask] = np.nan
     mean_lambda = np.nanmean(cube_dct, axis=(1, 2))
     var[mask] = np.inf

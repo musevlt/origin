@@ -1007,7 +1007,7 @@ class ORIGIN(object):
                                  Mean of DCT continuum cube along the
                                  wavelength axis
         """
-        self._loginfo('Step 01 - Preprocessing, dct order=%d' % dct_order)
+        self._loginfo('Step 01 - Preprocessing, dct order=%d', dct_order)
 
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
@@ -1017,14 +1017,14 @@ class ORIGIN(object):
         # compute standardized data
         self._loginfo('Data standardizing')
         cube_std = Compute_Standardized_data(faint_dct, self.mask, self.var)
-        cont_dct = cont_dct / np.sqrt(self.var)
+        cont_dct /= np.sqrt(self.var)
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask)
+                             mask=np.ma.nomask, copy=False)
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask)
+                             mask=np.ma.nomask, copy=False)
 
         self._loginfo('01 Done')
 
@@ -1075,14 +1075,12 @@ class ORIGIN(object):
 
             self._loginfo('First segmentation of %d^2 square' % NbSubcube)
             self._loginfo('Squares segmentation and fusion')
-            square_cut_fus = area_segmentation_square_fusion(nexpmap,
-                                                             MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
+            square_cut_fus = area_segmentation_square_fusion(
+                nexpmap, MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
 
             self._loginfo('Sources fusion')
-            square_src_fus, src = \
-                area_segmentation_sources_fusion(self.segmap.data,
-                                                 square_cut_fus, pfa,
-                                                 self.Ny, self.Nx)
+            square_src_fus, src = area_segmentation_sources_fusion(
+                self.segmap.data, square_cut_fus, pfa, self.Ny, self.Nx)
 
             self._loginfo('Convex envelope')
             convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
