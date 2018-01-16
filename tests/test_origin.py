@@ -68,23 +68,23 @@ def test_origin():
     my_origin = ORIGIN.load('tmp2')
     cat = my_origin.step11_write_sources(ncpu=1)
     cat = my_origin.step11_write_sources(ncpu=2, overwrite=True)
-    assert (len(cat) == 9)
+    assert len(cat) == 9
+
     cat = Catalog.read('tmp2/tmp2.fits')
-    assert (len(cat) == 9)
+    assert len(cat) == 9
 
     # test returned sources are valid
     src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
-    Nz = np.array([sp.shape[0] for sp in src.spectra.values()])
-    assert (len(np.unique(Nz)) == 1)
-    Ny = np.array([ima.shape[0] for ima in src.images.values()])
-    assert(len(np.unique(Ny)) == 1)
-    Nx = np.array([ima.shape[1] for ima in src.images.values()])
-    assert(len(np.unique(Nx)) == 1)
-    Nz = np.unique(Nz)[0]
-    Ny = np.unique(Ny)[0]
-    Nx = np.unique(Nx)[0]
-    cNz, cNy, cNx = src.cubes['MUSE_CUBE'].shape
-    assert(cNy == Ny)
-    assert(cNx == Nx)
-    shutil.rmtree('tmp')
-    shutil.rmtree('tmp2')
+    assert set(sp.shape[0] for sp in src.spectra.values()) == {3681}
+    assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
+    assert src.cubes['MUSE_CUBE'].shape == (3681, 25, 25)
+
+    # Cleanup (try to close opened files)
+    for h in my_origin._log_file.handlers:
+        h.close()
+
+    try:
+        shutil.rmtree('tmp')
+        shutil.rmtree('tmp2')
+    except OSError:
+        print('Failed to remove tmp directories')
