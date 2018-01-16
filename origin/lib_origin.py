@@ -1094,27 +1094,29 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     correl = np.full(shape, -np.inf)
     correl_min = np.full(shape, np.inf)
 
+    profile = np.empty(shape, dtype=np.int)
+    correl = np.full(shape, -np.inf)
+    correl_min = np.full(shape, np.inf)
+    Dico = np.array(Dico)
+    Dico -= np.mean(Dico, axis=1)[:, None]
+    Dico_sq = Dico ** 2
+
     if threads == 1:
         for k in ProgressBar(list(range(len(Dico)))):
             # Second cube of correlation values
-            d_j = Dico[k] - np.mean(Dico[k])
-            profile_square = d_j**2
-            for y in range(Ny):
-                for x in range(Nx):
-                    cube_profile = fftconvolve(cube_fsf[:, y, x], d_j,
-                                               mode='same')
-                    norm_profile = fftconvolve(norm_fsf[:, y, x],
-                                               profile_square, mode='same')
+            d_j = Dico[k][:, None, None]
+            d_j2 = Dico_sq[k][:, None, None]
+            cube_profile = fftconvolve(cube_fsf, d_j, mode='same')
+            norm_profile = fftconvolve(norm_fsf, d_j2, mode='same')
+            norm_profile[norm_profile <= 0] = np.inf
+            cube_profile /= np.sqrt(norm_profile)
 
-                    norm_profile[norm_profile <= 0] = np.inf
-                    tmp = cube_profile / np.sqrt(norm_profile)
-                    PROFILE_MAX = np.where(tmp > correl[:, y, x])[0]
-                    correl[:, y, x] = np.maximum(correl[:, y, x], tmp)
-                    correl_min[:, y, x] = np.minimum(correl_min[:, y, x], tmp)
-                    profile[PROFILE_MAX, y, x] = k
+            profile[cube_profile > correl] = k
+            np.maximum(correl, cube_profile, out=correl)
+            np.minimum(correl_min, cube_profile, out=correl_min)
     else:
 
-        ndico = Dico[0].shape[0]
+        ndico = Dico.shape[1]
         s = Nz + ndico - 1
         if ndico / 2 == ndico // 2:
             cc1 = ndico // 2 - 1
@@ -1141,7 +1143,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         for k in ProgressBar(list(range(len(Dico)))):
 
             # fftconvolve(cube_fsf[:,x,y], d_j)
-            d_j = Dico[k] - np.mean(Dico[k])
+            d_j = Dico[k]
             temp[:ndico] = d_j
             temp[ndico:] = 0
             fftd_j()  # fd_j=fft(d_j)
@@ -1154,7 +1156,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
             cube_profile = res[cc1:cc2, :, :].copy()
 
             # fftconvolve(norm_fsf[:,x,y], d_j**2)
-            temp[:ndico] = d_j**2
+            temp[:ndico] = Dico_sq[k]
             temp[ndico:] = 0
             fftd_j()  # fprof=fft(d_j**2)
 
