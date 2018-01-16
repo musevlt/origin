@@ -44,7 +44,8 @@ from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
 from functools import wraps
 from joblib import Parallel, delayed
-from scipy import stats
+from numpy import fft
+from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
@@ -1114,12 +1115,33 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     Dico_sq = Dico ** 2
 
     if threads == 1:
+        s1 = np.array(cube_fsf.shape)
+        s2 = np.array((Dico.shape[1], 1, 1))
+        shape = s1 + s2 - 1
+        fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape]
+        # fslice = tuple([slice(0, int(sz)) for sz in shape])
+
+        startind = (shape - s1) // 2
+        endind = startind + s1
+        cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
+
+        cube_fft = fft.rfftn(cube_fsf, fshape)
+        norm_fft = fft.rfftn(norm_fsf, fshape)
+
         for k in ProgressBar(list(range(len(Dico)))):
             # Second cube of correlation values
-            d_j = Dico[k][:, None, None]
-            d_j2 = Dico_sq[k][:, None, None]
-            cube_profile = fftconvolve(cube_fsf, d_j, mode='same')
-            norm_profile = fftconvolve(norm_fsf, d_j2, mode='same')
+            dico_fft = fft.rfftn(Dico[k][:, None, None], fshape)
+            dico_fft *= cube_fft
+            cube_profile = fft.irfftn(dico_fft, fshape)
+            # cube_profile = cube_profile[fslice].copy()
+            cube_profile = cube_profile[cslice]
+
+            dico_fft = fft.rfftn(Dico_sq[k][:, None, None], fshape)
+            dico_fft *= norm_fft
+            norm_profile = fft.irfftn(dico_fft, fshape)
+            # norm_profile = norm_profile[fslice].copy()
+            norm_profile = norm_profile[cslice]
+
             norm_profile[norm_profile <= 0] = np.inf
             cube_profile /= np.sqrt(norm_profile)
 
