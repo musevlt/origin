@@ -35,7 +35,6 @@ import astropy.units as u
 import logging
 import numpy as np
 import os.path
-import pyfftw
 
 from astropy.table import Table, Column
 from astropy.utils.console import ProgressBar as _ProgressBar
@@ -1148,6 +1147,10 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
             np.minimum(correl_min, cube_profile, out=correl_min)
+
+        # Clear the caches!
+        np.fft.fftpack._fft_cache._dict.clear()
+        np.fft.fftpack._real_fft_cache._dict.clear()
     else:
 
         ndico = Dico.shape[1]
@@ -1160,6 +1163,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
             cc2 = -ndico // 2 + 1
 
         logger.info('Compute the FFT planes...')
+        import pyfftw
         temp = pyfftw.empty_aligned(s, dtype='float64')
         fd_j = pyfftw.empty_aligned(s // 2 + 1, dtype='complex128')
         flags = ['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
