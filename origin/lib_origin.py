@@ -1114,30 +1114,32 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     Dico_sq = Dico ** 2
 
     if threads == 1:
+        # import pyfftw
+        # fft = pyfftw.interfaces.numpy_fft  # noqa
+        # pyfftw.interfaces.cache.enable()
+
         s1 = np.array(cube_fsf.shape)
         s2 = np.array((Dico.shape[1], 1, 1))
         shape = s1 + s2 - 1
-        fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape]
+        fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape[:1]]
         # fslice = tuple([slice(0, int(sz)) for sz in shape])
 
         startind = (shape - s1) // 2
         endind = startind + s1
         cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
 
-        cube_fft = fft.rfftn(cube_fsf, fshape)
-        norm_fft = fft.rfftn(norm_fsf, fshape)
+        cube_fft = fft.rfftn(cube_fsf, fshape, axes=(0,))
+        norm_fft = fft.rfftn(norm_fsf, fshape, axes=(0,))
 
         for k in ProgressBar(list(range(len(Dico)))):
             # Second cube of correlation values
-            dico_fft = fft.rfftn(Dico[k][:, None, None], fshape)
-            dico_fft *= cube_fft
-            cube_profile = fft.irfftn(dico_fft, fshape)
+            dico_fft = fft.rfftn(Dico[k], fshape)[:, None, None]
+            cube_profile = fft.irfftn(dico_fft * cube_fft, fshape, axes=(0,))
             # cube_profile = cube_profile[fslice].copy()
             cube_profile = cube_profile[cslice]
 
-            dico_fft = fft.rfftn(Dico_sq[k][:, None, None], fshape)
-            dico_fft *= norm_fft
-            norm_profile = fft.irfftn(dico_fft, fshape)
+            dico_fft = fft.rfftn(Dico_sq[k], fshape)[:, None, None]
+            norm_profile = fft.irfftn(dico_fft * norm_fft, fshape, axes=(0,))
             # norm_profile = norm_profile[fslice].copy()
             norm_profile = norm_profile[cslice]
 
@@ -1166,7 +1168,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         import pyfftw
         temp = pyfftw.empty_aligned(s, dtype='float64')
         fd_j = pyfftw.empty_aligned(s // 2 + 1, dtype='complex128')
-        flags = ['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
+        flags = ['FFTW_DESTROY_INPUT', 'FFTW_MEASURE']
         fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
                              threads=threads)
         temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
