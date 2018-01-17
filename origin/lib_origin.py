@@ -38,7 +38,7 @@ import os.path
 import pyfftw
 
 from astropy.table import Table, Column
-from astropy.utils.console import ProgressBar
+from astropy.utils.console import ProgressBar as _ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
@@ -70,6 +70,23 @@ def timeit(f):
         logger.debug('%s executed in %0.1fs', f.__name__, time() - t0)
         return result
     return timed
+
+
+def isnotebook():  # pragma: no cover
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True   # Jupyter notebook or qtconsole
+        elif shell == 'TerminalInteractiveShell':
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False      # Probably standard Python interpreter
+
+
+def ProgressBar(*args):
+    return _ProgressBar(*args, ipython_widget=isnotebook())
 
 
 @timeit
