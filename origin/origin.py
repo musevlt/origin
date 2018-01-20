@@ -732,6 +732,10 @@ class ORIGIN(object):
         self._log_file.info(logstr) 
         self._log_stdout.info(logstr)
         
+    def _logwarning(self, logstr):
+        self._log_file.warning(logstr) 
+        self._log_stdout.warning(logstr)    
+        
     @property
     def ima_dct(self):
         """DCT image"""
@@ -1023,9 +1027,9 @@ class ORIGIN(object):
             
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
-        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order)
+        faint_dct, cont_dct = dct_residual(self.cube_raw, self.var, dct_order)
          
-        # compute standardized data
+        # compute standardized data:
         self._loginfo('Data standardizing')
         cube_std  = Compute_Standardized_data(faint_dct, self.mask, self.var)
         cont_dct = cont_dct / np.sqrt(self.var)
@@ -1258,10 +1262,12 @@ class ORIGIN(object):
         
         self._loginfo('Compute greedy PCA on each zone')    
         
-        faint, mapO2 = \
+        faint, mapO2, nstop = \
         Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
                                self.areamap._data, Noise_population,
                                thr, itermax, self.testO2)
+        if nstop > 0:
+            self._logwarning('The iterations have been reached the limit of %d in %d cases'%(itermax,nstop))
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
@@ -1402,7 +1408,8 @@ class ORIGIN(object):
         
     def step07_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
-                                        spect_size=10):        
+                                        spect_size=10, 
+                                        auto=(5,15,0.1), threshlist=None):        
         """find the threshold  for a given purity
 
         Parameters
@@ -1418,7 +1425,12 @@ class ORIGIN(object):
                 spatiale size of the spatiale filter                
         spect_size : int
                  spectral lenght of the spectral filter
-                     
+        auto    : tuple (npts1,npts2,pmargin)
+                 nb of threshold sample for iteration 1 and 2, margin in purity
+                 default (5,15,0.1
+        threshlist : list
+                 list of thresholds to compute the purity
+           
         Returns
         -------
         self.threshold_correl : float
@@ -1446,14 +1458,14 @@ class ORIGIN(object):
         self.param['spat_size'] = spat_size
         self.param['spect_size'] = spect_size
 
-        self._loginfo('Estimation of threshold with purity = %.1f'%purity)
-        threshold, self.Pval_r, self.index_pval, self.Det_M, self.Det_m = \
+        self._loginfo('Estimation of threshold with purity = %.2f'%purity)
+        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
         Compute_threshold_purity(purity, self.cube_local_max.data,
                                  self.cube_local_min.data, self.segmap.data,
                                  spat_size, spect_size, tol_spat, tol_spec,
-                                 True, True)
+                                 True, True, auto, threshlist)
         self.param['threshold'] = threshold                                       
-        self._loginfo('Threshold: %.1f '%threshold)
+        self._loginfo('Threshold: %.2f '%threshold)
      
         self._loginfo('07 Done')
         
@@ -1496,7 +1508,7 @@ class ORIGIN(object):
         ' (%d lines)'%len(self.Cat0))
         self._loginfo('08 Done')  
         
-    def step09_detection_lost(self, purity=None):
+    def step09_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1 
@@ -1506,6 +1518,13 @@ class ORIGIN(object):
         purity : float
                  purity to automatically compute the threshold 
                  If None, previous purity is used
+        auto     : tuple (npts1,npts2,pmargin)
+                 nb of threshold sample for iteration 1 and 2, margin in purity
+                 default (5,15,0.1)
+        threshlist : list
+                 list of thresholds to compute the purity
+                 default None
+
         Returns
         -------
         self.threshold_correl : float
@@ -1548,13 +1567,13 @@ class ORIGIN(object):
             purity = self.param['purity']  
         self.param['purity2'] = purity
 
-        self._loginfo('Threshold computed with purity = %.1f'%purity)    
+        self._loginfo('Threshold computed with purity = %.2f'%purity)    
         
         self.cube_local_max_faint_dct = cube_local_max_faint_dct
         self.cube_local_min_faint_dct = cube_local_min_faint_dct
     
-        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_M_comp, \
-        self.Det_m_comp = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
+        self.Det_M_comp = Compute_threshold_purity(
                                            purity, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
@@ -1563,9 +1582,10 @@ class ORIGIN(object):
                                            self.param['spect_size'],
                                            self.param['tol_spat'],
                                            self.param['tol_spec'],
-                                           True, False)
+                                           True, False,
+                                           auto, threshlist)
         self.param['threshold2'] =  threshold2                                     
-        self._loginfo('Threshold: %.1f '%threshold2)
+        self._loginfo('Threshold: %.2f '%threshold2)
         
         Catcomp, inut = Create_local_max_cat(threshold2, 
                                            cube_local_max_faint_dct,
@@ -2044,7 +2064,7 @@ class ORIGIN(object):
             ima.plot(title='Labels of segmentation, pfa: %f' %(pfa), ax=ax,
                      **kwargs)
         
-    def plot_purity(self, comp=False, ax=None, log10=True):
+    def plot_purity(self, comp=False, ax=None, log10=False):
         """Draw number of sources per threshold computed in step07/step09
         
         Parameters
