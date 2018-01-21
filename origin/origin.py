@@ -1505,7 +1505,7 @@ class ORIGIN(object):
                                 
         _format_cat(self.Cat0, 0)
         self._loginfo('Save the catalogue in self.Cat0' + \
-        ' (%d lines)'%len(self.Cat0))
+        ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
         self._loginfo('08 Done')  
         
     def step09_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
@@ -1606,8 +1606,12 @@ class ORIGIN(object):
         Catcomp['ID'] += (Cat0['ID'].max() + 1)
         self.Cat1 = vstack([Cat0, Catcomp]) 
         _format_cat(self.Cat1, 1)
+        ns = len(np.unique(self.Cat1['ID']))
+        ds = ns - len(np.unique(self.Cat0['ID']))
+        nl = len(self.Cat1)
+        dl = nl - len(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat1' + \
-        ' (%d lines)'%len(self.Cat1))
+        ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
         
         self._loginfo('09 Done')
         
@@ -1650,7 +1654,7 @@ class ORIGIN(object):
                                       [self.index_pval, self.index_pval_comp])                  
         _format_cat(self.Cat2, 2)
         self._loginfo('Save the updated catalogue in self.Cat2' + \
-        ' (%d lines)'%len(self.Cat2))
+        ' (%d sources %d lines)'%(len(np.unique(self.Cat2['ID'])),len(self.Cat2)))
         
         self.spectra = [] 
         for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
