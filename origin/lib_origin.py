@@ -2663,16 +2663,22 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
     
     #Comp=0
     ksel = Cat1_2['comp']==0
-    f = interp1d( purity_index[0], purity_curves[0], bounds_error=False,
+    if len(Cat1_2[ksel]) > 1:
+        tglr = Cat1_2['T_GLR'][ksel]
+        f = interp1d(purity_index[0], purity_curves[0], bounds_error=False,
                  fill_value="extrapolate")
-    tglr = Cat1_2['T_GLR'][ksel]
-    purity[ksel] = f(tglr.data.data)
+        purity[ksel] = f(tglr.data.data)
+    else:
+        purity[ksel] = 0 # set to 0 if only 1 purity meaurement
     #comp=1
     ksel = Cat1_2['comp']==1
-    f = interp1d( purity_index[1], purity_curves[1], bounds_error=False,
+    if len(Cat1_2[ksel]) > 1:
+        tglr = Cat1_2['STD'][ksel]
+        f = interp1d(purity_index[1], purity_curves[1], bounds_error=False,
                  fill_value="extrapolate")
-    tglr = Cat1_2['STD'][ksel]
-    purity[ksel] = f(tglr.data.data)
+        purity[ksel] = f(tglr.data.data)
+    else:
+        purity[ksel] = 0 # set to 0 if only 1 purity meaurement
     # The purity by definition cannot be > 1 and < 0, if the interpolation
     # gives a value outside these limits, replace by 1 or 0
     purity[purity<0] = 0

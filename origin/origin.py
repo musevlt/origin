@@ -1590,6 +1590,7 @@ class ORIGIN(object):
         if threshold2 == np.inf:
             self.Cat1 = self.Cat0.copy()
             self.Cat1['comp'] = 0
+            self.Cat1['STD'] = 0
         else:
             Catcomp, inut = Create_local_max_cat(threshold2, 
                                            cube_local_max_faint_dct,
