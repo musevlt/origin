@@ -1587,7 +1587,11 @@ class ORIGIN(object):
         self.param['threshold2'] =  threshold2                                     
         self._loginfo('Threshold: %.2f '%threshold2)
         
-        Catcomp, inut = Create_local_max_cat(threshold2, 
+        if threshold2 == np.inf:
+            self.Cat1 = self.Cat0.copy()
+            self.Cat1['comp'] = 0
+        else:
+            Catcomp, inut = Create_local_max_cat(threshold2, 
                                            cube_local_max_faint_dct,
                                            cube_local_min_faint_dct,                                            
                                            self.segmap._data, 
@@ -1598,14 +1602,14 @@ class ORIGIN(object):
                                            True,
                                            self.cube_profile._data,
                                            self.wcs, self.wave)
-        Catcomp.rename_column('T_GLR', 'STD')                                   
-        # merging
-        Cat0 = self.Cat0.copy()
-        Cat0['comp'] = 0
-        Catcomp['comp'] = 1
-        Catcomp['ID'] += (Cat0['ID'].max() + 1)
-        self.Cat1 = vstack([Cat0, Catcomp]) 
-        _format_cat(self.Cat1, 1)
+            Catcomp.rename_column('T_GLR', 'STD')                                   
+            # merging
+            Cat0 = self.Cat0.copy()
+            Cat0['comp'] = 0
+            Catcomp['comp'] = 1
+            Catcomp['ID'] += (Cat0['ID'].max() + 1)
+            self.Cat1 = vstack([Cat0, Catcomp]) 
+            _format_cat(self.Cat1, 1)
         ns = len(np.unique(self.Cat1['ID']))
         ds = ns - len(np.unique(self.Cat0['ID']))
         nl = len(self.Cat1)

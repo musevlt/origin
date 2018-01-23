@@ -2024,9 +2024,13 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, \
         det_m = np.asanyarray(det_m)
         det_M = np.asanyarray(det_M)
 
-    threshold = np.interp(purity, Pval_r, Tval_r)
-    detect = np.interp(threshold, Tval_r, det_M)
-    logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f', threshold, detect, purity)
+    if Pval_r[-1]<purity:
+        logger.warning('Maximum computed purity %.2f is below %.2f',Pval_r[-1],purity)
+        threshold = np.inf
+    else:
+        threshold = np.interp(purity, Pval_r, Tval_r)
+        detect = np.interp(threshold, Tval_r, det_M)
+        logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f', threshold, detect, purity)
     
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     
