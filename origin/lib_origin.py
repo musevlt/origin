@@ -1347,7 +1347,7 @@ def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad, thrdata=None, mth
     if thrdata is None or mthrdata is None:
         data[z1:z2, ksel] = 0
     else:
-        ksel2 = (thrdata[z1:z2, ksel] <= mthrdata[z0, y0, x0])
+        ksel2 = (thrdata[z1:z2, ksel] <= np.max(mthrdata[z1:z2, ksel]))
         data[z1:z2, ksel][ksel2] = 0
 
 
