@@ -99,8 +99,8 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     return inty, intx
 
 
-def DCTMAT(dct_o):
-    """Function to compute the DCT Matrix or order dct_o.
+def DCTMAT(nl, order):
+    """Return the DCT Matrix[:,:order+1] of nl
 
     Parameters
     ----------
@@ -112,15 +112,16 @@ def DCTMAT(dct_o):
     dct_m   :   array
                 DCT Matrix
     """
-    cc = np.arange(dct_o)
-    cc = np.repeat(cc[None, :], dct_o, axis=0)
-    dct_m = np.sqrt(2 / dct_o) \
-        * np.cos(np.pi * ((2 * cc) + 1) * cc.T / (2 * dct_o))
-    dct_m[0, :] = dct_m[0, :] / np.sqrt(2)
-    return dct_m
+    yy, xx = np.mgrid[:nl, :order+1]
+    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi * yy / nl))
+    D0[0, :] /= np.sqrt(2)
+    return D0
 
+def continuum(D0, D0T, var, w_raw_var):
+    A = np.linalg.inv(np.dot(D0T/var, D0))
+    return np.dot(np.dot(np.dot(D0,A),D0T), w_raw_var)
 
-def dct_residual(w_raw, order):
+def dct_residual(w_raw, order, var, approx):
     """Function to compute the residual of the DCT on raw data.
 
     Parameters
@@ -130,6 +131,9 @@ def dct_residual(w_raw, order):
 
     order   :   integer
                 The number of atom to keep for the dct decomposition
+                
+    var : array
+          Variance
 
     Returns
     -------
@@ -143,11 +147,21 @@ def dct_residual(w_raw, order):
     t0 = time.time()
 
     nl = w_raw.shape[0]
-    D0 = DCTMAT(nl)
-    D0 = D0[:, 0:order + 1]
-    A = np.dot(D0, D0.T)
-
-    cont = np.tensordot(A, w_raw, axes=(0, 0))
+    D0 = DCTMAT(nl, order)
+    if approx:
+        A = np.dot(D0, D0.T)
+        cont = np.tensordot(A, w_raw, axes=(0, 0))
+    else:
+        w_raw_var = w_raw / var
+        D0T = D0.T
+        cont = Parallel()(delayed(continuum)(D0, D0T, var[:,i,j], w_raw_var[:,i,j]) for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))  
+        cont = np.asarray(cont).T.reshape(w_raw.shape)
+    #    cont = np.empty_like(w_raw)
+    #    for i in range(w_raw.shape[1]):
+    #        for j in range(w_raw.shape[2]):
+    #            A = np.linalg.inv(np.dot(D0T/var[:,i,j], D0))
+    #            cont[:,i,j] = np.dot(np.dot(np.dot(D0,A),D0T), w_raw_var[:,i,j])
+    
     Faint = w_raw - cont
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return Faint, cont
@@ -2257,8 +2271,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
 
     if order_dct is not None:
         # denoise eigen vector with DCT
-        D0 = DCTMAT(nl)
-        D0 = D0[:, 0:order_dct + 1]
+        D0 = DCTMAT(nl, order_dct)
         A = np.dot(D0, D0.T)
         U = np.dot(A, U)
 

@@ -989,13 +989,15 @@ class ORIGIN(object):
 
         self._loginfo("Current session saved in %s" % path2)
 
-    def step01_preprocessing(self, dct_order=10):
+    def step01_preprocessing(self, dct_order=10, dct_approx=True):
         """ Preprocessing of data, dct, standardization and noise compensation
 
         Parameters
         ----------
         dct_order   : integer
                       The number of atom to keep for the dct decomposition
+        dct_approx : bool
+                     if True, the DCT computation is approximated
 
         Returns
         -------
@@ -1016,7 +1018,8 @@ class ORIGIN(object):
 
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
-        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order)
+        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order, self.var,
+                                           dct_approx)
 
         # compute standardized data
         self._loginfo('Data standardizing')
