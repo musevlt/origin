@@ -1,6 +1,5 @@
 """
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
-
 This software has been developped by Carole Clastres under the supervision of
 David Mary (Lagrange institute, University of Nice) and ported to python by
 Laure Piqueras (CRAL). From November 2016 the software is updated by
@@ -42,13 +41,11 @@ from .lib_origin import Spatial_Segmentation, \
     Construct_Object_Catalogue, \
     dct_residual, \
     Compute_Standardized_data, \
-    Compute_Segmentation_test, \
     Compute_GreedyPCA_area, \
     Compute_local_max_zone, \
     Compute_PCA_threshold, \
     Create_local_max_cat, \
     Estimation_Line, \
-    Segmentation, \
     Compute_threshold_purity, \
     CleanCube, \
     Purity_Estimation, \
@@ -136,6 +133,8 @@ class ORIGIN(object):
                                  field).
         imawhite               : `~mpdaf.obj.Image`
                                  White image
+        segmap                 : `~mpdaf.obj.Image`
+                                 Segmentation map
         self.cube_std          : `~mpdaf.obj.Cube`
                                  standardized data for PCA. Result of step01.
         self.cont_dct          : `~mpdaf.obj.Cube`
@@ -146,8 +145,6 @@ class ORIGIN(object):
         self.ima_dct           : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis. Result of step01.
-        self.segmentation_test : `~mpdaf.obj.Image`
-                                 Test for segmentation. Result of step01.
         nbAreas                : integer
                                  Number of area (segmentation) for the PCA
                                  computation. Result of step02.
@@ -186,47 +183,45 @@ class ORIGIN(object):
                                  Local maxima from max correlation (step05).
         cube_local_min         : `~mpdaf.obj.Cube`
                                  Local maxima from min correlation (step05).
-        segmap                 : `~mpdaf.obj.Image`
-                                 Segmentation map for threshold (step06).
         threshold              : float
-                                 Estimated threshold (step07).
+                                 Estimated threshold (step06).
         Pval_r                 : array
-                                 Purity curves (step07).
+                                 Purity curves (step06).
         index_pval             : array
-                                 Indexes of the purity curves (step07).
+                                 Indexes of the purity curves (step06).
         Det_M                  : List
-                                 Number of detections in +DATA (step07).
+                                 Number of detections in +DATA (step06).
         Det_m                  : List
-                                 Number of detections in -DATA  (step07).
+                                 Number of detections in -DATA  (step06).
         Cat0                   : astropy.Table
-                                 Catalog returned by step08
+                                 Catalog returned by step07
         zm                     : array
                                  z-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         ym                     : array
                                  y-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         xm                     : array
                                  x-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         Pval_r_comp            : array
-                                 Purity curves (step09).
+                                 Purity curves (step08).
         index_pval_comp        : array
-                                 Indexes of the purity curves (step09).
+                                 Indexes of the purity curves (step08).
         Det_M_comp             : List
-                                 Number of detections in +DATA (step09).
+                                 Number of detections in +DATA (step08).
         Det_m_comp             : List
-                                 Number of detections in -DATA  (step09).
+                                 Number of detections in -DATA  (step08).
         Cat1                   : astropy.Table
-                                 Catalog returned by step09
+                                 Catalog returned by step08
         spectra                : list of `~mpdaf.obj.Spectrum`
-                                 Estimated lines. Result of step10.
+                                 Estimated lines. Result of step09.
         Cat2                   : astropy.Table
-                                 Catalog returned by step10.
+                                 Catalog returned by step09.
     """
 
     def __init__(self, path, name, param, filename, fieldmap, profiles, PSF,
-                 FWHM_PSF, imawhite, cube_std, cont_dct, segmentation_test,
+                 FWHM_PSF, imawhite, cube_std, cont_dct,
                  areamap, thresO2, testO2, histO2, binO2, meaO2, stdO2,
                  cube_faint, mapO2, cube_correl, maxmap, cube_profile,
                  cube_local_max, cube_local_min, segmap, Pval_r, index_pval,
@@ -277,6 +272,10 @@ class ORIGIN(object):
         self.wave = cub.wave
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
+        
+        # segmap
+        self.param['segmap'] = segmap
+        self.segmap = Image(segmap)
 
         # List of spectral profile
         self.param['profiles'] = profiles
@@ -380,7 +379,6 @@ class ORIGIN(object):
         # step1
         self.cube_std = cube_std
         self.cont_dct = cont_dct
-        self.segmentation_test = segmentation_test
         self._ima_dct = None
         self._ima_std = None
         # step 2
@@ -402,8 +400,6 @@ class ORIGIN(object):
         self.cube_local_min = cube_local_min
         self.cube_profile = cube_profile
         self.maxmap = maxmap
-        # step6
-        self.segmap = segmap
         # step7
         self.Pval_r = Pval_r
         self.index_pval = index_pval
@@ -421,14 +417,14 @@ class ORIGIN(object):
         self.index_pval_comp = index_pval_comp
         self.Det_M_comp = Det_M_comp
         self.Det_m_comp = Det_m_comp
-        # step10
+        # step09
         self.spectra = spectra
         self.Cat2 = Cat2
         self._Cat2b = None
         self._loginfo('00 Done')
 
     @classmethod
-    def init(cls, cube, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
+    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
              name='origin'):
         """Create a ORIGIN object.
 
@@ -443,6 +439,8 @@ class ORIGIN(object):
         ----------
         cube        : string
                       Cube FITS file name
+        segmap      : string
+                      Segmentation map FITS filename
         fieldmap    : string
                       FITS file containing the field map (mosaic)
         profiles    : string
@@ -464,11 +462,11 @@ class ORIGIN(object):
         return cls(path='.', name=name, param=None, filename=cube,
                    fieldmap=fieldmap, profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, imawhite=None, cube_std=None,
-                   cont_dct=None, segmentation_test=None, areamap=None,
+                   cont_dct=None, areamap=None,
                    thresO2=None, testO2=None, histO2=None, binO2=None,
                    meaO2=None, stdO2=None, cube_faint=None, mapO2=None,
                    cube_correl=None, maxmap=None, cube_profile=None,
-                   cube_local_max=None, cube_local_min=None, segmap=None,
+                   cube_local_max=None, cube_local_min=None, segmap=segmap,
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
                    index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
@@ -537,10 +535,6 @@ class ORIGIN(object):
             cont_dct = Cube('%s/cont_dct.fits' % folder)
         else:
             cont_dct = None
-        if os.path.isfile('%s/segmentation_test.fits' % folder):
-            segmentation_test = Image('%s/segmentation_test.fits' % folder)
-        else:
-            segmentation_test = None
 
         # step2
         if os.path.isfile('%s/areamap.fits' % folder):
@@ -627,11 +621,6 @@ class ORIGIN(object):
         else:
             cube_profile = None
         # step06
-        if os.path.isfile('%s/segmap.fits' % folder):
-            segmap = Image('%s' % folder + '/segmap.fits')
-        else:
-            segmap = None
-        # step07
         if os.path.isfile('%s/Pval_r.txt' % folder):
             Pval_r = np.loadtxt('%s/Pval_r.txt' % folder).astype(np.float)
         else:
@@ -649,7 +638,7 @@ class ORIGIN(object):
             Det_m = np.loadtxt('%s/Det_min.txt' % folder).astype(np.int)
         else:
             Det_m = None
-        # step08
+        # step07
         if os.path.isfile('%s/Cat0.fits' % folder):
             Cat0 = Table.read('%s/Cat0.fits' % folder)
             _format_cat(Cat0, 0)
@@ -667,7 +656,7 @@ class ORIGIN(object):
             xm = np.loadtxt('%s/xm.txt' % folder, ndmin=1).astype(np.int)
         else:
             xm = None
-         # step09
+         # step08
         if os.path.isfile('%s/Pval_r_comp.txt' % folder):
             Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt' % folder).astype(np.float)
         else:
@@ -690,7 +679,7 @@ class ORIGIN(object):
             _format_cat(Cat1, 1)
         else:
             Cat1 = None
-        # step10
+        # step09
         if os.path.isfile('%s/spectra.fits' % folder):
             spectra = []
             with fits.open('%s/spectra.fits' % folder) as fspectra:
@@ -713,12 +702,12 @@ class ORIGIN(object):
                    filename=param['cubename'], fieldmap=wfields,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    imawhite=ima_white, cube_std=cube_std, cont_dct=cont_dct,
-                   segmentation_test=segmentation_test, areamap=areamap,
+                   areamap=areamap,
                    thresO2=thresO2, testO2=testO2, histO2=histO2, binO2=binO2,
                    meaO2=meaO2, stdO2=stdO2, cube_faint=cube_faint,
                    mapO2=mapO2, cube_correl=cube_correl, maxmap=maxmap,
                    cube_profile=cube_profile, cube_local_max=cube_local_max,
-                   cube_local_min=cube_local_min, segmap=segmap, Pval_r=Pval_r,
+                   cube_local_min=cube_local_min, segmap=param['segmap'], Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m, Cat0=Cat0,
                    zm=zm, ym=ym, xm=xm, Pval_r_comp=Pval_r_comp,
                    index_pval_comp=index_pval_comp, Det_M_comp=Det_M_comp,
@@ -888,8 +877,6 @@ class ORIGIN(object):
             self.cube_std.write('%s/cube_std.fits' % path2)
         if self.cont_dct is not None:
             self.cont_dct.write('%s/cont_dct.fits' % path2)
-        if self.segmentation_test is not None:
-            self.segmentation_test.write('%s/segmentation_test.fits' % path2)
         if self.ima_std is not None:
             self.ima_std.write('%s/ima_std.fits' % path2)
         if self.ima_dct is not None:
@@ -939,9 +926,6 @@ class ORIGIN(object):
             self.cube_local_min.write('%s/cube_local_min.fits' % path2)
 
         # step6
-        if self.segmap is not None:
-            self.segmap.write('%s' % path2 +
-                              '/segmap.fits')
         if self.Pval_r is not None:
             np.savetxt('%s/Pval_r.txt' % (path2), self.Pval_r)
         if self.index_pval is not None:
@@ -1011,8 +995,6 @@ class ORIGIN(object):
         self.ima_dct          : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis
-        self.segmentation_test : `~mpdaf.obj.Image`
-                                 Test for segmentation
         """
         self._loginfo('Step 01 - Preprocessing, dct order=%d' % dct_order)
 
@@ -1025,13 +1007,6 @@ class ORIGIN(object):
         self._loginfo('Data standardizing')
         cube_std = Compute_Standardized_data(faint_dct, self.mask, self.var)
         cont_dct = cont_dct / np.sqrt(self.var)
-
-        # compute test for segmentation map
-        self._loginfo('Segmentation test')
-        segmentation_test = Compute_Segmentation_test(cont_dct)
-        self._loginfo('Test for segmentation saved in self.segmentation_test')
-        self.segmentation_test = Image(data=segmentation_test,
-                                       wcs=self.wcs, mask=np.ma.nomask)
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
@@ -1066,11 +1041,6 @@ class ORIGIN(object):
                        The map of areas
         """
         self._loginfo('02 - Areas creation')
-
-        if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' +
-                          'self.segmentation_test')
-
         self._loginfo('   - pfa of the test = %0.2f' % pfa)
         self._loginfo('   - side size = %d pixels' % minsize)
         if minsize is None:
@@ -1099,7 +1069,7 @@ class ORIGIN(object):
 
             self._loginfo('Sources fusion')
             square_src_fus, src = \
-                area_segmentation_sources_fusion(self.segmentation_test.data,
+                area_segmentation_sources_fusion(self.segmap.data,
                                                  square_cut_fus, pfa,
                                                  self.Ny, self.Nx)
 
@@ -1363,37 +1333,7 @@ class ORIGIN(object):
 
         self._loginfo('05 Done')
 
-    def step06_compute_segmentation_map(self, pfa=0.05):
-        """compute segmentation map that will be used during detection step
-        (spatio-spectral merging)
-
-        Parameters
-        ----------
-        pfa    : float
-                 Pvalue for the test which performs segmentation
-
-        Returns
-        -------
-        self.segmap : `~mpdaf.obj.Image`
-                      Segmentation map for threshold
-        """
-        self._loginfo('Step 06 - Compute Purity threshold')
-
-        if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' +
-                          'self.segmentation_test')
-
-        self.param['pfa'] = pfa
-
-        # segmentation map
-        self._loginfo('Segmentation map computation (pfa=%.2f)...' % pfa)
-        segmap = Segmentation(self.segmentation_test.data, pfa)
-        self.segmap = Image(data=segmap, wcs=self.wcs, mask=np.ma.nomask)
-        self._loginfo('Save the segmentation map in self.segmap')
-
-        self._loginfo('06 Done')
-
-    def step07_compute_purity_threshold(self, purity=.9, tol_spat=3,
+    def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
                                         spect_size=10):
         """find the threshold  for a given purity
@@ -1430,8 +1370,6 @@ class ORIGIN(object):
         if self.cube_local_max is None:
             raise IOError('Run the step 05 to initialize ' +
                           'self.cube_local_max and self.cube_local_min')
-        if self.segmap is None:
-            raise IOError('Run the step 06 to initialize self.segmap')
 
         self.param['purity'] = purity
         self.param['tol_spat'] = tol_spat
@@ -1450,7 +1388,7 @@ class ORIGIN(object):
 
         self._loginfo('07 Done')
 
-    def step08_detection(self, threshold=None):
+    def step07_detection(self, threshold=None):
         """Detections on local maxima from max correlation + spatia-spectral
         merging in order to create the first catalog.
 
@@ -1470,9 +1408,6 @@ class ORIGIN(object):
 
         self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
 
-        if self.segmap is None:
-            raise IOError('Run the step 06 to initialize segmap')
-
         if threshold is not None:
             self.param['threshold'] = threshold
 
@@ -1489,7 +1424,7 @@ class ORIGIN(object):
                       ' (%d lines)' % len(self.Cat0))
         self._loginfo('08 Done')
 
-    def step09_detection_lost(self, purity=None):
+    def step08_detection_lost(self, purity=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
@@ -1584,7 +1519,7 @@ class ORIGIN(object):
 
         self._loginfo('09 Done')
 
-    def step10_compute_spectra(self, grid_dxy=0):
+    def step09_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1605,7 +1540,7 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._loginfo('Step09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
+        self._loginfo('step08 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat1 is None:
@@ -1634,7 +1569,7 @@ class ORIGIN(object):
 
         self._loginfo('10 Done')
 
-    def step11_write_sources(self, path=None, overwrite=True,
+    def step10_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
@@ -1736,7 +1671,7 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()
 
-        self.segmentation_test.plot(ax=ax)
+        self.segmap.plot(ax=ax)
 
         if 'cmap' not in kwargs:
             kwargs['cmap'] = 'jet'
@@ -1975,70 +1910,70 @@ class ORIGIN(object):
 
         themap.plot(title=title, colorbar='v', ax=ax, **kwargs)
 
-    def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
-        """ Plot the 2D segmentation map associated to a PFA
-        This function draw the labels of the segmentation map which is computed,
-        not with the same pfa, in :
-            - the step02 to compute the automatic areas splitting for
-            the PCA
-            - the step06 to compute the threshold of the local maxima
-
-        Parameters
-        ----------
-        pfa  : float
-               Pvalue for the test which performs segmentation
-        step : int
-               The Segmentation map as used in this step: (2/6)
-        maxmap : bool
-                 If true, segmentation map is plotted as contours on the maxmap
-        ax   : matplotlib.Axes
-               The Axes instance in which the image is drawn
-        kwargs : matplotlib.artist.Artist
-                 Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function
-        """
-        if self.cont_dct is None:
-            raise IOError('Run the step 01 to initialize self.cont_dct')
-        if maxmap and self.maxmap is None:
-            raise IOError('Run the step 05 to initialize self.maxmap')
-
-        if ax is None:
-            ax = plt.gca()
-
-        if step == 2:
-            radius = 2
-            dxy = 2 * radius
-            x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-            y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-            xv, yv = np.meshgrid(x, y)
-            r = np.sqrt(xv**2 + yv**2)
-            disk = (np.abs(r) <= radius)
-            mask = disk
-        elif step == 6:
-            mask = None
-        else:
-            raise IOError('sept must be equal to 2 or 6')
-
-        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
-
-        if maxmap:
-            self.maxmap[self.maxmap._data == 0] = np.ma.masked
-            self.maxmap.plot(ax=ax, **kwargs)
-            ax.contour(map_in, [0], origin='lower', cmap='Greys')
-        else:
-            ima = Image(data=map_in, wcs=self.wcs)
-            if 'cmap' not in kwargs:
-                kwargs['cmap'] = 'jet'
-            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
-                     **kwargs)
+#    def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
+#        """ Plot the 2D segmentation map associated to a PFA
+#        This function draw the labels of the segmentation map which is computed,
+#        not with the same pfa, in :
+#            - the step02 to compute the automatic areas splitting for
+#            the PCA
+#            - the step06 to compute the threshold of the local maxima
+#
+#        Parameters
+#        ----------
+#        pfa  : float
+#               Pvalue for the test which performs segmentation
+#        step : int
+#               The Segmentation map as used in this step: (2/6)
+#        maxmap : bool
+#                 If true, segmentation map is plotted as contours on the maxmap
+#        ax   : matplotlib.Axes
+#               The Axes instance in which the image is drawn
+#        kwargs : matplotlib.artist.Artist
+#                 Optional extra keyword/value arguments to be passed to
+#                 the ``ax.imshow()`` function
+#        """
+#        if self.cont_dct is None:
+#            raise IOError('Run the step 01 to initialize self.cont_dct')
+#        if maxmap and self.maxmap is None:
+#            raise IOError('Run the step 05 to initialize self.maxmap')
+#
+#        if ax is None:
+#            ax = plt.gca()
+#
+#        if step == 2:
+#            radius = 2
+#            dxy = 2 * radius
+#            x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
+#            y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
+#            xv, yv = np.meshgrid(x, y)
+#            r = np.sqrt(xv**2 + yv**2)
+#            disk = (np.abs(r) <= radius)
+#            mask = disk
+#        elif step == 6:
+#            mask = None
+#        else:
+#            raise IOError('sept must be equal to 2 or 6')
+#
+#        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
+#
+#        if maxmap:
+#            self.maxmap[self.maxmap._data == 0] = np.ma.masked
+#            self.maxmap.plot(ax=ax, **kwargs)
+#            ax.contour(map_in, [0], origin='lower', cmap='Greys')
+#        else:
+#            ima = Image(data=map_in, wcs=self.wcs)
+#            if 'cmap' not in kwargs:
+#                kwargs['cmap'] = 'jet'
+#            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
+#                     **kwargs)
 
     def plot_purity(self, comp=False, ax=None, log10=True):
-        """Draw number of sources per threshold computed in step07/step09
+        """Draw number of sources per threshold computed in step06/step08
 
         Parameters
         ----------
         comp : bool
-               If True, plot purity curves for the complementary lines (step09)
+               If True, plot purity curves for the complementary lines (step08)
         ax : matplotlib.Axes
              The Axes instance in which the image is drawn
         log10 : To draw histogram in logarithmic scale or not

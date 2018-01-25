@@ -212,77 +212,6 @@ def Compute_Standardized_data(cube_dct, mask, var):
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
     return STD
 
-
-def Compute_Segmentation_test(STD_in):
-    """Generate from a 3D Cube a 2D map where sources and background are
-    separated
-
-    Parameters
-    ---------
-    STD_in       : Array
-                   standard continu part of DCT from preprocessing step - Cube
-
-    Returns
-    -------
-    Segmentation_test : Array
-                        test for Segmentation map
-
-    Date  : June, 26 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
-    """
-    logger = logging.getLogger('origin')
-    t0 = time.time()
-
-    nl, ny, nx = STD_in.shape
-
-    # Standardized STD Cube
-    mask = (STD_in == 0)
-    VAR = np.repeat(np.var(STD_in, axis=0)[np.newaxis, :, :], nl, axis=0)
-    VAR[mask] = np.inf
-    x = STD_in / np.sqrt(VAR)
-
-    # test
-    Segmentation_test = np.mean(x**2, axis=0) - 1
-    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return Segmentation_test
-
-
-def Segmentation(Segmentation_test, pfa, mask=None):
-    """Generate from a 3D Cube a 2D map where sources and background are
-    separated
-
-    Parameters
-    ---------
-    Segmentation_test   : Array
-                          Segmentation test computed in Segmentation_test
-
-    pfa                 :   float
-                            Pvalue for the test which performs segmentation
-    mask                : array
-                          a mask to convolve the sources with
-
-    Returns
-    -------
-    map_in : label
-
-    Date  : June, 26 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
-    """
-    gamma = stats.chi2.ppf(1 - pfa, 1)
-
-    # threshold - erosion and dilation to clean ponctual "source"
-    sources = Segmentation_test > gamma
-    sources = binary_erosion(sources, border_value=1, iterations=1)
-    sources = binary_dilation(sources, iterations=1)
-    if mask is not None:
-        sources = signal.fftconvolve(sources, mask, mode='same')
-        sources = sources > 1e-9
-    # Label
-    map_in = measurements.label(sources)[0]
-
-    return map_in
-
-
 def createradvar(cu, ot):
     """Function to compute the compactness of areas using variance of
     position. The variance is computed on the position given by
@@ -456,7 +385,7 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     return label
 
 
-def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
+def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
     """Function to create non square area based on continuum test. Thanks
     to the continuum test, detected sources are fused with associated area.
     The convex enveloppe of the sources inside
@@ -465,8 +394,8 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
 
     Parameters
     ----------
-    Segmentation_test : array
-                        continuum test
+    labsrc : array
+             segmentation map
     label :     array
                 label of fused square generated in
                 area_segmentation_square_fusion
@@ -492,17 +421,7 @@ def area_segmentation_sources_fusion(Segmentation_test, label, pfa, Ny, Nx):
     logger = logging.getLogger('origin')
     t0 = time.time()
 
-    # convolution mask definition
-    radius = 2
-    dxy = 2 * radius
-    x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-    y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-    xv, yv = np.meshgrid(x, y)
-    r = np.sqrt(xv**2 + yv**2)
-    disk = (np.abs(r) <= radius)
-
     # compute the sources label
-    labsrc = Segmentation(Segmentation_test, pfa, mask=disk)
     nlab = labsrc.max()
     sources = np.zeros((nlab, Ny, Nx))
     for n in range(1, nlab + 1):
@@ -2731,10 +2650,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
             src.header['OR_THL%02d' % i] = ('%0.2f' % th, 'OR input Threshold per area')
     if 'neighboors' in param.keys():
         src.OR_NG = (param['neighboors'], 'OR input Neighboors')
-    if 'nbsubcube' in param.keys():
-        src.OR_NS = (param['nbsubcube'], 'OR input Nb of subcubes for the spatial segmentation')
-    if 'pfa' in param.keys():
-        src.OR_PFA = (param['pfa'], 'OR input PFA for the test which performs segmentation ')
+    if 'NbSubcube' in param.keys():
+        src.OR_NS = (param['NbSubcube'], 'OR input Nb of subcubes for the spatial segmentation')
     if 'tol_spat' in param.keys():
         src.OR_DXY = (param['tol_spat'], 'spatial tolerance for the spatial merging (distance in pixels)')
     if 'tol_spec' in param.keys():
