@@ -1,12 +1,11 @@
 """
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
-
 This software has been developped by Carole Clastres under the supervision of
 David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL). From November 2016 the software is updated by 
+Laure Piqueras (CRAL). From November 2016 the software is updated by
 Antony Schutz.
 
-The project is funded by the ERC MUSICOS (Roland Bacon, CRAL). 
+The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 Please contact Carole for more info at carole.clastres@univ-lyon1.fr
 Please contact Antony for more info at antonyschutz@gmail.com
 
@@ -42,13 +41,11 @@ from .lib_origin import Spatial_Segmentation, \
     Construct_Object_Catalogue, \
     dct_residual, \
     Compute_Standardized_data, \
-    Compute_Segmentation_test, \
     Compute_GreedyPCA_area, \
     Compute_local_max_zone, \
     Compute_PCA_threshold, \
     Create_local_max_cat, \
     Estimation_Line, \
-    Segmentation, \
     Compute_threshold_purity, \
     CleanCube, \
     Purity_Estimation, \
@@ -57,7 +54,11 @@ from .lib_origin import Spatial_Segmentation, \
     area_segmentation_convex_fusion, \
     area_growing, \
     area_segmentation_final, \
-    __version__    
+    __version__
+
+
+CURDIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def _format_cat(Cat, i):
     try:
@@ -65,27 +66,27 @@ def _format_cat(Cat, i):
         Cat['dec'].format = '.3f'
         Cat['lbda'].format = '.2f'
         Cat['T_GLR'].format = '.2f'
-        if i>0:
+        if i > 0:
             Cat['STD'].format = '.2f'
-        if i>1:
+        if i > 1:
             Cat['residual'].format = '.3f'
             Cat['flux'].format = '.1f'
             Cat['purity'].format = '.3f'
-    except:
+    except Exception:
         logger = logging.getLogger('origin')
         logger.info('Invalid format for the Catalog')
-    
+
 
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
        This software has been developped by Carole Clastres under the
        supervision of David Mary (Lagrange institute, University of Nice).
-       From November 2016 the software is updated by Antony Schutz. 
+       From November 2016 the software is updated by Antony Schutz.
 
        The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
        Please contact Carole for more info at carole.clastres@univ-lyon1.fr
-       Please contact Antony for more info at antonyschutz@gmail.com      
+       Please contact Antony for more info at antonyschutz@gmail.com
 
        An Origin object is mainly composed by:
         - cube data (raw data and covariance)
@@ -106,7 +107,7 @@ class ORIGIN(object):
         cube_raw               : array (Nz, Ny, Nx)
                                  Raw data.
         var                    : array (Nz, Ny, Nx)
-                                 Variance.               
+                                 Variance.
         Nx                     : integer
                                  Number of columns
         Ny                     : integer
@@ -129,21 +130,21 @@ class ORIGIN(object):
                                  MUSE PSF (one per field)
         FWHM_PSF               : float or list of float
                                  Mean of the fwhm of the PSF in pixel (one per
-                                 field). 
+                                 field).
         imawhite               : `~mpdaf.obj.Image`
                                  White image
+        segmap                 : `~mpdaf.obj.Image`
+                                 Segmentation map
         self.cube_std          : `~mpdaf.obj.Cube`
                                  standardized data for PCA. Result of step01.
         self.cont_dct          : `~mpdaf.obj.Cube`
                                  DCT continuum. Result of step01.
         self.ima_std           : `~mpdaf.obj.Image`
                                  Mean of standardized data for PCA along the
-                                 wavelength axis. Result of step01. 
+                                 wavelength axis. Result of step01.
         self.ima_dct           : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis. Result of step01.
-        self.segmentation_test : `~mpdaf.obj.Image`
-                                 Test for segmentation. Result of step01.
         nbAreas                : integer
                                  Number of area (segmentation) for the PCA
                                  computation. Result of step02.
@@ -154,7 +155,7 @@ class ORIGIN(object):
         histO2                 : list of arrays (one per PCA area)
                                  PCA histogram (step03).
         binO2                  : list of arrays (one per PCA area)
-                                 Bins for the PCA histogram (step03).          
+                                 Bins for the PCA histogram (step03).
         thresO2                : list of float
                                  For each area, threshold value (step03).
         meaO2                  : list of float
@@ -162,7 +163,7 @@ class ORIGIN(object):
                                  estimate the threshold (step03).
         stdO2                  : list of float
                                  Scale parameter of the Gaussian fit used to
-                                 estimate the threshold (step03).                         
+                                 estimate the threshold (step03).
         cube_faint             : `~mpdaf.obj.Cube`
                                  Projection on the eigenvectors associated to
                                  the lower eigenvalues of the data cube
@@ -182,95 +183,89 @@ class ORIGIN(object):
                                  Local maxima from max correlation (step05).
         cube_local_min         : `~mpdaf.obj.Cube`
                                  Local maxima from min correlation (step05).
-        segmap                 : `~mpdaf.obj.Image`
-                                 Segmentation map for threshold (step06).
         threshold              : float
-                                 Estimated threshold (step07).
+                                 Estimated threshold (step06).
         Pval_r                 : array
-                                 Purity curves (step07).
+                                 Purity curves (step06).
         index_pval             : array
-                                 Indexes of the purity curves (step07).
+                                 Indexes of the purity curves (step06).
         Det_M                  : List
-                                 Number of detections in +DATA (step07).
+                                 Number of detections in +DATA (step06).
         Det_m                  : List
-                                 Number of detections in -DATA  (step07).                                                      
+                                 Number of detections in -DATA  (step06).
         Cat0                   : astropy.Table
-                                 Catalog returned by step08
+                                 Catalog returned by step07
         zm                     : array
                                  z-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         ym                     : array
                                  y-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         xm                     : array
                                  x-position of the detections from min
-                                 correlation (step08)
+                                 correlation (step07)
         Pval_r_comp            : array
-                                 Purity curves (step09).
+                                 Purity curves (step08).
         index_pval_comp        : array
-                                 Indexes of the purity curves (step09).
+                                 Indexes of the purity curves (step08).
         Det_M_comp             : List
-                                 Number of detections in +DATA (step09).
+                                 Number of detections in +DATA (step08).
         Det_m_comp             : List
-                                 Number of detections in -DATA  (step09).                                
+                                 Number of detections in -DATA  (step08).
         Cat1                   : astropy.Table
-                                 Catalog returned by step09                                
+                                 Catalog returned by step08
         spectra                : list of `~mpdaf.obj.Spectrum`
-                                 Estimated lines. Result of step10.
+                                 Estimated lines. Result of step09.
         Cat2                   : astropy.Table
-                                 Catalog returned by step10. 
+                                 Catalog returned by step09.
     """
-    
+
     def __init__(self, path, name, param, filename, fieldmap, profiles, PSF,
-                 FWHM_PSF, imawhite, cube_std, cont_dct, segmentation_test,
+                 FWHM_PSF, imawhite, cube_std, cont_dct,
                  areamap, thresO2, testO2, histO2, binO2, meaO2, stdO2,
                  cube_faint, mapO2, cube_correl, maxmap, cube_profile,
                  cube_local_max, cube_local_min, segmap, Pval_r, index_pval,
                  Det_M, Det_m, Cat0, zm, ym, xm, Pval_r_comp, index_pval_comp,
                  Det_M_comp, Det_m_comp, Cat1, spectra, Cat2):
-        #loggers
+        # loggers
         setup_logging(name='origin', level=logging.DEBUG,
-                           color=False,
-                           fmt='%(name)s[%(levelname)s]: %(message)s',
-                           stream=sys.stdout)
-                           
-        if os.path.exists('%s/%s/%s.log'%(path, name,name)):
+                      color=False, fmt='%(name)s[%(levelname)s]: %(message)s',
+                      stream=sys.stdout)
+
+        if os.path.exists('%s/%s/%s.log' % (path, name, name)):
             setup_logfile(name='origfile', level=logging.DEBUG,
-                                       logfile='%s/%s/%s.log'%(path, name,
-                                                               name),
-                                       fmt='%(asctime)s %(message)s')
+                          logfile='%s/%s/%s.log' % (path, name,
+                                                    name),
+                          fmt='%(asctime)s %(message)s')
         else:
             setup_logfile(name='origfile', level=logging.DEBUG,
-                                       logfile='%s/%s.log'%(path, name),
-                                       fmt='%(asctime)s %(message)s')                           
+                          logfile='%s/%s.log' % (path, name),
+                          fmt='%(asctime)s %(message)s')
         self._log_stdout = logging.getLogger('origin')
         self._log_file = logging.getLogger('origfile')
         self._log_file.setLevel(logging.INFO)
-                                       
+
         # log
-        self._loginfo('Step 00 - Initialization (ORIGIN v%s)'%__version__)
-        
+        self._loginfo('Step 00 - Initialization (ORIGIN v%s)' % __version__)
+
         # init
         self.path = path
         self.name = name
-        if param is None:
-            self.param = {}
-        else:
-            self.param = param
-        
+        self.param = param or {}
+
         # MUSE data cube
-        self._loginfo('Read the Data Cube %s'%filename)
+        self._loginfo('Read the Data Cube %s' % filename)
         self.param['cubename'] = filename
         cub = Cube(filename)
-        
+
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
         self.mask = cub._mask
-        
+
         # variance - set to Inf the Nan
         self.var = cub._var
         self.var[np.isnan(self.var)] = np.inf
-    
+
         # RA-DEC coordinates
         self.wcs = cub.wcs
         # spectral coordinates
@@ -278,114 +273,116 @@ class ORIGIN(object):
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
         
+        # segmap
+        self._loginfo('Read the Segmentation Map %s' % segmap)
+        self.param['segmap'] = segmap
+        self.segmap = Image(segmap)
+
         # List of spectral profile
         self.param['profiles'] = profiles
         if profiles is None:
-            DIR = os.path.dirname(__file__)
-            profiles = DIR + '/Dico_FWHM_2_12.fits'
-        self._loginfo('Load dictionary of spectral profile %s'%profiles)
+            profiles = CURDIR + '/Dico_FWHM_2_12.fits'
+        self._loginfo('Load dictionary of spectral profile %s' % profiles)
         self.profiles = []
         self.FWHM_profiles = []
-        fprof = fits.open(profiles)
-        for hdu in fprof[1:]:
-            self.profiles.append(hdu.data)
-            self.FWHM_profiles.append(hdu.header['FWHM'])
-        fprof.close()
+        with fits.open(profiles) as fprof:
+            for hdu in fprof[1:]:
+                self.profiles.append(hdu.data)
+                self.FWHM_profiles.append(hdu.header['FWHM'])
+
         # check that the profiles have the same size
         if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
             raise IOError('The profiles must have the same size')
-        
-        #FSF
+
+        # FSF
         # FSF cube(s)
         # map fileds in the case of MUSE mosaic
         self.wfields = None
         if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header ' + \
-                                                                    'keywords')
-            Nfsf=13
+            self._loginfo('Compute FSFs from the datacube FITS header '
+                          'keywords')
+            Nfsf = 13
             if 'FSFMODE' in cub.primary_header:
                 # FSF created from FSF*** keywords
                 PSF, fwhm_pix, fwhm_arcsec = get_FSF_from_cube_keywords(cub,
                                                                         Nfsf)
                 self.param['PSF'] = cub.primary_header['FSFMODE']
                 nfields = cub.primary_header['NFIELDS']
-                if nfields == 1: # just one FSF
+                if nfields == 1:  # just one FSF
                     # Normalization
                     self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
-                                                                 np.newaxis]
+                                                              np.newaxis]
                     # mean of the fwhm of the FSF in pixel
                     self.FWHM_PSF = np.mean(fwhm_pix)
                     self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-                    self._loginfo('mean FWHM of the FSFs = %.2f pixels'\
-                                                                %self.FWHM_PSF)
-                else: # mosaic: one FSF cube per field
+                    self._loginfo('mean FWHM of the FSFs = %.2f pixels'
+                                  % self.FWHM_PSF)
+                else:  # mosaic: one FSF cube per field
                     self.PSF = []
                     self.FWHM_PSF = []
                     for i in range(nfields):
-                        # Normalization 
-                        self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))\
-                                                    [:, np.newaxis,np.newaxis])
+                        # Normalization
+                        self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))[:, np.newaxis, np.newaxis])
                         # mean of the fwhm of the FSF in pixel
                         fwhm = np.mean(fwhm_pix[i])
                         self.FWHM_PSF.append(fwhm)
-                        self._loginfo('mean FWHM of the FSFs' + \
-                        ' (field %d) = %.2f pixels'%(i, fwhm))
-                    self._loginfo('Compute weight maps from field map %s'%fieldmap)
+                        self._loginfo('mean FWHM of the FSFs' +
+                                      ' (field %d) = %.2f pixels' % (i, fwhm))
+                    self._loginfo('Compute weight maps from field map %s' % fieldmap)
                     fmap = FieldsMap(fieldmap, nfields=nfields)
                     # weighted field map
                     self.wfields = fmap.compute_weights()
                     self.param['FWHM PSF'] = self.FWHM_PSF
             else:
-                raise IOError('PSF are not described in the FITS header' + \
-                                                                 'of the cube')
+                raise IOError('PSF are not described in the FITS header' +
+                              'of the cube')
 
         else:
             if type(PSF) is str:
-                self._loginfo('Load FSFs from %s'%PSF)
+                self._loginfo('Load FSFs from %s' % PSF)
                 self.param['PSF'] = PSF
-                
+
                 cubePSF = Cube(PSF)
                 if cubePSF.shape[1] != cubePSF.shape[2]:
                     raise IOError('PSF must be a square image.')
-                if not cubePSF.shape[1]%2:
+                if not cubePSF.shape[1] % 2:
                     raise IOError('The spatial size of the PSF must be odd.')
                 if cubePSF.shape[0] != self.Nz:
-                    raise IOError('PSF and data cube have not the same' + \
-                                         'dimensions along the spectral axis.')
+                    raise IOError('PSF and data cube have not the same' +
+                                  'dimensions along the spectral axis.')
                 self.PSF = cubePSF._data
                 # mean of the fwhm of the FSF in pixel
                 self.FWHM_PSF = np.mean(FWHM_PSF)
                 self.param['FWHM PSF'] = FWHM_PSF.tolist()
-                self._loginfo('mean FWHM of the FSFs = %.2f pixels'%self.FWHM_PSF)
+                self._loginfo('mean FWHM of the FSFs = %.2f pixels' % self.FWHM_PSF)
             else:
                 nfields = len(PSF)
                 self.PSF = []
                 self.wfields = []
                 self.FWHM_PSF = FWHM_PSF.tolist()
                 for n in range(nfields):
-                    self._loginfo('Load FSF from %s'%PSF[n])
+                    self._loginfo('Load FSF from %s' % PSF[n])
                     self.PSF.append(Cube(PSF[n])._data)
                     # weighted field map
-                    self._loginfo('Load weight maps from %s'%fieldmap[n])
+                    self._loginfo('Load weight maps from %s' % fieldmap[n])
                     self.wfields.append(Image(fieldmap[n])._data)
-                    self._loginfo('mean FWHM of the FSFs' + \
-                        ' (field %d) = %.2f pixels'%(n, FWHM_PSF[n]))
-            
+                    self._loginfo('mean FWHM of the FSFs' +
+                                  ' (field %d) = %.2f pixels' % (n, FWHM_PSF[n]))
+
         # additional images
         if imawhite is None:
             self.ima_white = cub.mean(axis=0)
         else:
-            self.ima_white =  imawhite
-        
+            self.ima_white = imawhite
+
         del cub
-        
+
         # step1
         self.cube_std = cube_std
-        self.cont_dct = cont_dct       
-        self.segmentation_test = segmentation_test     
+        self.cont_dct = cont_dct
         self._ima_dct = None
         self._ima_std = None
-        # step 2 
+        # step 2
         self._nbAreas = None
         self.areamap = areamap
         # step3
@@ -400,17 +397,15 @@ class ORIGIN(object):
         self.mapO2 = mapO2
         # step5
         self.cube_correl = cube_correl
-        self.cube_local_max = cube_local_max     
-        self.cube_local_min = cube_local_min             
+        self.cube_local_max = cube_local_max
+        self.cube_local_min = cube_local_min
         self.cube_profile = cube_profile
         self.maxmap = maxmap
-        # step6
-        self.segmap = segmap
         # step7
         self.Pval_r = Pval_r
         self.index_pval = index_pval
         self.Det_M = Det_M
-        self.Det_m = Det_m   
+        self.Det_m = Det_m
         # step8
         self.Cat0 = Cat0
         if zm is not None and ym is not None and xm is not None:
@@ -423,14 +418,15 @@ class ORIGIN(object):
         self.index_pval_comp = index_pval_comp
         self.Det_M_comp = Det_M_comp
         self.Det_m_comp = Det_m_comp
-        # step10
+        # step09
         self.spectra = spectra
         self.Cat2 = Cat2
         self._Cat2b = None
         self._loginfo('00 Done')
-        
+
     @classmethod
-    def init(cls, cube, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None, name='origin'):
+    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
+             name='origin'):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -444,6 +440,8 @@ class ORIGIN(object):
         ----------
         cube        : string
                       Cube FITS file name
+        segmap      : string
+                      Segmentation map FITS filename
         fieldmap    : string
                       FITS file containing the field map (mosaic)
         profiles    : string
@@ -465,41 +463,40 @@ class ORIGIN(object):
         return cls(path='.', name=name, param=None, filename=cube,
                    fieldmap=fieldmap, profiles=profiles, PSF=PSF,
                    FWHM_PSF=FWHM_PSF, imawhite=None, cube_std=None,
-                   cont_dct=None, segmentation_test=None, areamap=None,
+                   cont_dct=None, areamap=None,
                    thresO2=None, testO2=None, histO2=None, binO2=None,
                    meaO2=None, stdO2=None, cube_faint=None, mapO2=None,
                    cube_correl=None, maxmap=None, cube_profile=None,
-                   cube_local_max=None, cube_local_min=None, segmap=None,
+                   cube_local_max=None, cube_local_min=None, segmap=segmap,
                    Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
                    Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
                    index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
                    Cat1=None, spectra=None, Cat2=None)
-        
+
     @classmethod
     def load(cls, folder, newname=None):
         """Load a previous session of ORIGIN.
-        
+
         ORIGIN.write() method saves a session in a folder that has the name of
         the ORIGIN object (self.name)
-        
+
         Parameters
         ----------
         folder  : string
-                  Folder name (with the relative path) where the ORIGIN data 
+                  Folder name (with the relative path) where the ORIGIN data
                   have been stored.
         newname : string
                   New name for this session.
                   This parameter lets the user to load a previous session but
                   continue in a new one.
-                  If None, the user will continue the loaded session. 
+                  If None, the user will continue the loaded session.
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
-        
-        stream = open('%s/%s.yaml'%(folder, name), 'r')
-        param = yaml.load(stream)
-        stream.close()
-            
+
+        with open('%s/%s.yaml' % (folder, name), 'r') as stream:
+            param = yaml.load(stream)
+
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
         else:
@@ -508,259 +505,249 @@ class ORIGIN(object):
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
         else:
-            if os.path.isfile('%s/cube_psf.fits'%folder):
-                PSF = '%s/cube_psf.fits'%folder
+            if os.path.isfile('%s/cube_psf.fits' % folder):
+                PSF = '%s/cube_psf.fits' % folder
             else:
-                PSF_files = glob.glob('%s/cube_psf_*.fits'%folder)
+                PSF_files = glob.glob('%s/cube_psf_*.fits' % folder)
                 if len(PSF_files) == 0:
                     PSF = None
                 elif len(PSF_files) == 1:
                     PSF = PSF_files[0]
                 else:
                     PSF = sorted(PSF_files)
-        wfield_files = glob.glob('%s/wfield_*.fits'%folder)
+        wfield_files = glob.glob('%s/wfield_*.fits' % folder)
         if len(wfield_files) == 0:
             wfields = None
         else:
             wfields = sorted(wfield_files)
-            
+
         # step0
-        if os.path.isfile('%s/ima_white.fits'%folder):
-            ima_white = Image('%s/ima_white.fits'%folder)
+        if os.path.isfile('%s/ima_white.fits' % folder):
+            ima_white = Image('%s/ima_white.fits' % folder)
         else:
             ima_white = None
-            
+
         # step1
-        if os.path.isfile('%s/cube_std.fits'%folder):
-            cube_std = Cube('%s/cube_std.fits'%folder)
+        if os.path.isfile('%s/cube_std.fits' % folder):
+            cube_std = Cube('%s/cube_std.fits' % folder)
         else:
             cube_std = None
-        if os.path.isfile('%s/cont_dct.fits'%folder):
-            cont_dct = Cube('%s/cont_dct.fits'%folder)
+        if os.path.isfile('%s/cont_dct.fits' % folder):
+            cont_dct = Cube('%s/cont_dct.fits' % folder)
         else:
-            cont_dct = None     
-        if os.path.isfile('%s/segmentation_test.fits'%folder):
-            segmentation_test = Image('%s/segmentation_test.fits'%folder)
-        else:
-            segmentation_test = None                        
-            
+            cont_dct = None
+
         # step2
-        if os.path.isfile('%s/areamap.fits'%folder):
-            areamap = Image('%s/areamap.fits'%folder, dtype=np.int)
+        if os.path.isfile('%s/areamap.fits' % folder):
+            areamap = Image('%s/areamap.fits' % folder, dtype=np.int)
         else:
             areamap = None
         if 'nbareas' in param:
             NbAreas = param['nbareas']
         else:
             NbAreas = None
-        
+
         # step3
-        if os.path.isfile('%s/thresO2.txt'%(folder)):
-            thresO2 = np.loadtxt('%s/thresO2.txt'%(folder), ndmin=1)
+        if os.path.isfile('%s/thresO2.txt' % (folder)):
+            thresO2 = np.loadtxt('%s/thresO2.txt' % (folder), ndmin=1)
             thresO2 = thresO2.tolist()
         else:
             thresO2 = None
-        if NbAreas is not None: 
-            if os.path.isfile('%s/testO2_1.txt'%(folder)):
+        if NbAreas is not None:
+            if os.path.isfile('%s/testO2_1.txt' % (folder)):
                 testO2 = []
-                for area in range(1, NbAreas+1):
-                    testO2.append(np.loadtxt('%s/testO2_%d.txt'%(folder,area),
+                for area in range(1, NbAreas + 1):
+                    testO2.append(np.loadtxt('%s/testO2_%d.txt' % (folder, area),
                                              ndmin=1))
             else:
                 testO2 = None
-            if os.path.isfile('%s/histO2_1.txt'%(folder)):
+            if os.path.isfile('%s/histO2_1.txt' % (folder)):
                 histO2 = []
-                for area in range(1, NbAreas+1):
-                    histO2.append(np.loadtxt('%s/histO2_%d.txt'%(folder, area),
+                for area in range(1, NbAreas + 1):
+                    histO2.append(np.loadtxt('%s/histO2_%d.txt' % (folder, area),
                                              ndmin=1))
             else:
                 histO2 = None
-            if os.path.isfile('%s/binO2_1.txt'%(folder)):
+            if os.path.isfile('%s/binO2_1.txt' % (folder)):
                 binO2 = []
-                for area in range(1, NbAreas+1):
-                    binO2.append(np.loadtxt('%s/binO2_%d.txt'%(folder, area),
-                                             ndmin=1))
+                for area in range(1, NbAreas + 1):
+                    binO2.append(np.loadtxt('%s/binO2_%d.txt' % (folder, area),
+                                            ndmin=1))
             else:
                 binO2 = None
         else:
             testO2 = None
             histO2 = None
             binO2 = None
-        if os.path.isfile('%s/meaO2.txt'%(folder)):
-            meaO2 = np.loadtxt('%s/meaO2.txt'%(folder), ndmin=1)
+        if os.path.isfile('%s/meaO2.txt' % (folder)):
+            meaO2 = np.loadtxt('%s/meaO2.txt' % (folder), ndmin=1)
             meaO2 = meaO2.tolist()
         else:
             meaO2 = None
-        if os.path.isfile('%s/stdO2.txt'%(folder)):
-            stdO2 = np.loadtxt('%s/stdO2.txt'%(folder), ndmin=1)
+        if os.path.isfile('%s/stdO2.txt' % (folder)):
+            stdO2 = np.loadtxt('%s/stdO2.txt' % (folder), ndmin=1)
             stdO2 = stdO2.tolist()
         else:
             stdO2 = None
-            
+
         # step4
-        if os.path.isfile('%s/cube_faint.fits'%folder):
-            cube_faint = Cube('%s/cube_faint.fits'%folder)
+        if os.path.isfile('%s/cube_faint.fits' % folder):
+            cube_faint = Cube('%s/cube_faint.fits' % folder)
         else:
             cube_faint = None
-        if os.path.isfile('%s/mapO2.fits'%folder):
-            mapO2 = Image('%s/mapO2.fits'%folder)
+        if os.path.isfile('%s/mapO2.fits' % folder):
+            mapO2 = Image('%s/mapO2.fits' % folder)
         else:
-            mapO2 = None            
-            
+            mapO2 = None
+
         # step5
-        if os.path.isfile('%s/cube_correl.fits'%folder):
-            cube_correl = Cube('%s/cube_correl.fits'%folder)
+        if os.path.isfile('%s/cube_correl.fits' % folder):
+            cube_correl = Cube('%s/cube_correl.fits' % folder)
         else:
             cube_correl = None
-        if os.path.isfile('%s/cube_local_max.fits'%folder):
-            cube_local_max = Cube('%s/cube_local_max.fits'%folder)
+        if os.path.isfile('%s/cube_local_max.fits' % folder):
+            cube_local_max = Cube('%s/cube_local_max.fits' % folder)
         else:
-            cube_local_max = None     
-        if os.path.isfile('%s/cube_local_min.fits'%folder):
-            cube_local_min = Cube('%s/cube_local_min.fits'%folder)
+            cube_local_max = None
+        if os.path.isfile('%s/cube_local_min.fits' % folder):
+            cube_local_min = Cube('%s/cube_local_min.fits' % folder)
         else:
-            cube_local_min = None                                    
-        if os.path.isfile('%s/maxmap.fits'%folder):
-            maxmap = Image('%s/maxmap.fits'%folder)
+            cube_local_min = None
+        if os.path.isfile('%s/maxmap.fits' % folder):
+            maxmap = Image('%s/maxmap.fits' % folder)
         else:
             maxmap = None
-        if os.path.isfile('%s/cube_profile.fits'%folder):
-            cube_profile = Cube('%s/cube_profile.fits'%folder)
+        if os.path.isfile('%s/cube_profile.fits' % folder):
+            cube_profile = Cube('%s/cube_profile.fits' % folder)
         else:
             cube_profile = None
         # step06
-        if os.path.isfile('%s/segmap.fits'%folder):
-            segmap = Image('%s'%folder + '/segmap.fits')
-        else:
-            segmap = None
-        # step07
-        if os.path.isfile('%s/Pval_r.txt'%folder):
-            Pval_r = np.loadtxt('%s/Pval_r.txt'%folder).astype(np.float)
+        if os.path.isfile('%s/Pval_r.txt' % folder):
+            Pval_r = np.loadtxt('%s/Pval_r.txt' % folder).astype(np.float)
         else:
             Pval_r = None
-        if os.path.isfile('%s/index_pval.txt'%folder):
-            index_pval = np.loadtxt('%s/index_pval.txt'%folder)\
-            .astype(np.float) 
+        if os.path.isfile('%s/index_pval.txt' % folder):
+            index_pval = np.loadtxt('%s/index_pval.txt' % folder)\
+                .astype(np.float)
         else:
             index_pval = None
-        if os.path.isfile('%s/Det_M.txt'%folder):
-            Det_M = np.loadtxt('%s/Det_M.txt'%folder).astype(np.int)
+        if os.path.isfile('%s/Det_M.txt' % folder):
+            Det_M = np.loadtxt('%s/Det_M.txt' % folder).astype(np.int)
         else:
             Det_M = None
-        if os.path.isfile('%s/Det_min.txt'%folder):
-            Det_m = np.loadtxt('%s/Det_min.txt'%folder).astype(np.int)
+        if os.path.isfile('%s/Det_min.txt' % folder):
+            Det_m = np.loadtxt('%s/Det_min.txt' % folder).astype(np.int)
         else:
             Det_m = None
-        # step08  
-        if os.path.isfile('%s/Cat0.fits'%folder):
-            Cat0 = Table.read('%s/Cat0.fits'%folder)
+        # step07
+        if os.path.isfile('%s/Cat0.fits' % folder):
+            Cat0 = Table.read('%s/Cat0.fits' % folder)
             _format_cat(Cat0, 0)
         else:
-            Cat0 = None   
-        if os.path.isfile('%s/zm.txt'%folder):
-            zm = np.loadtxt('%s/zm.txt'%folder, ndmin=1).astype(np.int)
+            Cat0 = None
+        if os.path.isfile('%s/zm.txt' % folder):
+            zm = np.loadtxt('%s/zm.txt' % folder, ndmin=1).astype(np.int)
         else:
             zm = None
-        if os.path.isfile('%s/ym.txt'%folder):
-            ym = np.loadtxt('%s/ym.txt'%folder, ndmin=1).astype(np.int)
+        if os.path.isfile('%s/ym.txt' % folder):
+            ym = np.loadtxt('%s/ym.txt' % folder, ndmin=1).astype(np.int)
         else:
             ym = None
-        if os.path.isfile('%s/xm.txt'%folder):
-            xm = np.loadtxt('%s/xm.txt'%folder, ndmin=1).astype(np.int)
+        if os.path.isfile('%s/xm.txt' % folder):
+            xm = np.loadtxt('%s/xm.txt' % folder, ndmin=1).astype(np.int)
         else:
             xm = None
-         # step09
-        if os.path.isfile('%s/Pval_r_comp.txt'%folder):
-            Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt'%folder).astype(np.float)
+         # step08
+        if os.path.isfile('%s/Pval_r_comp.txt' % folder):
+            Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt' % folder).astype(np.float)
         else:
             Pval_r_comp = None
-        if os.path.isfile('%s/index_pval_comp.txt'%folder):
-            index_pval_comp = np.loadtxt('%s/index_pval_comp.txt'%folder)\
-            .astype(np.float) 
+        if os.path.isfile('%s/index_pval_comp.txt' % folder):
+            index_pval_comp = np.loadtxt('%s/index_pval_comp.txt' % folder)\
+                .astype(np.float)
         else:
             index_pval_comp = None
-        if os.path.isfile('%s/Det_M_comp.txt'%folder):
-            Det_M_comp = np.loadtxt('%s/Det_M_comp.txt'%folder).astype(np.int)
+        if os.path.isfile('%s/Det_M_comp.txt' % folder):
+            Det_M_comp = np.loadtxt('%s/Det_M_comp.txt' % folder).astype(np.int)
         else:
             Det_M_comp = None
-        if os.path.isfile('%s/Det_min_comp.txt'%folder):
-            Det_m_comp = np.loadtxt('%s/Det_min_comp.txt'%folder).astype(np.int)
+        if os.path.isfile('%s/Det_min_comp.txt' % folder):
+            Det_m_comp = np.loadtxt('%s/Det_min_comp.txt' % folder).astype(np.int)
         else:
             Det_m_comp = None
-        if os.path.isfile('%s/Cat1.fits'%folder):
-            Cat1 = Table.read('%s/Cat1.fits'%folder)
+        if os.path.isfile('%s/Cat1.fits' % folder):
+            Cat1 = Table.read('%s/Cat1.fits' % folder)
             _format_cat(Cat1, 1)
         else:
             Cat1 = None
-        #step10
-        if os.path.isfile('%s/spectra.fits'%folder):
+        # step09
+        if os.path.isfile('%s/spectra.fits' % folder):
             spectra = []
-            fspectra = fits.open('%s/spectra.fits'%folder)
-            for i in range(len(fspectra)//2):
-                spectra.append(Spectrum('%s/spectra.fits'%folder,
-                                        hdulist=fspectra,
-                                        ext=('DATA%d'%i, 'STAT%d'%i)))
-            fspectra.close()
+            with fits.open('%s/spectra.fits' % folder) as fspectra:
+                for i in range(len(fspectra) // 2):
+                    spectra.append(Spectrum('%s/spectra.fits' % folder,
+                                            hdulist=fspectra,
+                                            ext=('DATA%d' % i, 'STAT%d' % i)))
         else:
-            spectra = None            
-        if os.path.isfile('%s/Cat2.fits'%folder):
-            Cat2 = Table.read('%s/Cat2.fits'%folder)
+            spectra = None
+        if os.path.isfile('%s/Cat2.fits' % folder):
+            Cat2 = Table.read('%s/Cat2.fits' % folder)
             _format_cat(Cat2, 2)
         else:
             Cat2 = None
 
         if newname is not None:
             name = newname
-                
+
         return cls(path=path, name=name, param=param,
                    filename=param['cubename'], fieldmap=wfields,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    imawhite=ima_white, cube_std=cube_std, cont_dct=cont_dct,
-                   segmentation_test=segmentation_test, areamap=areamap,
+                   areamap=areamap,
                    thresO2=thresO2, testO2=testO2, histO2=histO2, binO2=binO2,
                    meaO2=meaO2, stdO2=stdO2, cube_faint=cube_faint,
                    mapO2=mapO2, cube_correl=cube_correl, maxmap=maxmap,
                    cube_profile=cube_profile, cube_local_max=cube_local_max,
-                   cube_local_min=cube_local_min, segmap=segmap, Pval_r=Pval_r,
+                   cube_local_min=cube_local_min, segmap=param['segmap'], Pval_r=Pval_r,
                    index_pval=index_pval, Det_M=Det_M, Det_m=Det_m, Cat0=Cat0,
                    zm=zm, ym=ym, xm=xm, Pval_r_comp=Pval_r_comp,
                    index_pval_comp=index_pval_comp, Det_M_comp=Det_M_comp,
                    Det_m_comp=Det_m_comp, Cat1=Cat1, spectra=spectra,
                    Cat2=Cat2)
-                   
-    def _loginfo(self, logstr):
-        self._log_file.info(logstr) 
-        self._log_stdout.info(logstr)
+
+    def _loginfo(self, *args):
+        self._log_file.info(*args)
+        self._log_stdout.info(*args)
         
-    def _logwarning(self, logstr):
-        self._log_file.warning(logstr) 
-        self._log_stdout.warning(logstr)    
-        
+    def _logwarning(self, *args):
+        self._log_file.warning(*args) 
+        self._log_stdout.warning(*args)        
+
     @property
     def ima_dct(self):
         """DCT image"""
         if self._ima_dct is None and self.cont_dct is not None:
             self._ima_dct = self.cont_dct.mean(axis=0)
         return self._ima_dct
-        
+
     @property
     def ima_std(self):
         """STD image"""
         if self._ima_std is None and self.cube_std is not None:
             self._ima_std = self.cube_std.mean(axis=0)
         return self._ima_std
-        
+
     @property
     def nbAreas(self):
         """Number of area (segmentation) for the PCA"""
         if self._nbAreas is None and self.areamap is not None:
             labels = np.unique(self.areamap._data)
-            if 0 in labels: #expmap=0
+            if 0 in labels:  # expmap=0
                 self._nbAreas = len(labels) - 1
             else:
                 self._nbAreas = len(labels)
         return self._nbAreas
-    
+
     @property
     def threshold_correl(self):
         """Estimated threshold used to detect lines on local maxima of max
@@ -769,7 +756,7 @@ class ORIGIN(object):
             return self.param['threshold']
         else:
             return None
-            
+
     @property
     def threshold_std(self):
         """Estimated threshold used to detect complementary lines on local
@@ -777,16 +764,16 @@ class ORIGIN(object):
         if 'threshold2' in self.param:
             return self.param['threshold2']
         else:
-            return None  
-      
+            return None
+
     @property
-    def Cat2b(self):      
+    def Cat2b(self):
         if self._Cat2b is None and self.Cat2 is not None:
             from astropy.table import MaskedColumn
             cat = self.Cat2.group_by('ID')
             lmax = max([len(g['lbda']) for g in cat.groups])
-            ncat = Table(names=['ID','RA','DEC','DLINE','NLINE','SEG', 'COMP'],
-                         dtype=['i4','f4','f4','f4','i4','i4','i4'], masked=True)
+            ncat = Table(names=['ID', 'RA', 'DEC', 'DLINE', 'NLINE', 'SEG', 'COMP'],
+                         dtype=['i4', 'f4', 'f4', 'f4', 'i4', 'i4', 'i4'], masked=True)
             ncat['DLINE'].format = '.2f'
             for l in range(lmax):
                 ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
@@ -801,7 +788,7 @@ class ORIGIN(object):
                                              format='.2f'))
                 ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
                                              format='.2f'))
-            for key, group in zip(cat.groups.keys,cat.groups):
+            for key, group in zip(cat.groups.keys, cat.groups):
                 # compute average ra,dec and peak-to-peak distance in arcsec
                 mra = group['ra'].mean()
                 mdec = group['dec'].mean()
@@ -809,12 +796,12 @@ class ORIGIN(object):
                 c = SkyCoord([group['ra']], [group['dec']], unit=(u.deg, u.deg))
                 dist = c0.separation(c)
                 ptp = dist.arcsec.ptp()
-                dic = {'ID':key['ID'], 'RA':mra,
-                'DEC':mdec, 'DLINE':ptp, 'NLINE':len(group['lbda']),
-                'SEG':group['seg_label'][0], 'COMP':group['comp'][0]}
+                dic = {'ID': key['ID'], 'RA': mra,
+                       'DEC': mdec, 'DLINE': ptp, 'NLINE': len(group['lbda']),
+                       'SEG': group['seg_label'][0], 'COMP': group['comp'][0]}
                 ksort = group['T_GLR'].argsort()[::-1]
                 for k, (lbda, flux, tglr, std, eflux, purity) in \
-                enumerate(group['lbda','flux','T_GLR','STD','residual','purity'][ksort]):
+                        enumerate(group['lbda', 'flux', 'T_GLR', 'STD', 'residual', 'purity'][ksort]):
                     dic['LBDA{}'.format(k)] = lbda
                     dic['FLUX{}'.format(k)] = flux
                     dic['EFLUX{}'.format(k)] = eflux
@@ -826,15 +813,14 @@ class ORIGIN(object):
             self._Cat2b = ncat
         return self._Cat2b
 
-                   
     def write(self, path=None, erase=False):
         """Save the current session in a folder that will have the name of the
         ORIGIN object (self.name)
-        
+
         The ORIGIN.load(folder, newname=None) method will be used to load a
         session. The parameter newname will let the user to load a session but
         continue in a new one.
-        
+
         Parameters
         ----------
         path  : string
@@ -858,155 +844,149 @@ class ORIGIN(object):
             if erase:
                 shutil.rmtree(path2)
                 os.makedirs(path2)
-        
+
         # parameters in .yaml
-        stream = open('%s/%s.yaml'%(path2, self.name), 'w')
-        yaml.dump(self.param, stream)
-        stream.close()
-        
+        with open('%s/%s.yaml' % (path2, self.name), 'w') as stream:
+            yaml.dump(self.param, stream)
+
         # log file
         currentlog = self._log_file.handlers[0].baseFilename
-        newlog = os.path.abspath('%s/%s.log'%(path2, self.name))
+        newlog = os.path.abspath('%s/%s.log' % (path2, self.name))
         if (currentlog != newlog):
             clear_loggers('origfile')
             shutil.move(currentlog, newlog)
             setup_logfile(name='origfile', level=logging.DEBUG,
-                                           logfile=newlog,
-                                           fmt='%(asctime)s %(message)s')
+                          logfile=newlog,
+                          fmt='%(asctime)s %(message)s')
             self._log_file = logging.getLogger('origfile')
             self._log_file.setLevel(logging.INFO)
-            
+
         # PSF
         if type(self.PSF) is list:
             for i, psf in enumerate(self.PSF):
-                Cube(data=psf, mask=np.ma.nomask).write('%s'%path2 + \
-                '/cube_psf_%02d.fits'%i)
+                Cube(data=psf, mask=np.ma.nomask).write('%s' % path2 +
+                                                        '/cube_psf_%02d.fits' % i)
         else:
-            Cube(data=self.PSF, mask=np.ma.nomask).write('%s'%path2 + \
-            '/cube_psf.fits')
+            Cube(data=self.PSF, mask=np.ma.nomask).write('%s' % path2 +
+                                                         '/cube_psf.fits')
         if self.wfields is not None:
             for i, wfield in enumerate(self.wfields):
-                Image(data=wfield, mask=np.ma.nomask).write('%s'%path2 + \
-                '/wfield_%02d.fits'%i)
-            
-        if self.ima_white is not None:
-            self.ima_white.write('%s/ima_white.fits'%path2)
-            
-        #step1
-        if self.cube_std is not None:
-            self.cube_std.write('%s/cube_std.fits'%path2)
-        if self.cont_dct is not None:
-            self.cont_dct.write('%s/cont_dct.fits'%path2)
-        if self.segmentation_test is not None:
-            self.segmentation_test.write('%s/segmentation_test.fits'%path2)
-        if self.ima_std is not None:
-            self.ima_std.write('%s/ima_std.fits'%path2)
-        if self.ima_dct is not None:
-            self.ima_dct.write('%s/ima_dct.fits'%path2)
+                Image(data=wfield, mask=np.ma.nomask).write('%s' % path2 +
+                                                            '/wfield_%02d.fits' % i)
 
-        #step2
+        if self.ima_white is not None:
+            self.ima_white.write('%s/ima_white.fits' % path2)
+
+        # step1
+        if self.cube_std is not None:
+            self.cube_std.write('%s/cube_std.fits' % path2)
+        if self.cont_dct is not None:
+            self.cont_dct.write('%s/cont_dct.fits' % path2)
+        if self.ima_std is not None:
+            self.ima_std.write('%s/ima_std.fits' % path2)
+        if self.ima_dct is not None:
+            self.ima_dct.write('%s/ima_dct.fits' % path2)
+
+        # step2
         if self.areamap is not None:
-            self.areamap.write('%s/areamap.fits'%path2)
-                
-        #step3
+            self.areamap.write('%s/areamap.fits' % path2)
+
+        # step3
         if self.thresO2 is not None:
-            np.savetxt('%s/thresO2.txt'%path2, self.thresO2)
+            np.savetxt('%s/thresO2.txt' % path2, self.thresO2)
         if self.nbAreas is not None:
             if self.testO2 is not None:
-                for area in range(1, self.nbAreas+1):
-                    np.savetxt('%s/testO2_%d.txt'%(path2, area),
-                               self.testO2[area-1])
+                for area in range(1, self.nbAreas + 1):
+                    np.savetxt('%s/testO2_%d.txt' % (path2, area),
+                               self.testO2[area - 1])
             if self.histO2 is not None:
-                for area in range(1, self.nbAreas+1):
-                    np.savetxt('%s/histO2_%d.txt'%(path2, area),
-                               self.histO2[area-1])
+                for area in range(1, self.nbAreas + 1):
+                    np.savetxt('%s/histO2_%d.txt' % (path2, area),
+                               self.histO2[area - 1])
             if self.binO2 is not None:
-                for area in range(1, self.nbAreas+1):
-                    np.savetxt('%s/binO2_%d.txt'%(path2, area),
-                               self.binO2[area-1])
+                for area in range(1, self.nbAreas + 1):
+                    np.savetxt('%s/binO2_%d.txt' % (path2, area),
+                               self.binO2[area - 1])
         if self.meaO2 is not None:
-            np.savetxt('%s/meaO2.txt'%path2, self.meaO2)
+            np.savetxt('%s/meaO2.txt' % path2, self.meaO2)
         if self.stdO2 is not None:
-            np.savetxt('%s/stdO2.txt'%path2, self.stdO2)
-                           
+            np.savetxt('%s/stdO2.txt' % path2, self.stdO2)
+
         # step4
         if self.cube_faint is not None:
-            self.cube_faint.write('%s/cube_faint.fits'%path2)
+            self.cube_faint.write('%s/cube_faint.fits' % path2)
         if self.mapO2 is not None:
-            self.mapO2.write('%s/mapO2.fits'%path2)            
+            self.mapO2.write('%s/mapO2.fits' % path2)
 
         # step5
         if self.cube_correl is not None:
-            self.cube_correl.write('%s/cube_correl.fits'%path2)
+            self.cube_correl.write('%s/cube_correl.fits' % path2)
         if self.cube_profile is not None:
-            self.cube_profile.write('%s/cube_profile.fits'%path2)
+            self.cube_profile.write('%s/cube_profile.fits' % path2)
         if self.maxmap is not None:
-            self.maxmap.write('%s/maxmap.fits'%path2)
+            self.maxmap.write('%s/maxmap.fits' % path2)
         if self.cube_local_max is not None:
-            self.cube_local_max.write('%s/cube_local_max.fits'%path2)    
+            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
         if self.cube_local_min is not None:
-            self.cube_local_min.write('%s/cube_local_min.fits'%path2) 
+            self.cube_local_min.write('%s/cube_local_min.fits' % path2)
 
-        # step6                       
-        if self.segmap is not None:
-            self.segmap.write('%s'%path2 + \
-            '/segmap.fits')  
+        # step6
         if self.Pval_r is not None:
-            np.savetxt('%s/Pval_r.txt'%(path2), self.Pval_r)
+            np.savetxt('%s/Pval_r.txt' % (path2), self.Pval_r)
         if self.index_pval is not None:
-            np.savetxt('%s/index_pval.txt'%(path2), self.index_pval)
+            np.savetxt('%s/index_pval.txt' % (path2), self.index_pval)
         if self.Det_M is not None:
-            np.savetxt('%s/Det_M.txt'%(path2), self.Det_M)
+            np.savetxt('%s/Det_M.txt' % (path2), self.Det_M)
         if self.Det_m is not None:
-            np.savetxt('%s/Det_min.txt'%(path2), self.Det_m)
-        
+            np.savetxt('%s/Det_min.txt' % (path2), self.Det_m)
+
         # step7
         if self.Cat0 is not None:
-            self.Cat0.write('%s/Cat0.fits'%path2, overwrite=True)
+            self.Cat0.write('%s/Cat0.fits' % path2, overwrite=True)
         if self.det_correl_min is not None:
-            np.savetxt('%s/zm.txt'%(path2), self.det_correl_min[0])
-            np.savetxt('%s/ym.txt'%(path2), self.det_correl_min[1])
-            np.savetxt('%s/xm.txt'%(path2), self.det_correl_min[2])
+            np.savetxt('%s/zm.txt' % (path2), self.det_correl_min[0])
+            np.savetxt('%s/ym.txt' % (path2), self.det_correl_min[1])
+            np.savetxt('%s/xm.txt' % (path2), self.det_correl_min[2])
         if self.Pval_r_comp is not None:
-            np.savetxt('%s/Pval_r_comp.txt'%(path2), self.Pval_r_comp)
+            np.savetxt('%s/Pval_r_comp.txt' % (path2), self.Pval_r_comp)
         if self.index_pval_comp is not None:
-            np.savetxt('%s/index_pval_comp.txt'%(path2), self.index_pval_comp)
+            np.savetxt('%s/index_pval_comp.txt' % (path2), self.index_pval_comp)
         if self.Det_M_comp is not None:
-            np.savetxt('%s/Det_M_comp.txt'%(path2), self.Det_M_comp)
+            np.savetxt('%s/Det_M_comp.txt' % (path2), self.Det_M_comp)
         if self.Det_m_comp is not None:
-            np.savetxt('%s/Det_min_comp.txt'%(path2), self.Det_m_comp)
-        
+            np.savetxt('%s/Det_min_comp.txt' % (path2), self.Det_m_comp)
+
         # step8
         if self.Cat1 is not None:
-            self.Cat1.write('%s/Cat1.fits'%path2, overwrite=True)
-            
+            self.Cat1.write('%s/Cat1.fits' % path2, overwrite=True)
+
         # step9
         if self.Cat2 is not None:
-            self.Cat2.write('%s/Cat2.fits'%path2, overwrite=True)
+            self.Cat2.write('%s/Cat2.fits' % path2, overwrite=True)
         if self.Cat2b is not None:
-            self.Cat2b.write('%s/Cat2b.fits'%path2, overwrite=True)
+            self.Cat2b.write('%s/Cat2b.fits' % path2, overwrite=True)
         if self.spectra is not None:
             hdulist = fits.HDUList([fits.PrimaryHDU()])
             for i in range(len(self.spectra)):
-                hdu = self.spectra[i].get_data_hdu(name='DATA%d'%i,
+                hdu = self.spectra[i].get_data_hdu(name='DATA%d' % i,
                                                    savemask='nan')
                 hdulist.append(hdu)
-                hdu = self.spectra[i].get_stat_hdu(name='STAT%d'%i)
+                hdu = self.spectra[i].get_stat_hdu(name='STAT%d' % i)
                 if hdu is not None:
                     hdulist.append(hdu)
-            write_hdulist_to(hdulist, '%s/spectra.fits'%path2, overwrite=True)
-        
-        self._loginfo("Current session saved in %s"%path2)
-      
-           
-        
-    def step01_preprocessing(self, dct_order=10):
-        """ Preprocessing of data, dct, standardization and noise compensation         
-        
+            write_hdulist_to(hdulist, '%s/spectra.fits' % path2, overwrite=True)
+
+        self._loginfo("Current session saved in %s" % path2)
+
+    def step01_preprocessing(self, dct_order=10, dct_approx=True):
+        """ Preprocessing of data, dct, standardization and noise compensation
+
         Parameters
         ----------
         dct_order   : integer
                       The number of atom to keep for the dct decomposition
+        dct_approx : bool
+                     if True, the DCT computation is approximated
 
         Returns
         -------
@@ -1020,126 +1000,113 @@ class ORIGIN(object):
         self.ima_dct          : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis
-        self.segmentation_test : `~mpdaf.obj.Image`
-                                 Test for segmentation
         """
-        self._loginfo('Step 01 - Preprocessing, dct order=%d'%dct_order)
-            
+        self._loginfo('Step 01 - Preprocessing, dct order=%d' % dct_order)
+
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
-        faint_dct, cont_dct = dct_residual(self.cube_raw, self.var, dct_order)
-         
-        # compute standardized data:
+        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order, self.var,
+                                           dct_approx)
+
+        # compute standardized data
         self._loginfo('Data standardizing')
-        cube_std  = Compute_Standardized_data(faint_dct, self.mask, self.var)
+        cube_std = Compute_Standardized_data(faint_dct, self.mask, self.var)
         cont_dct = cont_dct / np.sqrt(self.var)
-        
-        # compute test for segmentation map 
-        self._loginfo('Segmentation test')
-        segmentation_test = Compute_Segmentation_test(cont_dct)
-        self._loginfo('Test for segmentation saved in self.segmentation_test')
-        self.segmentation_test = Image(data=segmentation_test, 
-                                      wcs=self.wcs, mask=np.ma.nomask)
-        
-        self._loginfo('Std signal saved in self.cube_std and self.ima_std')        
+
+        self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
-                         mask=np.ma.nomask)
+                             mask=np.ma.nomask)
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
-                         mask=np.ma.nomask)
-                
+                             mask=np.ma.nomask)
+
         self._loginfo('01 Done')
 
-    def step02_areas(self,  pfa=.2, minsize=100, maxsize=None):
-        """ Creation of automatic area         
-        
+    def step02_areas(self, pfa=.2, minsize=100, maxsize=None):
+        """ Creation of automatic area
+
         Parameters
         ----------
         pfa      :  float
                     PFA of the segmentation test to estimates sources with
                     strong continuum
         minsize  :  int
-                    Lenght in pixel of the side of typical surface wanted                        
+                    Lenght in pixel of the side of typical surface wanted
                     enough big area to satisfy the PCA
         maxsize :   int
-                    Lenght in pixel of the side of maximum surface wanted                        
-                            
+                    Lenght in pixel of the side of maximum surface wanted
+
 
         Returns
         -------
-     
+
         self.nbAreas    :   int
-                            number of areas                    
+                            number of areas
         self.areamap : `~mpdaf.obj.Image`
                        The map of areas
-        """           
+        """
         self._loginfo('02 - Areas creation')
-        
-        if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' + \
-            'self.segmentation_test')
-        
-        self._loginfo('   - pfa of the test = %0.2f'%pfa)
-        self._loginfo('   - side size = %d pixels'%minsize)
+        self._loginfo('   - pfa of the test = %0.2f' % pfa)
+        self._loginfo('   - side size = %d pixels' % minsize)
         if minsize is None:
             self._loginfo('   - minimum size = None')
         else:
-            self._loginfo('   - minimum size = %d pixels**2'%minsize)
-        
+            self._loginfo('   - minimum size = %d pixels**2' % minsize)
+
         self.param['pfa_areas'] = pfa
         self.param['minsize_areas'] = minsize
         self.param['maxsize_areas'] = maxsize
-        
-        nexpmap = (np.sum(~self.mask, axis=0) >0).astype(np.int)
-        
-        NbSubcube = np.maximum(1,int( np.sqrt( np.sum(nexpmap)/(minsize**2) )))
-        if NbSubcube > 1:          
+
+        nexpmap = (np.sum(~self.mask, axis=0) > 0).astype(np.int)
+
+        NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize**2))))
+        if NbSubcube > 1:
             if maxsize is None:
-                maxsize = minsize*2
-                
-            MinSize = minsize**2 
-            MaxSize = maxsize**2                
-                
-            self._loginfo('First segmentation of %d^2 square'%NbSubcube)
-            self._loginfo('Squares segmentation and fusion') 
-            square_cut_fus = area_segmentation_square_fusion(nexpmap, \
-                            MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
-            
-            self._loginfo('Sources fusion')         
+                maxsize = minsize * 2
+
+            MinSize = minsize**2
+            MaxSize = maxsize**2
+
+            self._loginfo('First segmentation of %d^2 square' % NbSubcube)
+            self._loginfo('Squares segmentation and fusion')
+            square_cut_fus = area_segmentation_square_fusion(nexpmap,
+                                                             MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
+
+            self._loginfo('Sources fusion')
             square_src_fus, src = \
-            area_segmentation_sources_fusion(self.segmentation_test.data, \
-                                             square_cut_fus, pfa, \
-                                             self.Ny, self.Nx)        
-            
-            self._loginfo('Convex envelope')                 
+                area_segmentation_sources_fusion(self.segmap.data,
+                                                 square_cut_fus, pfa,
+                                                 self.Ny, self.Nx)
+
+            self._loginfo('Convex envelope')
             convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
-            
-            self._loginfo('Areas dilation')                 
-            Grown_label = area_growing(convex_lab, nexpmap)        
-            
+
+            self._loginfo('Areas dilation')
+            Grown_label = area_growing(convex_lab, nexpmap)
+
             self._loginfo('Fusion of small area')
-            self._loginfo('Minimum Size: %d px'%MinSize)
-            self._loginfo('Maximum Size: %d px'%MaxSize)
+            self._loginfo('Minimum Size: %d px' % MinSize)
+            self._loginfo('Maximum Size: %d px' % MaxSize)
             areamap = area_segmentation_final(Grown_label, MinSize, MaxSize)
-            
+
         elif NbSubcube == 1:
             areamap = nexpmap
-            
-        self._loginfo('Save the map of areas in self.areamap') 
+
+        self._loginfo('Save the map of areas in self.areamap')
 
         self.areamap = Image(data=areamap, wcs=self.wcs, dtype=np.int)
-        self._loginfo('%d areas generated'%self.nbAreas)        
+        self._loginfo('%d areas generated' % self.nbAreas)
         self.param['nbareas'] = self.nbAreas
-        
-        self._loginfo('02 Done') 
-        
+
+        self._loginfo('02 Done')
+
     def step03_compute_PCA_threshold(self, pfa_test=.01):
         """ Loop on each zone of the data cube and estimate the threshold
 
         Parameters
         ----------
         pfa_test            :   float
-                                Threshold of the test (default=0.01)  
+                                Threshold of the test (default=0.01)
 
         Returns
         -------
@@ -1148,7 +1115,7 @@ class ORIGIN(object):
         self.histO2  : lists of arrays (one per PCA area)
                        PCA histogram
         self.binO2   : lists of arrays (one per PCA area)
-                       bin for the PCA histogram          
+                       bin for the PCA histogram
         self.thresO2 : list of float
                        For each area, threshold value
         self.meaO2   : list of float
@@ -1158,74 +1125,74 @@ class ORIGIN(object):
                        Scale parameter of the Gaussian fit used to estimate
                        the threshold
         """
-        self._loginfo('Step 03 - PCA threshold computation') 
-        self._loginfo('   - pfa of the test = %0.2f'%pfa_test)            
+        self._loginfo('Step 03 - PCA threshold computation')
+        self._loginfo('   - pfa of the test = %0.2f' % pfa_test)
         self.param['pfa_test'] = pfa_test
-        
+
         if self.cube_std is None:
             raise IOError('Run the step 01 to initialize self.cube_std')
         if self.areamap is None:
             raise IOError('Run the step 02 to initialize self.areamap ')
-            
-        self.testO2 = [] # list of arrays
-        self.histO2 = [] # list of arrays
-        self.binO2 = [] # list of arrays
+
+        self.testO2 = []  # list of arrays
+        self.histO2 = []  # list of arrays
+        self.binO2 = []  # list of arrays
         self.thresO2 = []
         self.meaO2 = []
         self.stdO2 = []
-        
+
         for area_ind in range(1, self.nbAreas + 1):
             # limits of each spatial zone
             ksel = (self.areamap._data == area_ind)
-        
+
             # Data in this spatio-spectral zone
             cube_temp = self.cube_std._data[:, ksel]
 
             testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp,
                                                                     pfa_test)
-            self._loginfo('Area %d, estimation mean/std/threshold:'%area_ind \
-                                                + ' %f/%f/%f' %(mea, std, tO2))
+            self._loginfo('Area %d, estimation mean/std/threshold:' % area_ind
+                          + ' %f/%f/%f' % (mea, std, tO2))
             self.testO2.append(testO2)
             self.histO2.append(hO2)
             self.binO2.append(fO2)
             self.thresO2.append(tO2)
             self.meaO2.append(mea)
             self.stdO2.append(std)
-        
-        self._loginfo('03 Done')              
-        
+
+        self._loginfo('03 Done')
+
     def step04_compute_greedy_PCA(self, Noise_population=50,
-                              itermax=100, threshold_list=None):
+                                  itermax=100, threshold_list=None):
         """ Loop on each zone of the data cube and compute the greedy PCA.
         The test (test_fun) and the threshold (threshold_test) define the part
-        of the each zone of the cube to segment in nuisance and background. 
-        A part of the background part (1/Noise_population %) is used to compute 
-        a mean background, a signature. 
-        The Nuisance part is orthogonalized to this signature in order to not 
+        of the each zone of the cube to segment in nuisance and background.
+        A part of the background part (1/Noise_population %) is used to compute
+        a mean background, a signature.
+        The Nuisance part is orthogonalized to this signature in order to not
         loose this part during the greedy process. SVD is performed on nuisance
-        in order to modelized the nuisance part and the principal eigen vector, 
+        in order to modelized the nuisance part and the principal eigen vector,
         only one, is used to perform the projection of the whole set of data:
         Nuisance and background. The Nuisance spectra which satisfied the test
-        are updated in the background computation and the background is so 
+        are updated in the background computation and the background is so
         cleaned from sources signature. The iteration stop when all the spectra
         satisfy the criteria
 
         Parameters
         ----------
-        
-        Noise_population    :   float                
-                                Fraction of spectra used to estimate 
+
+        Noise_population    :   float
+                                Fraction of spectra used to estimate
                                 the background signature
-                                
+
         itermax             :   integer
                                 Maximum number of iterations
 
         threshold_list      :   list
                                 User given list of threshold (not pfa) to apply
                                 on each area, the list is of lenght nbAreas
-                                or of lenght 1. Before using this option 
+                                or of lenght 1. Before using this option
                                 make sure to have good correspondance between
-                                the Areas and the threshold in list. 
+                                the Areas and the threshold in list.
                                 Use: self.plot_areas() to be sure.
 
         Returns
@@ -1237,8 +1204,8 @@ class ORIGIN(object):
         self.mapO2 : `~mpdaf.obj.Image`
                      The numbers of iterations used by testO2 for each spaxel
         """
-        self._loginfo('Step 04 - Greedy PCA computation')  
-        
+        self._loginfo('Step 04 - Greedy PCA computation')
+
         if self.cube_std is None:
             raise IOError('Run the step 01 to initialize self.cube_std')
         if self.areamap is None:
@@ -1249,45 +1216,44 @@ class ORIGIN(object):
             thr = self.thresO2
         else:
             thr = threshold_list
-            
-            
-        self._loginfo('   - Noise_population = %0.2f'%Noise_population)
-        self._loginfo('   - List of threshold = ' + \
-            " ".join("%.2f"%x for x in thr))     
-        self._loginfo('   - Max number of iterations = %d'%itermax)
-        
+
+        self._loginfo('   - Noise_population = %0.2f' % Noise_population)
+        self._loginfo('   - List of threshold = ' +
+                      " ".join("%.2f" % x for x in thr))
+        self._loginfo('   - Max number of iterations = %d' % itermax)
+
         self.param['threshold_list'] = thr
-        self.param['Noise_population'] = Noise_population                
+        self.param['Noise_population'] = Noise_population
         self.param['itermax'] = itermax
-        
-        self._loginfo('Compute greedy PCA on each zone')    
-        
+
+        self._loginfo('Compute greedy PCA on each zone')
+
         faint, mapO2, nstop = \
-        Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
-                               self.areamap._data, Noise_population,
-                               thr, itermax, self.testO2)
+            Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
+                                   self.areamap._data, Noise_population,
+                                   thr, itermax, self.testO2)
         if nstop > 0:
             self._logwarning('The iterations have been reached the limit of %d in %d cases'%(itermax,nstop))
+        
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
-                          mask=np.ma.nomask)
-        self._loginfo('Save the numbers of iterations used by the' + \
-                              ' testO2 for each spaxel in self.mapO2') 
+                               mask=np.ma.nomask)
+        self._loginfo('Save the numbers of iterations used by the' +
+                      ' testO2 for each spaxel in self.mapO2')
 
-        self.mapO2 = Image(data=mapO2, wcs=self.wcs) 
-            
-        self._loginfo('04 Done')              
-        
+        self.mapO2 = Image(data=mapO2, wcs=self.wcs)
+
+        self._loginfo('04 Done')
 
     def step05_compute_TGLR(self, NbSubcube=1, neighboors=26, ncpu=4):
         """Compute the cube of GLR test values.
         The test is done on the cube containing the faint signal
         (self.cube_faint) and it uses the PSF and the spectral profile.
-        The correlation can be computed per "area"  for low memory system. 
+        The correlation can be computed per "area"  for low memory system.
         Then a Loop on each zone of self.cube_correl is performed to
         compute for each zone:
-        
+
         - The local maxima distribution of each zone
         - the p-values associated to the local maxima,
         - the p-values associated to the number of thresholded p-values
@@ -1296,9 +1262,9 @@ class ORIGIN(object):
           to the T_GLR values divided by twice the pvalues associated to the
           number of thresholded p-values of the correlations per spectral
           channel.
-          
+
         Parameters
-        ----------                    
+        ----------
         NbSubcube   :   integer
                         Number of sub-cubes for the spatial segmentation
                         If NbSubcube>1 the correlation and local maximas and
@@ -1308,7 +1274,7 @@ class ORIGIN(object):
                         Connectivity of contiguous voxels
         ncpu        :   integer
                         Number of CPUs used
-                                
+
         Returns
         -------
         self.cube_correl  : `~mpdaf.obj.Cube`
@@ -1317,112 +1283,81 @@ class ORIGIN(object):
                              Number of the profile associated to the T_GLR
         self.maxmap       : `~mpdaf.obj.Image`
                              Map of maxima along the wavelength axis
-                             
+
         self.cube_local_max    : `~mpdaf.obj.Cube`
                                  Local maxima from max correlation
         self.cube_local_min    : `~mpdaf.obj.Cube`
                                  Local maxima from minus min correlation
         """
-        self._loginfo('Step 05 - GLR test(NbSubcube=%d'%NbSubcube +\
-        ', neighboors=%d)'%neighboors)
-        
+        self._loginfo('Step 05 - GLR test(NbSubcube=%d' % NbSubcube +
+                      ', neighboors=%d)' % neighboors)
+
         if self.cube_faint is None:
             raise IOError('Run the step 04 to initialize self.cube_faint')
-            
+
         self.param['neighboors'] = neighboors
         self.param['NbSubcube'] = NbSubcube
 
-        # TGLR computing (normalized correlations)           
+        # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
         if NbSubcube == 1:
-            correl, profile, cm = Correlation_GLR_test(self.cube_faint._data, 
-                                            self.var, self.PSF, self.wfields,
-                                               self.profiles, ncpu)  
-        else:              
-            correl, profile, cm = Correlation_GLR_test_zone( \
-                    self.cube_faint._data, self.var, self.PSF, self.wfields,
-                    self.profiles, intx, inty, NbSubcube, ncpu)  
-                                                                         
-        
+            correl, profile, cm = Correlation_GLR_test(self.cube_faint._data,
+                                                       self.var, self.PSF, self.wfields,
+                                                       self.profiles, ncpu)
+        else:
+            correl, profile, cm = Correlation_GLR_test_zone(
+                self.cube_faint._data, self.var, self.PSF, self.wfields,
+                self.profiles, intx, inty, NbSubcube, ncpu)
+
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[self.mask] = 0
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
-                      mask=np.ma.nomask)
-                      
-        self._loginfo('Save the number of profile associated to the TGLR' + \
+                                mask=np.ma.nomask)
+
+        self._loginfo('Save the number of profile associated to the TGLR' +
                       ' in self.cube_profile')
-        profile[self.mask] = 0       
+        profile[self.mask] = 0
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
-                       mask=np.ma.nomask, dtype=int)
-        
-        self._loginfo('Save the map of maxima in self.maxmap')              
+                                 mask=np.ma.nomask, dtype=int)
+
+        self._loginfo('Save the map of maxima in self.maxmap')
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
-        self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)               
-                       
+        self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)
+
         self._loginfo('Compute p-values of local maximum of correlation values')
         cube_local_max, cube_local_min = Compute_local_max_zone(correl, cm,
-                                                    self.mask,
-                                                    intx, inty, NbSubcube,
-                                                    neighboors)
+                                                                self.mask,
+                                                                intx, inty, NbSubcube,
+                                                                neighboors)
         self._loginfo('Save self.cube_local_max from max correlations')
-        self.cube_local_max = Cube(data=cube_local_max, \
-                                     wave=self.wave,
-                                     wcs=self.wcs, mask=np.ma.nomask)      
-        self._loginfo('Save self.cube_local_min from min correlations')        
-        self.cube_local_min = Cube(data=cube_local_min, \
-                                     wave=self.wave,
-                                     wcs=self.wcs, mask=np.ma.nomask)                                 
-        
+        self.cube_local_max = Cube(data=cube_local_max,
+                                   wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask)
+        self._loginfo('Save self.cube_local_min from min correlations')
+        self.cube_local_min = Cube(data=cube_local_min,
+                                   wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask)
+
         self._loginfo('05 Done')
-        
-    def step06_compute_segmentation_map(self, pfa=0.05):        
-        """compute segmentation map that will be used during detection step
-        (spatio-spectral merging)
 
-        Parameters
-        ----------
-        pfa    : float
-                 Pvalue for the test which performs segmentation 
-                     
-        Returns
-        -------
-        self.segmap : `~mpdaf.obj.Image`
-                      Segmentation map for threshold
-        """
-        self._loginfo('Step 06 - Compute Purity threshold')  
-        
-        if self.segmentation_test is None:
-            raise IOError('Run the step 01 to initialize ' + \
-            'self.segmentation_test')
-            
-        self.param['pfa'] = pfa
-
-        # segmentation map
-        self._loginfo('Segmentation map computation (pfa=%.2f)...'%pfa)
-        segmap = Segmentation(self.segmentation_test.data, pfa)
-        self.segmap = Image(data=segmap, wcs=self.wcs, mask=np.ma.nomask)
-        self._loginfo('Save the segmentation map in self.segmap')
-     
-        self._loginfo('06 Done')
-        
-    def step07_compute_purity_threshold(self, purity=.9, tol_spat=3,
+    def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
-                                        spect_size=10, 
-                                        auto=(5,15,0.1), threshlist=None):        
+                                        spect_size=10,
+                                        auto=(5,15,0.1), threshlist=None):
         """find the threshold  for a given purity
 
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold        
+                 purity to automatically compute the threshold
         tol_spat : integer
                    spatial tolerance for the spatial merging (distance in pixels)
                    TODO en fonction du FWHM
         tol_spec : integer
                    spectral tolerance for the spatial merging (distance in pixels)
         spat_size : int
-                spatiale size of the spatiale filter                
+                spatiale size of the spatiale filter
         spect_size : int
                  spectral lenght of the spectral filter
         auto    : tuple (npts1,npts2,pmargin)
@@ -1430,7 +1365,8 @@ class ORIGIN(object):
                  default (5,15,0.1
         threshlist : list
                  list of thresholds to compute the purity
-           
+
+
         Returns
         -------
         self.threshold_correl : float
@@ -1444,32 +1380,30 @@ class ORIGIN(object):
         self.Det_m  : List
                       Number of detections in -DATA
         """
-        self._loginfo('Step 07 - Compute Purity threshold')  
-        
+        self._loginfo('Step 06 - Compute Purity threshold')
+
         if self.cube_local_max is None:
-            raise IOError('Run the step 05 to initialize ' + \
-            'self.cube_local_max and self.cube_local_min')
-        if self.segmap is None:
-            raise IOError('Run the step 06 to initialize self.segmap') 
-            
+            raise IOError('Run the step 05 to initialize ' +
+                          'self.cube_local_max and self.cube_local_min')
+
         self.param['purity'] = purity
         self.param['tol_spat'] = tol_spat
         self.param['tol_spec'] = tol_spec
         self.param['spat_size'] = spat_size
         self.param['spect_size'] = spect_size
 
-        self._loginfo('Estimation of threshold with purity = %.2f'%purity)
+        self._loginfo('Estimation of threshold with purity = %.2f' % purity)
         threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
-        Compute_threshold_purity(purity, self.cube_local_max.data,
-                                 self.cube_local_min.data, self.segmap.data,
-                                 spat_size, spect_size, tol_spat, tol_spec,
-                                 True, True, auto, threshlist)
-        self.param['threshold'] = threshold                                       
-        self._loginfo('Threshold: %.2f '%threshold)
-     
-        self._loginfo('07 Done')
-        
-    def step08_detection(self, threshold=None):
+            Compute_threshold_purity(purity, self.cube_local_max.data,
+                                     self.cube_local_min.data, self.segmap.data,
+                                     spat_size, spect_size, tol_spat, tol_spec,
+                                     True, True, auto, threshlist)
+        self.param['threshold'] = threshold
+        self._loginfo('Threshold: %.2f ' % threshold)
+
+        self._loginfo('06 Done')
+
+    def step07_detection(self, threshold=None):
         """Detections on local maxima from max correlation + spatia-spectral
         merging in order to create the first catalog.
 
@@ -1477,7 +1411,7 @@ class ORIGIN(object):
         ----------
         threshold : float
                     User threshod if the estimated threshold is not good
-                            
+
         Returns
         -------
         self.Cat0 : astropy.Table
@@ -1485,38 +1419,36 @@ class ORIGIN(object):
                     Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
         self.det_correl_min : (array, array, array)
                               3D positions of detections in correl_min
-        """        
+        """
 
-        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')  
-        
-        if self.segmap is None:
-            raise IOError('Run the step 06 to initialize segmap')        
+        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
 
         if threshold is not None:
             self.param['threshold'] = threshold
-        
+
         self.Cat0, self.det_correl_min = \
-        Create_local_max_cat(self.param['threshold'], self.cube_local_max.data,
-                             self.cube_local_min.data, self.segmap.data, 
-                             self.param['spat_size'], self.param['spect_size'], 
-                             self.param['tol_spat'], self.param['tol_spec'],
-                             True, self.cube_profile._data, self.wcs,
-                             self.wave)
-                                
+            Create_local_max_cat(self.param['threshold'], self.cube_local_max.data,
+                                 self.cube_local_min.data, self.segmap.data,
+                                 self.param['spat_size'], self.param['spect_size'],
+                                 self.param['tol_spat'], self.param['tol_spec'],
+                                 True, self.cube_profile._data, self.wcs,
+                                 self.wave)
+
         _format_cat(self.Cat0, 0)
         self._loginfo('Save the catalogue in self.Cat0' + \
-        ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
-        self._loginfo('08 Done')  
+                          ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
         
-    def step09_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
+        self._loginfo('07 Done')
+
+    def step08_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
-        merged with the catalog Cat0 in order to create the catalog Cat1 
+        merged with the catalog Cat0 in order to create the catalog Cat1
 
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold 
+                 purity to automatically compute the threshold
                  If None, previous purity is used
         auto     : tuple (npts1,npts2,pmargin)
                  nb of threshold sample for iteration 1 and 2, margin in purity
@@ -1524,7 +1456,6 @@ class ORIGIN(object):
         threshlist : list
                  list of thresholds to compute the purity
                  default None
-
         Returns
         -------
         self.threshold_correl : float
@@ -1542,86 +1473,85 @@ class ORIGIN(object):
                     New catalog
                     Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
                              STD comp
-        """        
+        """
 
-        self._loginfo('Step 09 - Thresholding and spatio-spectral merging')  
-        
+        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
+
         if self.Cat0 is None:
-            raise IOError('Run the step 08 to initialize Cat0')        
-        
+            raise IOError('Run the step 07 to initialize Cat0')
+
         self._loginfo('Compute local maximum of std cube values')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny,
                                           self.param['NbSubcube'])
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
-        Compute_local_max_zone(self.cube_std.data, self.cube_std.data,
-                               self.mask, intx, inty, self.param['NbSubcube'],
-                               self.param['neighboors'])
-        
+            Compute_local_max_zone(self.cube_std.data, self.cube_std.data,
+                                   self.mask, intx, inty, self.param['NbSubcube'],
+                                   self.param['neighboors'])
+
         # complementary catalog
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
-        CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct, 
-                  self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny, 
-                  self.param['spat_size'], self.param['spect_size'])   
+            CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct,
+                      self.Cat0, self.det_correl_min, self.Nz, self.Nx, self.Ny,
+                      self.param['spat_size'], self.param['spect_size'])
 
         if purity is None:
-            purity = self.param['purity']  
+            purity = self.param['purity']
         self.param['purity2'] = purity
 
-        self._loginfo('Threshold computed with purity = %.2f'%purity)    
-        
+        self._loginfo('Threshold computed with purity = %.1f' % purity)
+
         self.cube_local_max_faint_dct = cube_local_max_faint_dct
         self.cube_local_min_faint_dct = cube_local_min_faint_dct
-    
+
         threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
-        self.Det_M_comp = Compute_threshold_purity(
-                                           purity, 
-                                           cube_local_max_faint_dct,
-                                           cube_local_min_faint_dct,                                            
-                                           self.segmap._data, 
-                                           self.param['spat_size'],
-                                           self.param['spect_size'],
-                                           self.param['tol_spat'],
-                                           self.param['tol_spec'],
-                                           True, False,
-                                           auto, threshlist)
-        self.param['threshold2'] =  threshold2                                     
-        self._loginfo('Threshold: %.2f '%threshold2)
+            self.Det_M_comp = Compute_threshold_purity(
+                purity,
+                cube_local_max_faint_dct,
+                cube_local_min_faint_dct,
+                self.segmap._data,
+                self.param['spat_size'],
+                self.param['spect_size'],
+                self.param['tol_spat'],
+                self.param['tol_spec'],
+                True, False,
+                auto, threshlist)
+        self.param['threshold2'] = threshold2
+        self._loginfo('Threshold: %.2f ' % threshold2)
         
         if threshold2 == np.inf:
             self.Cat1 = self.Cat0.copy()
             self.Cat1['comp'] = 0
             self.Cat1['STD'] = 0
-        else:
-            Catcomp, inut = Create_local_max_cat(threshold2, 
-                                           cube_local_max_faint_dct,
-                                           cube_local_min_faint_dct,                                            
-                                           self.segmap._data, 
-                                           self.param['spat_size'],
-                                           self.param['spect_size'],
-                                           self.param['tol_spat'],
-                                           self.param['tol_spec'],
-                                           True,
-                                           self.cube_profile._data,
-                                           self.wcs, self.wave)
-            Catcomp.rename_column('T_GLR', 'STD')                                   
+        else:        
+            Catcomp, inut = Create_local_max_cat(threshold2,
+                                                 cube_local_max_faint_dct,
+                                                 cube_local_min_faint_dct,
+                                                 self.segmap._data,
+                                                 self.param['spat_size'],
+                                                 self.param['spect_size'],
+                                                 self.param['tol_spat'],
+                                                 self.param['tol_spec'],
+                                                 True,
+                                                 self.cube_profile._data,
+                                                 self.wcs, self.wave)
+            Catcomp.rename_column('T_GLR', 'STD')
             # merging
             Cat0 = self.Cat0.copy()
             Cat0['comp'] = 0
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            self.Cat1 = vstack([Cat0, Catcomp]) 
+            self.Cat1 = vstack([Cat0, Catcomp])
             _format_cat(self.Cat1, 1)
         ns = len(np.unique(self.Cat1['ID']))
         ds = ns - len(np.unique(self.Cat0['ID']))
         nl = len(self.Cat1)
         dl = nl - len(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat1' + \
-        ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
-        
-        self._loginfo('09 Done')
-        
-        
-    def step10_compute_spectra(self, grid_dxy=0):
+                          ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
+
+        self._loginfo('08 Done')
+
+    def step09_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
         for each detected lines in a spatio-spectral grid (each emission line
         is estimated with the deconvolution model :
@@ -1642,36 +1572,36 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._loginfo('Step09 - Lines estimation (grid_dxy=%d)' %(grid_dxy))
+        self._loginfo('step09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat1 is None:
-            raise IOError('Run the step 09 to initialize self.Cat1 catalog')
-            
+            raise IOError('Run the step 08 to initialize self.Cat1 catalog')
+
         self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = \
-        Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF, \
-                     self.wfields, self.wcs, self.wave, size_grid=grid_dxy, \
-                     criteria='flux', order_dct=30, horiz_psf=1, horiz=5)
-            
-        self._loginfo('Purity estimation')    
+            Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF,
+                            self.wfields, self.wcs, self.wave, size_grid=grid_dxy,
+                            criteria='flux', order_dct=30, horiz_psf=1, horiz=5)
+
+        self._loginfo('Purity estimation')
         self.Cat2 = Purity_Estimation(self.Cat2,
                                       [self.Pval_r, self.Pval_r_comp],
-                                      [self.index_pval, self.index_pval_comp])                  
+                                      [self.index_pval, self.index_pval_comp])
         _format_cat(self.Cat2, 2)
-        self._loginfo('Save the updated catalogue in self.Cat2' + \
-        ' (%d sources %d lines)'%(len(np.unique(self.Cat2['ID'])),len(self.Cat2)))
-        
-        self.spectra = [] 
-        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T): 
+        self._loginfo('Save the updated catalogue in self.Cat2' +
+                      ' (%d lines)' % len(self.Cat2))
+
+        self.spectra = []
+        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T):
             spe = Spectrum(data=data, var=vari, wave=self.wave,
                            mask=np.ma.nomask)
             self.spectra.append(spe)
-        self._loginfo('Save the estimated spectrum of each line in ' + \
-        'self.spectra')
-        
-        self._loginfo('10 Done')
+        self._loginfo('Save the estimated spectrum of each line in ' +
+                      'self.spectra')
 
-    def step11_write_sources(self, path=None, overwrite=True,
+        self._loginfo('09 Done')
+
+    def step10_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
@@ -1693,7 +1623,7 @@ class ORIGIN(object):
         -------
         CatF : mpdaf.sdetect.Catalog
                Final catalog
-                  
+
         Each Source object O consists of:
             - O.header: pyfits header instance that contains all parameters
                         used during the ORIGIN detection process
@@ -1705,7 +1635,7 @@ class ORIGIN(object):
             - O.images: Dictionary that contains images: the white image
                         (MUSE_WHITE), the map of maxima along the wavelength
                         axis (MAXMAP), the segmentation map (SEG_ORIG) and
-                        narrow band images (NB_LINE_** and NB_CORR_**) 
+                        narrow band images (NB_LINE_** and NB_CORR_**)
             - O.cubes: Dictionary that contains the small data cube around the
                        source (MUSE-CUBE)
         """
@@ -1718,15 +1648,15 @@ class ORIGIN(object):
         # path
         if path is not None and not os.path.exists(path):
             raise IOError("Invalid path: {0}".format(path))
-            
+
         if path is None:
-            path_src = '%s/%s/sources'%(self.path, self.name)
-            catname = '%s/%s/%s.fits'%(self.path, self.name, self.name)
+            path_src = '%s/%s/sources' % (self.path, self.name)
+            catname = '%s/%s/%s.fits' % (self.path, self.name, self.name)
         else:
             path = os.path.normpath(path)
-            path_src = '%s/%s/sources'%(path, self.name)
-            catname = '%s/%s/%s.fits'%(path, self.name, self.name)
-           
+            path_src = '%s/%s/sources' % (path, self.name)
+            catname = '%s/%s/%s.fits' % (path, self.name, self.name)
+
         if not os.path.exists(path_src):
             os.makedirs(path_src)
         else:
@@ -1747,13 +1677,13 @@ class ORIGIN(object):
                                               src_vers, author,
                                               self.path, self.maxmap,
                                               self.segmap,
-                                              ncpu)                                            
-                                              
+                                              ncpu)
+
         # create the final catalog
-        self._loginfo('Create the final catalog- %d sources'%nsources)
+        self._loginfo('Create the final catalog- %d sources' % nsources)
         catF = Catalog.from_path(path_src, fmt='working')
         catF.write(catname, overwrite=overwrite)
-                      
+
         self._loginfo('10 Done')
 
         return catF
@@ -1761,7 +1691,7 @@ class ORIGIN(object):
     def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()
             on the test used to perform this segmentation
-        
+
         Parameters
         ----------
         ax  : matplotlib.Axes
@@ -1771,10 +1701,10 @@ class ORIGIN(object):
                  the ``ax.imshow()`` function.
         """
         if ax is None:
-            ax = plt.gca()       
-        
-        self.segmentation_test.plot(ax=ax)
-        
+            ax = plt.gca()
+
+        self.segmap.plot(ax=ax)
+
         if 'cmap' not in kwargs:
             kwargs['cmap'] = 'jet'
         if 'alpha' not in kwargs:
@@ -1782,29 +1712,29 @@ class ORIGIN(object):
         if 'interpolation' not in kwargs:
             kwargs['interpolation'] = 'nearest'
         kwargs['origin'] = 'lower'
-        
+
         cax = ax.imshow(self.areamap._data, **kwargs)
-        
+
         i0 = np.min(self.areamap._data)
         i1 = np.max(self.areamap._data)
         if i0 != i1:
             n = i1 - i0 + 1
-            bounds = np.linspace(i0, i1+1, n+1) - 0.5
-            norm = BoundaryNorm(bounds, n+1)
+            bounds = np.linspace(i0, i1 + 1, n + 1) - 0.5
+            norm = BoundaryNorm(bounds, n + 1)
             divider = make_axes_locatable(ax)
             cax2 = divider.append_axes("right", size="5%", pad=1)
             plt.colorbar(cax, cax=cax2, cmap=kwargs['cmap'], norm=norm,
-                         spacing='proportional', ticks=bounds+0.5,
+                         spacing='proportional', ticks=bounds + 0.5,
                          boundaries=bounds, format='%1i')
             ax.set_title('continuum test with areas')
         else:
             ax.set_title('continuum test (1 area)')
-    
+
     def plot_step03_PCA_threshold(self, log10=False, ncol=3, legend=True,
                                   xlim=None, fig=None, **fig_kw):
-        """ Plot the histogram and the threshold for the starting point of the 
+        """ Plot the histogram and the threshold for the starting point of the
         PCA
-        
+
         Parameters
         ----------
         log10     : bool
@@ -1824,26 +1754,26 @@ class ORIGIN(object):
         """
         if self.nbAreas is None:
             raise IOError('Run the step 02 to initialize self.nbAreas')
-                       
+
         if fig is None:
             fig = plt.figure()
-            
-        if self.nbAreas<= ncol:
+
+        if self.nbAreas <= ncol:
             n = 1
             m = self.nbAreas
         else:
-            n = self.nbAreas//ncol
+            n = self.nbAreas // ncol
             m = ncol
-            if (n*m)<self.nbAreas:
+            if (n * m) < self.nbAreas:
                 n = n + 1
 
-        for area in range(1, self.nbAreas+1):
-            if area==1:
+        for area in range(1, self.nbAreas + 1):
+            if area == 1:
                 ax = fig.add_subplot(n, m, area, **fig_kw)
             else:
                 ax = fig.add_subplot(n, m, area, sharey=fig.axes[0], **fig_kw)
             self.plot_PCA_threshold(area, 'step03', log10, legend, xlim, ax)
-           
+
         # Fine-tune figure
         for a in fig.axes[:-1]:
             a.set_xlabel("")
@@ -1856,15 +1786,15 @@ class ORIGIN(object):
         fig.subplots_adjust(wspace=0)
         if xlim is not None:
             plt.setp([a.get_xticklabels() for a in fig.axes[:-m]],
-                      visible=False)
+                     visible=False)
             plt.setp([a.get_xticklines() for a in fig.axes[:-m]],
-                      visible=False)
+                     visible=False)
             fig.subplots_adjust(hspace=0)
-            
+
     def plot_step03_PCA_stat(self, cutoff=5, ax=None):
         """ Plot the thrashold value according to the area.
         Median Absolute Deviation is used to find outliers.
-        
+
         Parameters
         ----------
         cutoff    : float
@@ -1878,29 +1808,28 @@ class ORIGIN(object):
             raise IOError('Run the step 03 to compute the threshold values')
         if ax is None:
             ax = plt.gca()
-        ax.plot(np.arange(1, self.nbAreas+1), self.thresO2, '+')
+        ax.plot(np.arange(1, self.nbAreas + 1), self.thresO2, '+')
         med = np.median(self.thresO2)
         diff = np.absolute(self.thresO2 - med)
         mad = np.median(diff)
         if mad != 0:
-            ksel = (diff/mad)>cutoff
+            ksel = (diff / mad) > cutoff
             if ksel.any():
-                ax.plot(np.arange(1, self.nbAreas+1)[ksel],
+                ax.plot(np.arange(1, self.nbAreas + 1)[ksel],
                         np.asarray(self.thresO2)[ksel], 'ro')
         ax.set_xlabel('area')
-        ax.set_ylabel('Threshold')        
-        ax.set_title('PCA threshold (med=%.2f, mad= %.2f)'%(med,mad))
-        
+        ax.set_ylabel('Threshold')
+        ax.set_title('PCA threshold (med=%.2f, mad= %.2f)' % (med, mad))
 
     def plot_PCA_threshold(self, area, pfa_test='step03', log10=False,
                            legend=True, xlim=None, ax=None):
-        """ Plot the histogram and the threshold for the starting point of the 
+        """ Plot the histogram and the threshold for the starting point of the
         PCA
-        
+
         Parameters
         ----------
-        area      : integer in [1, nbAreas] 
-                    Area ID          
+        area      : integer in [1, nbAreas]
+                    Area ID
         pfa_test  : float or string
                     PFA of the test (if 'step03', the value set during step03
                     is used)
@@ -1909,24 +1838,24 @@ class ORIGIN(object):
         legend    : bool
                     If true, write pfa and threshold values as legend
         xlim      : (float, float)
-                    Set the data limits for the x-axis                  
+                    Set the data limits for the x-axis
         ax        : matplotlib.Axes
                     Axes instance in which the image is drawn
         """
         if self.nbAreas is None:
             raise IOError('Run the step 02 to initialize self.nbAreas')
-            
+
         if pfa_test == 'step03':
             if 'pfa_test' in self.param:
                 pfa_test = self.param['pfa_test']
-                hist = self.histO2[area-1]
-                bins = self.binO2[area-1]
-                thre = self.thresO2[area-1]
-                mea = self.meaO2[area-1]
-                std = self.stdO2[area-1]
+                hist = self.histO2[area - 1]
+                bins = self.binO2[area - 1]
+                thre = self.thresO2[area - 1]
+                mea = self.meaO2[area - 1]
+                std = self.stdO2[area - 1]
             else:
-                raise IOError('pfa_test param is None: set a value or run' + \
-                ' the Step03')
+                raise IOError('pfa_test param is None: set a value or run' +
+                              ' the Step03')
         else:
             if self.cube_std is None:
                 raise IOError('Run the step 01 to initialize self.cube_std')
@@ -1936,45 +1865,44 @@ class ORIGIN(object):
             cube_temp = self.cube_std._data[:, ksel]
             # Compute_PCA_threshold
             testO2, hist, bins, thre, mea, std = \
-                                     Compute_PCA_threshold(cube_temp, pfa_test)
-            
+                Compute_PCA_threshold(cube_temp, pfa_test)
+
         if ax is None:
             ax = plt.gca()
-        
+
         center = (bins[:-1] + bins[1:]) / 2
         gauss = stats.norm.pdf(center, loc=mea, scale=std)
-        gauss *= hist.max()/gauss.max()
+        gauss *= hist.max() / gauss.max()
 
         if log10:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 gauss = np.log10(gauss)
                 hist = np.log10(hist)
-            
-        ax.plot(center, hist,'-k')
-        ax.plot(center, hist,'.r')
-        ax.plot(center, gauss,'-b', alpha=.5)
-        ax.axvline(thre,color='b', lw=2, alpha=.5)
+
+        ax.plot(center, hist, '-k')
+        ax.plot(center, hist, '.r')
+        ax.plot(center, gauss, '-b', alpha=.5)
+        ax.axvline(thre, color='b', lw=2, alpha=.5)
         ax.grid()
         if xlim is None:
-            ax.set_xlim((center.min(),center.max()))
+            ax.set_xlim((center.min(), center.max()))
         else:
             ax.set_xlim(xlim)
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
         if legend:
-            ax.text(0.1, 0.8 ,'zone %d\npfa %.2f\nthreshold %.2f'%(area,
-                                                            pfa_test, thre),
-                transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
+            ax.text(0.1, 0.8, 'zone %d\npfa %.2f\nthreshold %.2f' % (area,
+                                                                     pfa_test, thre),
+                    transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
         else:
-            ax.text(0.9, 0.9 ,'%d'%area, transform=ax.transAxes,
+            ax.text(0.9, 0.9, '%d' % area, transform=ax.transAxes,
                     bbox=dict(facecolor='red', alpha=0.5))
-            
-        
+
     def plot_mapPCA(self, area=None, iteration=None, ax=None, **kwargs):
         """ Plot at a given iteration (or at the end) the number of times
         a spaxel got cleaned by the PCA
-        
+
         Parameters
         ----------
         area: integer in [1, nbAreas]
@@ -1994,103 +1922,101 @@ class ORIGIN(object):
         themap = self.mapO2.copy()
         title = 'Number of times the spaxel got cleaned by the PCA'
         if iteration is not None:
-            title += '\n%d iterations'%iteration
+            title += '\n%d iterations' % iteration
         if area is None:
             title += ' (Full map)'
         else:
             mask = np.ones_like(self.mapO2._data, dtype=np.bool)
             mask[self.areamap._data == area] = False
             themap._mask = mask
-            title += ' (zone %d)' %area
-            
+            title += ' (zone %d)' % area
+
         if iteration is not None:
-            themap[themap._data<iteration] = np.ma.masked
-            
+            themap[themap._data < iteration] = np.ma.masked
+
         if ax is None:
             ax = plt.gca()
-            
+
         if 'cmap' not in kwargs:
             kwargs['cmap'] = 'jet'
-            
+
         themap.plot(title=title, colorbar='v', ax=ax, **kwargs)
-  
-    
-        
-    def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
-        """ Plot the 2D segmentation map associated to a PFA
-        This function draw the labels of the segmentation map which is computed, 
-        not with the same pfa, in :
-            - the step02 to compute the automatic areas splitting for 
-            the PCA
-            - the step06 to compute the threshold of the local maxima
-            
-        Parameters
-        ----------
-        pfa  : float
-               Pvalue for the test which performs segmentation
-        step : int
-               The Segmentation map as used in this step: (2/6)
-        maxmap : bool
-                 If true, segmentation map is plotted as contours on the maxmap
-        ax   : matplotlib.Axes
-               The Axes instance in which the image is drawn
-        kwargs : matplotlib.artist.Artist
-                 Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function
-        """
-        if self.cont_dct is None:
-            raise IOError('Run the step 01 to initialize self.cont_dct') 
-        if maxmap and self.maxmap is None:
-            raise IOError('Run the step 05 to initialize self.maxmap')
-            
-        if ax is None:
-            ax = plt.gca()
-            
-        if step == 2: 
-            radius=2        
-            dxy = 2 * radius
-            x = np.linspace(-dxy,dxy,1 + (dxy)*2)
-            y = np.linspace(-dxy,dxy,1 + (dxy)*2)
-            xv, yv = np.meshgrid(x, y)   
-            r = np.sqrt(xv**2 + yv**2)
-            disk = (np.abs(r)<=radius)  
-            mask = disk 
-        elif step == 6:
-            mask = None 
-        else:
-            raise IOError('sept must be equal to 2 or 6')
-            
-        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
-                              
-        if maxmap:
-            self.maxmap[self.maxmap._data == 0] = np.ma.masked
-            self.maxmap.plot(ax=ax, **kwargs)
-            ax.contour(map_in, [0], origin='lower', cmap='Greys')
-        else:
-            ima = Image(data=map_in, wcs=self.wcs)
-            if 'cmap' not in kwargs:
-                kwargs['cmap'] = 'jet'
-            ima.plot(title='Labels of segmentation, pfa: %f' %(pfa), ax=ax,
-                     **kwargs)
-        
+
+#    def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
+#        """ Plot the 2D segmentation map associated to a PFA
+#        This function draw the labels of the segmentation map which is computed,
+#        not with the same pfa, in :
+#            - the step02 to compute the automatic areas splitting for
+#            the PCA
+#            - the step06 to compute the threshold of the local maxima
+#
+#        Parameters
+#        ----------
+#        pfa  : float
+#               Pvalue for the test which performs segmentation
+#        step : int
+#               The Segmentation map as used in this step: (2/6)
+#        maxmap : bool
+#                 If true, segmentation map is plotted as contours on the maxmap
+#        ax   : matplotlib.Axes
+#               The Axes instance in which the image is drawn
+#        kwargs : matplotlib.artist.Artist
+#                 Optional extra keyword/value arguments to be passed to
+#                 the ``ax.imshow()`` function
+#        """
+#        if self.cont_dct is None:
+#            raise IOError('Run the step 01 to initialize self.cont_dct')
+#        if maxmap and self.maxmap is None:
+#            raise IOError('Run the step 05 to initialize self.maxmap')
+#
+#        if ax is None:
+#            ax = plt.gca()
+#
+#        if step == 2:
+#            radius = 2
+#            dxy = 2 * radius
+#            x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
+#            y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
+#            xv, yv = np.meshgrid(x, y)
+#            r = np.sqrt(xv**2 + yv**2)
+#            disk = (np.abs(r) <= radius)
+#            mask = disk
+#        elif step == 6:
+#            mask = None
+#        else:
+#            raise IOError('sept must be equal to 2 or 6')
+#
+#        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
+#
+#        if maxmap:
+#            self.maxmap[self.maxmap._data == 0] = np.ma.masked
+#            self.maxmap.plot(ax=ax, **kwargs)
+#            ax.contour(map_in, [0], origin='lower', cmap='Greys')
+#        else:
+#            ima = Image(data=map_in, wcs=self.wcs)
+#            if 'cmap' not in kwargs:
+#                kwargs['cmap'] = 'jet'
+#            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
+#                     **kwargs)
+
     def plot_purity(self, comp=False, ax=None, log10=False):
-        """Draw number of sources per threshold computed in step07/step09
-        
+        """Draw number of sources per threshold computed in step06/step08
+
         Parameters
         ----------
         comp : bool
-               If True, plot purity curves for the complementary lines (step09)
+               If True, plot purity curves for the complementary lines (step08)
         ax : matplotlib.Axes
              The Axes instance in which the image is drawn
         log10 : To draw histogram in logarithmic scale or not
         """
-            
+
         if self.Det_M is None:
             raise IOError('Run the step 06')
-            
+
         if ax is None:
-            ax = plt.gca()        
-        
+            ax = plt.gca()
+
         if comp:
             threshold = self.param['threshold2']
             Pval_r = self.Pval_r_comp
@@ -2105,38 +2031,38 @@ class ORIGIN(object):
             purity = self.param['purity']
             Det_M = self.Det_M
             Det_m = self.Det_m
-        
+
         ax2 = ax.twinx()
         if log10:
-            ax2.semilogy(index_pval, Pval_r, 'y.-', label = 'purity')
-            ax.semilogy( index_pval, Det_M, 'b.-',
-                        label = 'n detections (+DATA)')
-            ax.semilogy( index_pval, Det_m, 'g.-',
-                        label = 'n detections (-DATA)')
-            ax2.semilogy(threshold, purity,'xr') 
-            
+            ax2.semilogy(index_pval, Pval_r, 'y.-', label='purity')
+            ax.semilogy(index_pval, Det_M, 'b.-',
+                        label='n detections (+DATA)')
+            ax.semilogy(index_pval, Det_m, 'g.-',
+                        label='n detections (-DATA)')
+            ax2.semilogy(threshold, purity, 'xr')
+
         else:
-            ax2.plot(index_pval, Pval_r, 'y.-', label = 'purity')
-            ax.plot( index_pval, Det_M, 'b.-', label = 'n detections (+DATA)')
-            ax.plot( index_pval, Det_m, 'g.-', label = 'n detections (-DATA)')
-            ax2.plot(threshold, purity,'xr') 
-            
-        ym,yM = ax.get_ylim()
-        ax.plot([threshold,threshold],[ym,yM],'r', alpha=.25, lw=2 , \
-                 label='automatic threshold' )
-               
-        ax.set_ylim((ym,yM))
+            ax2.plot(index_pval, Pval_r, 'y.-', label='purity')
+            ax.plot(index_pval, Det_M, 'b.-', label='n detections (+DATA)')
+            ax.plot(index_pval, Det_m, 'g.-', label='n detections (-DATA)')
+            ax2.plot(threshold, purity, 'xr')
+
+        ym, yM = ax.get_ylim()
+        ax.plot([threshold, threshold], [ym, yM], 'r', alpha=.25, lw=2,
+                label='automatic threshold')
+
+        ax.set_ylim((ym, yM))
         ax.set_xlabel('Threshold')
         ax2.set_ylabel('Purity')
         ax.set_ylabel('Number of detections')
-        ax.set_title('threshold %f' %threshold)
+        ax.set_title('threshold %f' % threshold)
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
-        ax.legend(h1+h2, l1+l2, loc=2)                      
-        
+        ax.legend(h1 + h2, l1 + l2, loc=2)
+
     def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
-        
+
         src_ind : integer
                   Index of the object in self.Cat0
         ax1     : matplotlib.Axes
@@ -2150,12 +2076,12 @@ class ORIGIN(object):
         """
         if self.Cat0 is None:
             raise IOError('Run the step 05 to initialize self.Cat0')
-            
+
         if ax1 is None and ax2 is None and ax3 is None:
-            ax1 = plt.subplot(1,3,1)
-            ax2 = plt.subplot(1,3,2)
-            ax3 = plt.subplot(1,3,3)
-            
+            ax1 = plt.subplot(1, 3, 1)
+            ax2 = plt.subplot(1, 3, 2)
+            ax3 = plt.subplot(1, 3, 3)
+
         # Coordinates of the source
         x0 = self.Cat0[src_ind]['x0']
         y0 = self.Cat0[src_ind]['y0']
@@ -2194,7 +2120,7 @@ class ORIGIN(object):
         cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
         # (1/sqrt(2)) * difference of the 2 sububes
         diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
-        
+
         if ax1 is not None:
             ax1.plot(x00, y00, 'm+')
             ima_test_plot = Image(data=cube_test_plot.sum(axis=0), wcs=wcs)
@@ -2208,7 +2134,7 @@ class ORIGIN(object):
             ax2.plot(x00, y00, 'm+')
             ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
             title = 'check - (%d,%d)\n' % (x0, y0) + \
-                        'int=[%d,%d[' % (intz1c, intz2c)
+                'int=[%d,%d[' % (intz1c, intz2c)
             ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)
             ax2.get_xaxis().set_visible(False)
             ax2.get_yaxis().set_visible(False)
@@ -2221,7 +2147,6 @@ class ORIGIN(object):
             ima_diff_plot.plot(colorbar='v', title=title, ax=ax3)
             ax3.get_xaxis().set_visible(False)
             ax3.get_yaxis().set_visible(False)
-    
 
     def plot_sources(self, x, y, circle=False, vmin=0, vmax=30, title=None,
                      ax=None, **kwargs):
@@ -2249,7 +2174,7 @@ class ORIGIN(object):
                 the Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
                  Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function. 
+                 the ``ax.imshow()`` function.
         """
         if self.wfields is None:
             fwhm = self.FWHM_PSF
@@ -2266,7 +2191,7 @@ class ORIGIN(object):
                                fill=False)
                 ax.add_artist(c)
         self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax, **kwargs)
-        
+
     def info(self):
         """ plot information
         """
@@ -2275,4 +2200,3 @@ class ORIGIN(object):
             for line in f:
                 if line.find('Done') == -1:
                     self._log_stdout.info(line)
-        
