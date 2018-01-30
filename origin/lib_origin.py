@@ -56,7 +56,8 @@ from scipy.interpolate import interp1d
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
 
-__version__ = '2.0 beta'
+__version__ = '3.0 beta'
+
 
 
 def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
@@ -692,6 +693,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     cube_faint = cube_std.copy()
     mapO2 = np.zeros((cube_std.shape[1], cube_std.shape[2]))
     # Spatial segmentation
+    nstop = 0
     with ProgressBar(NbArea) as bar:
         for area_ind in range(1, NbArea + 1):
             # limits of each spatial zone
@@ -702,13 +704,14 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
 
             thr = threshold_test[area_ind - 1]
             test = testO2[area_ind - 1]
-            cube_faint[:, ksel], mO2 = Compute_GreedyPCA(cube_temp, test, thr,
+            cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(cube_temp, test, thr,
                                                          Noise_population, itermax)
             mapO2[ksel] = mO2
+            nstop += kstop
             bar.update()
 
     logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
-    return cube_faint, mapO2
+    return cube_faint, mapO2, nstop
 
 
 def Compute_PCA_threshold(faint, pfa_test):
@@ -769,7 +772,11 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 cleaned cube
     mapO2   :   array
                 2D MAP filled with the number of iteration per spectra
-    thresO2 :   Threshold for the O2 test
+    thresO2 :   float
+                Threshold for the O2 test
+    nstop   :   int
+                Nb of times the iterations have been stopped when > itermax
+
 
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
@@ -786,6 +793,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     npix = len(pypx)
 
     mapO2 = np.zeros(nynx)
+    nstop = 0
 
     with ProgressBar(npix) as bar:
         # greedy loop based on test
@@ -796,6 +804,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             if len(pypx) == 0:
                 break
             if tmp > itermax:
+                nstop += 1
                 logger.info('Warning iterations stopped at %d' % (tmp))
                 break
             # vector data
@@ -847,7 +856,8 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             pypx = np.where(test > thresO2)[0]
             bar.update(npix - len(pypx))
 
-    return faint, mapO2
+    return faint, mapO2, nstop
+
 
 
 def O2test(Cube_in):
@@ -1822,7 +1832,8 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat, tol
 
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                              segmap, spat_size, spect_size,
-                             tol_spat, tol_spec, filter_act, bkgrd):
+                             tol_spat, tol_spec, filter_act, bkgrd,
+                                 auto=(5,15,0.1), threshlist=None):
     """Compute threshold values corresponding to a given purity
 
     Parameters
@@ -1848,6 +1859,13 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     filter_act : Bool
                  activate or deactivate the spatio spectral filter
                  default: True
+    auto       : tuple (npts1,npts2,pmargin)
+                 nb of threshold sample for iteration 1 and 2, margin in purity
+                 default (5,15,0.1)
+    threshlist : list
+                 list of thresholds to compute the purity
+                 default None
+
     Returns
     -------
     threshold : float
@@ -1864,46 +1882,92 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
+
+    logger = logging.getLogger('origin')
+    t0 = time.time()    
     # initialization
     det_m = []
     det_M = []
     Pval_r = []
-    thresh_max = np.minimum(cube_local_min.max(), cube_local_max.max())
-    thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
+    Tval_r = []
+    if threshlist is None:
+        npts1,npts2,dp = auto
+        thresh_max = np.minimum(cube_local_min.max(),cube_local_max.max())
+        thresh_min = np.median(np.amax(cube_local_max,axis=0))*1.1
+        # first exploration 
+        index_pval1 = np.exp(np.linspace(np.log(thresh_min),np.log(thresh_max),npts1))
+        logger.debug('Iter 1 Threshold min %f max %f npts %d',thresh_min,thresh_max,len(index_pval1))
+        for k,thresh in enumerate(ProgressBar(list(index_pval1[::-1]))):
+            est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
+                                                cube_local_min, \
+                                                thresh,spat_size,\
+                                                spect_size, segmap,\
+                                                tol_spat,tol_spec, \
+                                                filter_act, bkgrd) 
+            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f',k+1,len(index_pval1),thresh,det_mit,det_Mit,est_purity) 
+            Tval_r.append(thresh)
+            Pval_r.append(est_purity)
+            det_m.append(det_mit)
+            det_M.append(det_Mit)
+            if est_purity == 1:
+                thresh_max = thresh
+            if est_purity < purity - dp:
+                break
+        thresh_min = thresh
+        # 2nd iter 
+        index_pval3 = np.exp(np.linspace(np.log(thresh_min),np.log(thresh_max),npts2))
+        logger.debug('Iter 2 Threshold min %f max %f npts %d',index_pval3[0],index_pval3[-1],len(index_pval3)) 
+        index_pval2 = []
+        for k,thresh in enumerate(ProgressBar(list(index_pval3))):
+            if np.any(np.isclose(thresh, Tval_r)):
+                continue       
+            est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
+                                                cube_local_min, \
+                                                thresh,spat_size,\
+                                                spect_size, segmap,\
+                                                tol_spat,tol_spec, \
+                                                filter_act, bkgrd) 
+            logger.debug('    %d/%d Threshold %f -data %d +data %d purity %f',k+1,len(index_pval3),thresh,det_mit,det_Mit,est_purity) 
+            Tval_r.append(thresh)
+            Pval_r.append(est_purity)
+            det_m.append(det_mit)
+            det_M.append(det_Mit)    
+            if est_purity > purity + dp:
+                break
+        Tval_r = np.asarray(Tval_r)
+        ksort = Tval_r.argsort()
+        Pval_r = np.asarray(Pval_r)[ksort]    
+        det_m = np.asarray(det_m)[ksort]
+        det_M = np.asarray(det_M)[ksort]   
+        Tval_r = Tval_r[ksort]    
+    else:
+        for k,thresh in enumerate(ProgressBar(threshlist)):
+            est_purity, det_mit, det_Mit =  purity_iter(cube_local_max,\
+                                                cube_local_min, \
+                                                thresh,spat_size,\
+                                                spect_size, segmap,\
+                                                tol_spat,tol_spec, \
+                                                filter_act, bkgrd) 
+            logger.debug('%d/%d Threshold %f -data %d +data %d purity %f',k+1,len(threshlist),thresh,det_mit,det_Mit,est_purity) 
+            Pval_r.append(est_purity)
+            det_m.append(det_mit)
+            det_M.append(det_Mit)
+        Tval_r = np.asarray(threshlist)
+        Pval_r = np.asarray(Pval_r)
+        det_m = np.asanyarray(det_m)
+        det_M = np.asanyarray(det_M)
 
-    index_pval = np.arange(thresh_max, thresh_min, -.5)
-    for thresh in ProgressBar(list(index_pval)):
-        est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
-                                                   cube_local_min,
-                                                   thresh, spat_size,
-                                                   spect_size, segmap,
-                                                   tol_spat, tol_spec,
-                                                   filter_act, bkgrd)
+    if Pval_r[-1]<purity:
+        logger.warning('Maximum computed purity %.2f is below %.2f',Pval_r[-1],purity)
+        threshold = np.inf
+    else:
+        threshold = np.interp(purity, Pval_r, Tval_r)
+        detect = np.interp(threshold, Tval_r, det_M)
+        logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f', threshold, detect, purity)
 
-        Pval_r.append(est_purity)
-        det_m.append(det_mit)
-        det_M.append(det_Mit)
+    logger.debug('%s executed in %0.1fs' % (whoami(), time.time() - t0))
 
-    Pval_r = np.asarray(Pval_r)
-    Pval_r = Pval_r[::-1]
-    det_m = det_m[::-1]
-    det_M = det_M[::-1]
-    index_pval = index_pval[::-1]
-
-    ind = np.where(purity < Pval_r)[0][0]
-    x2 = index_pval[ind]
-    x1 = index_pval[ind - 1]
-    y2 = Pval_r[ind]
-    y1 = Pval_r[ind - 1]
-
-    b = y2 - y1
-    a = x2 - x1
-
-    tan_theta = b / a
-    threshold = (purity - y1) / tan_theta + x1
-
-    return threshold, Pval_r, index_pval, det_m, det_M
-
+    return threshold, Pval_r, Tval_r, det_m, det_M    
 
 def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
                          segmentation_map, spat_size, spect_size,
@@ -2530,16 +2594,21 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
 
     # Comp=0
     ksel = Cat1_2['comp'] == 0
-    f = interp1d(purity_index[0], purity_curves[0], bounds_error=False,
+    if len(Cat1_2[ksel]) > 1:
+        tglr = Cat1_2['T_GLR'][ksel]
+        f = interp1d(purity_index[0], purity_curves[0], bounds_error=False,
                  fill_value="extrapolate")
-    tglr = Cat1_2['T_GLR'][ksel]
-    purity[ksel] = f(tglr.data.data)
-    # comp=1
-    ksel = Cat1_2['comp'] == 1
-    f = interp1d(purity_index[1], purity_curves[1], bounds_error=False,
+        purity[ksel] = f(tglr.data.data)
+
+    #comp=1
+    ksel = Cat1_2['comp']==1
+    if len(Cat1_2[ksel]) > 1:
+        tglr = Cat1_2['STD'][ksel]
+        f = interp1d(purity_index[1], purity_curves[1], bounds_error=False,
                  fill_value="extrapolate")
-    tglr = Cat1_2['STD'][ksel]
-    purity[ksel] = f(tglr.data.data)
+        purity[ksel] = f(tglr.data.data)
+    else:
+        purity[ksel] = 0 # set to 0 if only 1 purity meaurement
     # The purity by definition cannot be > 1 and < 0, if the interpolation
     # gives a value outside these limits, replace by 1 or 0
     purity[purity < 0] = 0

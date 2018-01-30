@@ -274,6 +274,7 @@ class ORIGIN(object):
         self.Nz, self.Ny, self.Nx = cub.shape
         
         # segmap
+        self._loginfo('Read the Segmentation Map %s' % segmap)
         self.param['segmap'] = segmap
         self.segmap = Image(segmap)
 
@@ -717,6 +718,10 @@ class ORIGIN(object):
     def _loginfo(self, *args):
         self._log_file.info(*args)
         self._log_stdout.info(*args)
+        
+    def _logwarning(self, *args):
+        self._log_file.warning(*args) 
+        self._log_stdout.warning(*args)        
 
     @property
     def ima_dct(self):
@@ -921,9 +926,21 @@ class ORIGIN(object):
         if self.maxmap is not None:
             self.maxmap.write('%s/maxmap.fits' % path2)
         if self.cube_local_max is not None:
-            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
+            hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
+            hdui = fits.ImageHDU(name='DATA',
+                                 data=self.cube_local_max.data.filled(fill_value=np.nan),
+                                 header = self.cube_local_max.data_header)
+            hdul = fits.HDUList([hdu, hdui])
+            hdul.writeto('%s/cube_local_max.fits' % path2, overwrite=True)
+#            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
         if self.cube_local_min is not None:
-            self.cube_local_min.write('%s/cube_local_min.fits' % path2)
+            hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
+            hdui = fits.ImageHDU(name='DATA',
+                                 data=self.cube_local_min.data.filled(fill_value=np.nan),
+                                 header = self.cube_local_min.data_header)
+            hdul = fits.HDUList([hdu, hdui])
+            hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
+ #           self.cube_local_min.write('%s/cube_local_min.fits' % path2)
 
         # step6
         if self.Pval_r is not None:
@@ -1223,10 +1240,13 @@ class ORIGIN(object):
 
         self._loginfo('Compute greedy PCA on each zone')
 
-        faint, mapO2 = \
+        faint, mapO2, nstop = \
             Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
                                    self.areamap._data, Noise_population,
                                    thr, itermax, self.testO2)
+        if nstop > 0:
+            self._logwarning('The iterations have been reached the limit of %d in %d cases'%(itermax,nstop))
+        
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
@@ -1335,7 +1355,8 @@ class ORIGIN(object):
 
     def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
-                                        spect_size=10):
+                                        spect_size=10,
+                                        auto=(5,15,0.1), threshlist=None):
         """find the threshold  for a given purity
 
         Parameters
@@ -1351,6 +1372,12 @@ class ORIGIN(object):
                 spatiale size of the spatiale filter
         spect_size : int
                  spectral lenght of the spectral filter
+        auto    : tuple (npts1,npts2,pmargin)
+                 nb of threshold sample for iteration 1 and 2, margin in purity
+                 default (5,15,0.1
+        threshlist : list
+                 list of thresholds to compute the purity
+
 
         Returns
         -------
@@ -1365,7 +1392,7 @@ class ORIGIN(object):
         self.Det_m  : List
                       Number of detections in -DATA
         """
-        self._loginfo('Step 07 - Compute Purity threshold')
+        self._loginfo('Step 06 - Compute Purity threshold')
 
         if self.cube_local_max is None:
             raise IOError('Run the step 05 to initialize ' +
@@ -1377,16 +1404,16 @@ class ORIGIN(object):
         self.param['spat_size'] = spat_size
         self.param['spect_size'] = spect_size
 
-        self._loginfo('Estimation of threshold with purity = %.1f' % purity)
-        threshold, self.Pval_r, self.index_pval, self.Det_M, self.Det_m = \
+        self._loginfo('Estimation of threshold with purity = %.2f' % purity)
+        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
             Compute_threshold_purity(purity, self.cube_local_max.data,
                                      self.cube_local_min.data, self.segmap.data,
                                      spat_size, spect_size, tol_spat, tol_spec,
-                                     True, True)
+                                     True, True, auto, threshlist)
         self.param['threshold'] = threshold
-        self._loginfo('Threshold: %.1f ' % threshold)
+        self._loginfo('Threshold: %.2f ' % threshold)
 
-        self._loginfo('07 Done')
+        self._loginfo('06 Done')
 
     def step07_detection(self, threshold=None):
         """Detections on local maxima from max correlation + spatia-spectral
@@ -1420,11 +1447,12 @@ class ORIGIN(object):
                                  self.wave)
 
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0' +
-                      ' (%d lines)' % len(self.Cat0))
-        self._loginfo('08 Done')
+        self._loginfo('Save the catalogue in self.Cat0' + \
+                          ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
+        
+        self._loginfo('07 Done')
 
-    def step08_detection_lost(self, purity=None):
+    def step08_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
@@ -1434,6 +1462,12 @@ class ORIGIN(object):
         purity : float
                  purity to automatically compute the threshold
                  If None, previous purity is used
+        auto     : tuple (npts1,npts2,pmargin)
+                 nb of threshold sample for iteration 1 and 2, margin in purity
+                 default (5,15,0.1)
+        threshlist : list
+                 list of thresholds to compute the purity
+                 default None
         Returns
         -------
         self.threshold_correl : float
@@ -1453,10 +1487,10 @@ class ORIGIN(object):
                              STD comp
         """
 
-        self._loginfo('Step 09 - Thresholding and spatio-spectral merging')
+        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
 
         if self.Cat0 is None:
-            raise IOError('Run the step 08 to initialize Cat0')
+            raise IOError('Run the step 07 to initialize Cat0')
 
         self._loginfo('Compute local maximum of std cube values')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny,
@@ -1481,8 +1515,8 @@ class ORIGIN(object):
         self.cube_local_max_faint_dct = cube_local_max_faint_dct
         self.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_M_comp, \
-            self.Det_m_comp = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
+            self.Det_M_comp = Compute_threshold_purity(
                 purity,
                 cube_local_max_faint_dct,
                 cube_local_min_faint_dct,
@@ -1491,33 +1525,43 @@ class ORIGIN(object):
                 self.param['spect_size'],
                 self.param['tol_spat'],
                 self.param['tol_spec'],
-                True, False)
+                True, False,
+                auto, threshlist)
         self.param['threshold2'] = threshold2
-        self._loginfo('Threshold: %.1f ' % threshold2)
+        self._loginfo('Threshold: %.2f ' % threshold2)
+        
+        if threshold2 == np.inf:
+            self.Cat1 = self.Cat0.copy()
+            self.Cat1['comp'] = 0
+            self.Cat1['STD'] = 0
+        else:        
+            Catcomp, inut = Create_local_max_cat(threshold2,
+                                                 cube_local_max_faint_dct,
+                                                 cube_local_min_faint_dct,
+                                                 self.segmap._data,
+                                                 self.param['spat_size'],
+                                                 self.param['spect_size'],
+                                                 self.param['tol_spat'],
+                                                 self.param['tol_spec'],
+                                                 True,
+                                                 self.cube_profile._data,
+                                                 self.wcs, self.wave)
+            Catcomp.rename_column('T_GLR', 'STD')
+            # merging
+            Cat0 = self.Cat0.copy()
+            Cat0['comp'] = 0
+            Catcomp['comp'] = 1
+            Catcomp['ID'] += (Cat0['ID'].max() + 1)
+            self.Cat1 = vstack([Cat0, Catcomp])
+            _format_cat(self.Cat1, 1)
+        ns = len(np.unique(self.Cat1['ID']))
+        ds = ns - len(np.unique(self.Cat0['ID']))
+        nl = len(self.Cat1)
+        dl = nl - len(self.Cat0)
+        self._loginfo('Save the catalogue in self.Cat1' + \
+                          ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
 
-        Catcomp, inut = Create_local_max_cat(threshold2,
-                                             cube_local_max_faint_dct,
-                                             cube_local_min_faint_dct,
-                                             self.segmap._data,
-                                             self.param['spat_size'],
-                                             self.param['spect_size'],
-                                             self.param['tol_spat'],
-                                             self.param['tol_spec'],
-                                             True,
-                                             self.cube_profile._data,
-                                             self.wcs, self.wave)
-        Catcomp.rename_column('T_GLR', 'STD')
-        # merging
-        Cat0 = self.Cat0.copy()
-        Cat0['comp'] = 0
-        Catcomp['comp'] = 1
-        Catcomp['ID'] += (Cat0['ID'].max() + 1)
-        self.Cat1 = vstack([Cat0, Catcomp])
-        _format_cat(self.Cat1, 1)
-        self._loginfo('Save the catalogue in self.Cat1' +
-                      ' (%d lines)' % len(self.Cat1))
-
-        self._loginfo('09 Done')
+        self._loginfo('08 Done')
 
     def step09_compute_spectra(self, grid_dxy=0):
         """compute the estimated emission line and the optimal coordinates
@@ -1540,11 +1584,11 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._loginfo('step08 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
+        self._loginfo('step09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat1 is None:
-            raise IOError('Run the step 09 to initialize self.Cat1 catalog')
+            raise IOError('Run the step 08 to initialize self.Cat1 catalog')
 
         self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = \
             Estimation_Line(self.Cat1, self.cube_raw, self.var, self.PSF,
@@ -1567,7 +1611,7 @@ class ORIGIN(object):
         self._loginfo('Save the estimated spectrum of each line in ' +
                       'self.spectra')
 
-        self._loginfo('10 Done')
+        self._loginfo('09 Done')
 
     def step10_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
@@ -1967,7 +2011,7 @@ class ORIGIN(object):
 #            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
 #                     **kwargs)
 
-    def plot_purity(self, comp=False, ax=None, log10=True):
+    def plot_purity(self, comp=False, ax=None, log10=False):
         """Draw number of sources per threshold computed in step06/step08
 
         Parameters
