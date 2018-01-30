@@ -926,9 +926,21 @@ class ORIGIN(object):
         if self.maxmap is not None:
             self.maxmap.write('%s/maxmap.fits' % path2)
         if self.cube_local_max is not None:
-            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
+            hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
+            hdui = fits.ImageHDU(name='DATA',
+                                 data=self.cube_local_max.data.filled(fill_value=np.nan),
+                                 header = self.cube_local_max.data_header)
+            hdul = fits.HDUList([hdu, hdui])
+            hdul.writeto('%s/cube_local_max.fits' % path2, overwrite=True)
+#            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
         if self.cube_local_min is not None:
-            self.cube_local_min.write('%s/cube_local_min.fits' % path2)
+            hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
+            hdui = fits.ImageHDU(name='DATA',
+                                 data=self.cube_local_min.data.filled(fill_value=np.nan),
+                                 header = self.cube_local_min.data_header)
+            hdul = fits.HDUList([hdu, hdui])
+            hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
+ #           self.cube_local_min.write('%s/cube_local_min.fits' % path2)
 
         # step6
         if self.Pval_r is not None:
