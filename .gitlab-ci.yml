@@ -1,0 +1,10 @@
+before_script:
+  - export PYENV_ROOT="$HOME/.pyenv"
+  - export PATH="$PYENV_ROOT/bin:$PATH"
+  - eval "$(pyenv init -)"
+  - pyenv local 3.6.3
+  - pip install tox
+  - pwd
+py36:
+  script:
+    - tox -v -e py36

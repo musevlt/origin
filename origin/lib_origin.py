@@ -59,6 +59,7 @@ from mpdaf.sdetect import Source
 __version__ = '3.0 beta'
 
 
+
 def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     """Function to compute the limits in pixels for each zone.
     Each zone is computed from the left to the right and the top to the bottom
@@ -856,6 +857,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             bar.update(npix - len(pypx))
 
     return faint, mapO2, nstop
+
 
 
 def O2test(Cube_in):
@@ -1885,7 +1887,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     t0 = time.time()    
     # initialization
     det_m = []
-    det_M = []    
+    det_M = []
     Pval_r = []
     Tval_r = []
     if threshlist is None:
