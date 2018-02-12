@@ -272,7 +272,7 @@ class ORIGIN(object):
         self.wave = cub.wave
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
-        
+
         # segmap
         self._loginfo('Read the Segmentation Map %s' % segmap)
         self.param['segmap'] = segmap
@@ -718,10 +718,10 @@ class ORIGIN(object):
     def _loginfo(self, *args):
         self._log_file.info(*args)
         self._log_stdout.info(*args)
-        
+
     def _logwarning(self, *args):
-        self._log_file.warning(*args) 
-        self._log_stdout.warning(*args)        
+        self._log_file.warning(*args)
+        self._log_stdout.warning(*args)
 
     @property
     def ima_dct(self):
@@ -929,7 +929,7 @@ class ORIGIN(object):
             hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_max.data.filled(fill_value=np.nan),
-                                 header = self.cube_local_max.data_header)
+                                 header=self.cube_local_max.data_header)
             hdul = fits.HDUList([hdu, hdui])
             hdul.writeto('%s/cube_local_max.fits' % path2, overwrite=True)
 #            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
@@ -937,7 +937,7 @@ class ORIGIN(object):
             hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_min.data.filled(fill_value=np.nan),
-                                 header = self.cube_local_min.data_header)
+                                 header=self.cube_local_min.data_header)
             hdul = fits.HDUList([hdu, hdui])
             hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
  #           self.cube_local_min.write('%s/cube_local_min.fits' % path2)
@@ -1245,8 +1245,7 @@ class ORIGIN(object):
                                    self.areamap._data, Noise_population,
                                    thr, itermax, self.testO2)
         if nstop > 0:
-            self._logwarning('The iterations have been reached the limit of %d in %d cases'%(itermax,nstop))
-        
+            self._logwarning('The iterations have been reached the limit of %d in %d cases' % (itermax, nstop))
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
@@ -1356,7 +1355,7 @@ class ORIGIN(object):
     def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
                                         spect_size=10,
-                                        auto=(5,15,0.1), threshlist=None):
+                                        auto=(5, 15, 0.1), threshlist=None):
         """find the threshold  for a given purity
 
         Parameters
@@ -1447,12 +1446,12 @@ class ORIGIN(object):
                                  self.wave)
 
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0' + \
-                          ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
-        
+        self._loginfo('Save the catalogue in self.Cat0' +
+                      ' (%d sources %d lines)' % (len(np.unique(self.Cat0['ID'])), len(self.Cat0)))
+
         self._loginfo('07 Done')
 
-    def step08_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
+    def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1), threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
@@ -1529,12 +1528,12 @@ class ORIGIN(object):
                 auto, threshlist)
         self.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ' % threshold2)
-        
+
         if threshold2 == np.inf:
             self.Cat1 = self.Cat0.copy()
             self.Cat1['comp'] = 0
             self.Cat1['STD'] = 0
-        else:        
+        else:
             Catcomp, inut = Create_local_max_cat(threshold2,
                                                  cube_local_max_faint_dct,
                                                  cube_local_min_faint_dct,
@@ -1558,8 +1557,8 @@ class ORIGIN(object):
         ds = ns - len(np.unique(self.Cat0['ID']))
         nl = len(self.Cat1)
         dl = nl - len(self.Cat0)
-        self._loginfo('Save the catalogue in self.Cat1' + \
-                          ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
+        self._loginfo('Save the catalogue in self.Cat1' +
+                      ' (%d [+%s] sources %d [+%d] lines)' % (ns, ds, nl, dl))
 
         self._loginfo('08 Done')
 
