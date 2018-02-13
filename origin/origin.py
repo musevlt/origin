@@ -272,7 +272,7 @@ class ORIGIN(object):
         self.wave = cub.wave
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
-        
+
         # segmap
         self._loginfo('Read the Segmentation Map %s' % segmap)
         self.param['segmap'] = segmap
@@ -657,7 +657,7 @@ class ORIGIN(object):
             xm = np.loadtxt('%s/xm.txt' % folder, ndmin=1).astype(np.int)
         else:
             xm = None
-         # step08
+        # step08
         if os.path.isfile('%s/Pval_r_comp.txt' % folder):
             Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt' % folder).astype(np.float)
         else:
@@ -718,10 +718,10 @@ class ORIGIN(object):
     def _loginfo(self, *args):
         self._log_file.info(*args)
         self._log_stdout.info(*args)
-        
+
     def _logwarning(self, *args):
-        self._log_file.warning(*args) 
-        self._log_stdout.warning(*args)        
+        self._log_file.warning(*args)
+        self._log_stdout.warning(*args)
 
     @property
     def ima_dct(self):
@@ -752,19 +752,13 @@ class ORIGIN(object):
     def threshold_correl(self):
         """Estimated threshold used to detect lines on local maxima of max
         correl"""
-        if 'threshold' in self.param:
-            return self.param['threshold']
-        else:
-            return None
+        return self.param.get('threshold')
 
     @property
     def threshold_std(self):
         """Estimated threshold used to detect complementary lines on local
         maxima of std cube"""
-        if 'threshold2' in self.param:
-            return self.param['threshold2']
-        else:
-            return None
+        return self.param.get('threshold2')
 
     @property
     def Cat2b(self):
@@ -776,18 +770,18 @@ class ORIGIN(object):
                          dtype=['i4', 'f4', 'f4', 'f4', 'i4', 'i4', 'i4'], masked=True)
             ncat['DLINE'].format = '.2f'
             for l in range(lmax):
-                ncat.add_column(MaskedColumn(name='LBDA{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='FLUX{}'.format(l), dtype='f4',
-                                             format='.1f'))
-                ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='TGLR{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='STD{}'.format(l), dtype='f4',
-                                             format='.2f'))
-                ncat.add_column(MaskedColumn(name='PURI{}'.format(l), dtype='f4',
-                                             format='.2f'))
+                ncat.add_column(MaskedColumn(name='LBDA{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='FLUX{}'.format(l),
+                                             dtype='f4', format='.1f'))
+                ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='TGLR{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='STD{}'.format(l),
+                                             dtype='f4', format='.2f'))
+                ncat.add_column(MaskedColumn(name='PURI{}'.format(l),
+                                             dtype='f4', format='.2f'))
             for key, group in zip(cat.groups.keys, cat.groups):
                 # compute average ra,dec and peak-to-peak distance in arcsec
                 mra = group['ra'].mean()
@@ -929,7 +923,7 @@ class ORIGIN(object):
             hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_max.data.filled(fill_value=np.nan),
-                                 header = self.cube_local_max.data_header)
+                                 header=self.cube_local_max.data_header)
             hdul = fits.HDUList([hdu, hdui])
             hdul.writeto('%s/cube_local_max.fits' % path2, overwrite=True)
 #            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
@@ -937,7 +931,7 @@ class ORIGIN(object):
             hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_min.data.filled(fill_value=np.nan),
-                                 header = self.cube_local_min.data_header)
+                                 header=self.cube_local_min.data_header)
             hdul = fits.HDUList([hdu, hdui])
             hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
  #           self.cube_local_min.write('%s/cube_local_min.fits' % path2)
@@ -1013,7 +1007,7 @@ class ORIGIN(object):
                                  Mean of DCT continuum cube along the
                                  wavelength axis
         """
-        self._loginfo('Step 01 - Preprocessing, dct order=%d' % dct_order)
+        self._loginfo('Step 01 - Preprocessing, dct order=%d', dct_order)
 
         self._loginfo('DCT computation')
         self.param['dct_order'] = dct_order
@@ -1023,14 +1017,14 @@ class ORIGIN(object):
         # compute standardized data
         self._loginfo('Data standardizing')
         cube_std = Compute_Standardized_data(faint_dct, self.mask, self.var)
-        cont_dct = cont_dct / np.sqrt(self.var)
+        cont_dct /= np.sqrt(self.var)
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask)
+                             mask=np.ma.nomask, copy=False)
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask)
+                             mask=np.ma.nomask, copy=False)
 
         self._loginfo('01 Done')
 
@@ -1081,14 +1075,12 @@ class ORIGIN(object):
 
             self._loginfo('First segmentation of %d^2 square' % NbSubcube)
             self._loginfo('Squares segmentation and fusion')
-            square_cut_fus = area_segmentation_square_fusion(nexpmap,
-                                                             MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
+            square_cut_fus = area_segmentation_square_fusion(
+                nexpmap, MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
 
             self._loginfo('Sources fusion')
-            square_src_fus, src = \
-                area_segmentation_sources_fusion(self.segmap.data,
-                                                 square_cut_fus, pfa,
-                                                 self.Ny, self.Nx)
+            square_src_fus, src = area_segmentation_sources_fusion(
+                self.segmap.data, square_cut_fus, pfa, self.Ny, self.Nx)
 
             self._loginfo('Convex envelope')
             convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
@@ -1146,12 +1138,7 @@ class ORIGIN(object):
         if self.areamap is None:
             raise IOError('Run the step 02 to initialize self.areamap ')
 
-        self.testO2 = []  # list of arrays
-        self.histO2 = []  # list of arrays
-        self.binO2 = []  # list of arrays
-        self.thresO2 = []
-        self.meaO2 = []
-        self.stdO2 = []
+        results = []
 
         for area_ind in range(1, self.nbAreas + 1):
             # limits of each spatial zone
@@ -1160,16 +1147,13 @@ class ORIGIN(object):
             # Data in this spatio-spectral zone
             cube_temp = self.cube_std._data[:, ksel]
 
-            testO2, hO2, fO2, tO2, mea, std = Compute_PCA_threshold(cube_temp,
-                                                                    pfa_test)
-            self._loginfo('Area %d, estimation mean/std/threshold:' % area_ind
-                          + ' %f/%f/%f' % (mea, std, tO2))
-            self.testO2.append(testO2)
-            self.histO2.append(hO2)
-            self.binO2.append(fO2)
-            self.thresO2.append(tO2)
-            self.meaO2.append(mea)
-            self.stdO2.append(std)
+            res = Compute_PCA_threshold(cube_temp, pfa_test)
+            results.append(res)
+            self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f'
+                          % (area_ind, res[4], res[5], res[3]))
+
+        (self.testO2, self.histO2, self.binO2, self.thresO2, self.meaO2,
+         self.stdO2) = zip(*results)
 
         self._loginfo('03 Done')
 
@@ -1240,18 +1224,17 @@ class ORIGIN(object):
 
         self._loginfo('Compute greedy PCA on each zone')
 
-        faint, mapO2, nstop = \
-            Compute_GreedyPCA_area(self.nbAreas, self.cube_std._data,
-                                   self.areamap._data, Noise_population,
-                                   thr, itermax, self.testO2)
+        faint, mapO2, nstop = Compute_GreedyPCA_area(
+            self.nbAreas, self.cube_std._data, self.areamap._data,
+            Noise_population, thr, itermax, self.testO2)
         if nstop > 0:
-            self._logwarning('The iterations have been reached the limit of %d in %d cases'%(itermax,nstop))
-        
+            self._logwarning('The iterations have been reached the limit '
+                             'of %d in %d cases', itermax, nstop)
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
-                               mask=np.ma.nomask)
-        self._loginfo('Save the numbers of iterations used by the' +
+                               mask=np.ma.nomask, copy=False)
+        self._loginfo('Save the numbers of iterations used by the'
                       ' testO2 for each spaxel in self.mapO2')
 
         self.mapO2 = Image(data=mapO2, wcs=self.wcs)
@@ -1260,10 +1243,11 @@ class ORIGIN(object):
 
     def step05_compute_TGLR(self, NbSubcube=1, neighboors=26, ncpu=4):
         """Compute the cube of GLR test values.
+
         The test is done on the cube containing the faint signal
-        (self.cube_faint) and it uses the PSF and the spectral profile.
+        (``self.cube_faint``) and it uses the PSF and the spectral profile.
         The correlation can be computed per "area"  for low memory system.
-        Then a Loop on each zone of self.cube_correl is performed to
+        Then a Loop on each zone of ``self.cube_correl`` is performed to
         compute for each zone:
 
         - The local maxima distribution of each zone
@@ -1314,9 +1298,9 @@ class ORIGIN(object):
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(self.Nx, self.Ny, NbSubcube)
         if NbSubcube == 1:
-            correl, profile, cm = Correlation_GLR_test(self.cube_faint._data,
-                                                       self.var, self.PSF, self.wfields,
-                                                       self.profiles, ncpu)
+            correl, profile, cm = Correlation_GLR_test(
+                self.cube_faint._data, self.var, self.PSF, self.wfields,
+                self.profiles, ncpu)
         else:
             correl, profile, cm = Correlation_GLR_test_zone(
                 self.cube_faint._data, self.var, self.PSF, self.wfields,
@@ -1325,38 +1309,34 @@ class ORIGIN(object):
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[self.mask] = 0
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
-                                mask=np.ma.nomask)
+                                mask=np.ma.nomask, copy=False)
 
         self._loginfo('Save the number of profile associated to the TGLR' +
                       ' in self.cube_profile')
         profile[self.mask] = 0
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
-                                 mask=np.ma.nomask, dtype=int)
+                                 mask=np.ma.nomask, dtype=int, copy=False)
 
         self._loginfo('Save the map of maxima in self.maxmap')
         carte_2D_correl = np.amax(self.cube_correl._data, axis=0)
         self.maxmap = Image(data=carte_2D_correl, wcs=self.wcs)
 
         self._loginfo('Compute p-values of local maximum of correlation values')
-        cube_local_max, cube_local_min = Compute_local_max_zone(correl, cm,
-                                                                self.mask,
-                                                                intx, inty, NbSubcube,
-                                                                neighboors)
+        cube_local_max, cube_local_min = Compute_local_max_zone(
+            correl, cm, self.mask, intx, inty, NbSubcube, neighboors)
         self._loginfo('Save self.cube_local_max from max correlations')
-        self.cube_local_max = Cube(data=cube_local_max,
-                                   wave=self.wave,
-                                   wcs=self.wcs, mask=np.ma.nomask)
+        self.cube_local_max = Cube(data=cube_local_max, wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask, copy=False)
         self._loginfo('Save self.cube_local_min from min correlations')
-        self.cube_local_min = Cube(data=cube_local_min,
-                                   wave=self.wave,
-                                   wcs=self.wcs, mask=np.ma.nomask)
+        self.cube_local_min = Cube(data=cube_local_min, wave=self.wave,
+                                   wcs=self.wcs, mask=np.ma.nomask, copy=False)
 
         self._loginfo('05 Done')
 
     def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
                                         tol_spec=5, spat_size=19,
                                         spect_size=10,
-                                        auto=(5,15,0.1), threshlist=None):
+                                        auto=(5, 15, 0.1), threshlist=None):
         """find the threshold  for a given purity
 
         Parameters
@@ -1447,12 +1427,12 @@ class ORIGIN(object):
                                  self.wave)
 
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0' + \
-                          ' (%d sources %d lines)'%(len(np.unique(self.Cat0['ID'])),len(self.Cat0)))
-        
+        self._loginfo('Save the catalogue in self.Cat0' +
+                      ' (%d sources %d lines)' % (len(np.unique(self.Cat0['ID'])), len(self.Cat0)))
+
         self._loginfo('07 Done')
 
-    def step08_detection_lost(self, purity=None, auto=(5,15,0.1), threshlist=None):
+    def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1), threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
@@ -1529,12 +1509,12 @@ class ORIGIN(object):
                 auto, threshlist)
         self.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ' % threshold2)
-        
+
         if threshold2 == np.inf:
             self.Cat1 = self.Cat0.copy()
             self.Cat1['comp'] = 0
             self.Cat1['STD'] = 0
-        else:        
+        else:
             Catcomp, inut = Create_local_max_cat(threshold2,
                                                  cube_local_max_faint_dct,
                                                  cube_local_min_faint_dct,
@@ -1558,8 +1538,8 @@ class ORIGIN(object):
         ds = ns - len(np.unique(self.Cat0['ID']))
         nl = len(self.Cat1)
         dl = nl - len(self.Cat0)
-        self._loginfo('Save the catalogue in self.Cat1' + \
-                          ' (%d [+%s] sources %d [+%d] lines)'%(ns,ds,nl,dl))
+        self._loginfo('Save the catalogue in self.Cat1' +
+                      ' (%d [+%s] sources %d [+%d] lines)' % (ns, ds, nl, dl))
 
         self._loginfo('08 Done')
 
@@ -1618,7 +1598,6 @@ class ORIGIN(object):
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
         write the final sources.
-
 
         Parameters
         ----------
