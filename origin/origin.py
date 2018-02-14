@@ -1593,7 +1593,7 @@ class ORIGIN(object):
 
         self._loginfo('09 Done')
 
-    def step10_write_sources(self, path=None, overwrite=True,
+    def step11_write_sources(self, path=None, overwrite=True,
                              fmt='default', src_vers='0.1',
                              author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and

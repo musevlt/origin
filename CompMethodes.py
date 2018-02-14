@@ -78,7 +78,7 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.step07_compute_spectra(T=2)
         orig.step08_spatial_merging()
         orig.step09_spectral_merging()
-        orig.step10_write_sources(author='', ncpu=24)
+        orig.step11_write_sources(author='', ncpu=24)
         orig.write()
 
     if meth == '2':  # beta 2 mixing False Ncube=1
@@ -97,7 +97,7 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.step07_compute_spectra(T=2)
         orig.step08_spatial_merging()
         orig.step09_spectral_merging()
-        orig.step10_write_sources(author='', ncpu=24)
+        orig.step11_write_sources(author='', ncpu=24)
         orig.write()
 
     if meth == '3':  # beta 2 mixing True Ncube=1
@@ -116,7 +116,7 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.step07_compute_spectra(T=2)
         orig.step08_spatial_merging()
         orig.step09_spectral_merging()
-        orig.step10_write_sources(author='', ncpu=24)
+        orig.step11_write_sources(author='', ncpu=24)
         orig.write()
 
     if meth == '4':  # beta 2 mixing False Ncube=3
@@ -135,7 +135,7 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.step07_compute_spectra(T=2)
         orig.step08_spatial_merging()
         orig.step09_spectral_merging()
-        orig.step10_write_sources(author='', ncpu=24)
+        orig.step11_write_sources(author='', ncpu=24)
         orig.write()
 
     if meth == '5':  # beta 2 mixing True Ncube=3
@@ -154,7 +154,7 @@ for meth in ('1', '2', '3', '4', '5'):
         orig.step07_compute_spectra(T=2)
         orig.step08_spatial_merging()
         orig.step09_spectral_merging()
-        orig.step10_write_sources(author='', ncpu=24)
+        orig.step11_write_sources(author='', ncpu=24)
         orig.write()
 
 

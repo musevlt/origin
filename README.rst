@@ -40,15 +40,13 @@ Usage
 
  >  orig.step05_compute_TGLR()
 
- > orig.step06_compute_segmentation_map(pfa=0.05)
+ >  orig.step06_compute_purity_threshold()
 
- >  orig.step07_compute_purity_threshold()
+ >  orig.step07_detection()
 
- >  orig.step08_detection()
+ >  orig.step08_detection_lost()
 
- >  orig.step09_detection_lost()
-
- >  orig.step10_compute_spectra()
+ >  orig.step09_compute.spectra()
 
  >  nsources = orig.step11_write_sources()
 
