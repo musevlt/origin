@@ -1413,7 +1413,7 @@ class ORIGIN(object):
                               3D positions of detections in correl_min
         """
 
-        self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
+        self._loginfo('Step 07 - Thresholding and spatio-spectral merging')
 
         if threshold is not None:
             self.param['threshold'] = threshold
@@ -1631,7 +1631,7 @@ class ORIGIN(object):
                        source (MUSE-CUBE)
         """
         # Add RA-DEC to the catalogue
-        self._loginfo('Step 11 - Sources creation')
+        self._loginfo('Step 10 - Sources creation')
         self._loginfo('Add RA-DEC to the catalogue')
         if self.Cat1 is None:
             raise IOError('Run the step 10 to initialize self.Cat2')

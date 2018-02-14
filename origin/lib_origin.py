@@ -2501,7 +2501,8 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Cat2_flux5 = []
     Cat_est_line_raw = []
     Cat_est_line_var = []
-    for src in Cat1_T:
+    for k in ProgressBar(range(len(Cat1_T))):
+        src = Cat1_T[k]
         y0 = src['y0']
         x0 = src['x0']
         z0 = src['z0']
@@ -2652,9 +2653,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
     Parameters
     ----------
     """
-
     logger = logging.getLogger(__name__)
-    logger.info('{}/{} source ID {}'.format(k + 1, ktot, i))
+    logger.debug('{}/{} source ID {}'.format(k + 1, ktot, i))
     cube = Cube(filename)
     cubevers = cube.primary_header.get('CUBE_V', '')
     origin.append(cubevers)
@@ -2847,10 +2847,11 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         f_correl = '%s/tmp_cube_correl.fits' % path2
 
     sources_arglist = []
-
+    logger.debug('Creating source list from Cat2 catalog (%d lines)',len(Cat))
     for i in np.unique(Cat['ID']):
         # Source = group
         E = Cat[Cat['ID'] == i]
+        # TODO change to compute barycenter using flux 
         ra = E['ra'][0]
         dec = E['dec'][0]
         x_centroid = E['x'][0]
@@ -2883,6 +2884,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
                           src_vers, author)
         sources_arglist.append(source_arglist)
 
+    logger.debug('Creating sources (%d sources)',len(source_arglist))
     if ncpu > 1:
         # run in parallel
         errmsg = Parallel(n_jobs=ncpu, max_nbytes=1e6)(
