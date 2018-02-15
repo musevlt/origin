@@ -2973,3 +2973,63 @@ def unique_sources(table):
 
     return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
                                           "seg_label", "comp"])
+
+
+def clean_line_table(table, *, z_pix_threshold=5):
+    """Remove duplicated lines and flag cleaned lines.
+
+    Some ORIGIN tables associate several identical lines at different positions
+    to the same object (same ID).  In that case, we don't want duplicated lines
+    (i.e. lines within a given threshold) associated to the same object.
+
+    For each object ID and for each group of lines defined by the spectral
+    proximity threshold, we keep only the brightest line.  We also flag the
+    objects for which we have removed some line because the fluxes are not
+    reliable.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns: ID,
+        lbda, z, and flux.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with unique lines per ID.
+
+    """
+    table = table.copy()
+    table.add_column(Column(data=np.arange(len(table), dtype=int),
+                            name="_idx"))
+
+    idx_to_flag = []
+    idx_to_remove = []
+
+    for group in table.group_by('ID').groups:
+        group.sort('z')
+
+        # Boolean array of the same length of the group indicating for each
+        # line if it's different from the previous (with True for the first
+        # line).
+        different_from_previous = np.concatenate(
+            ([True], (group['z'][1:] - group['z'][:-1]) >= z_pix_threshold)
+        )
+        # By computing the cumulative sum on this array, we get an array of
+        # increasing integers where a succession of same number identify
+        # identical lines.
+        line_groups = np.cumsum(different_from_previous)
+
+        for subgroup in group.group_by(line_groups).groups:
+            if len(subgroup) > 1:
+                subgroup.sort('flux')
+                idx_to_flag.append(subgroup[-1]['_idx'])
+                idx_to_remove += list(subgroup['_idx'][:-1])
+
+    table['line_cleaned_flag'] = False
+    table['line_cleaned_flag'][idx_to_flag] = True
+
+    table.remove_rows(idx_to_remove)
+    table.remove_columns('_idx')
+
+    return table
