@@ -2851,7 +2851,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     for i in np.unique(Cat['ID']):
         # Source = group
         E = Cat[Cat['ID'] == i]
-        # TODO change to compute barycenter using flux 
+        # TODO change to compute barycenter using flux
         ra = E['ra'][0]
         dec = E['dec'][0]
         x_centroid = E['x'][0]
@@ -2919,3 +2919,57 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         os.remove('%s/tmp_cube_correl.fits' % path2)
 
     return len(np.unique(Cat['ID']))
+
+
+def unique_sources(table):
+    """Return unique source positions in table.
+
+    ORIGIN produces a list of lines associated to various sources identified by
+    the ID column.  Some objects contain several lines found at slightly
+    different positions.
+
+    This function computes the list of unique sources averaging the RA and Dec
+    of each line using the flux as weight.  The resulting table contains:
+
+    - ID: the identifier of the source (unique);
+    - ra, dec: the position
+    - n_lines: the number of lines associated to the source;
+    - seg_label: the label of the segment associated to the source in the
+      segmentation map;
+    - comp: boolean flag true for complementary sources detected only in the
+      cube before the PCA.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns: ID,
+        ra, dec, flux, seg_label, and comp.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with unique sources.
+
+    """
+    table_by_id = table.group_by('ID')
+
+    result_rows = []
+    for key, group in zip(table_by_id.groups.keys, table_by_id.groups):
+        group_id = key['ID']
+
+        ra_waverage = np.average(group['ra'], weights=group['flux'])
+        dec_waverage = np.average(group['dec'], weights=group['flux'])
+
+        n_lines = len(group)
+
+        seg_label = group['seg_label'][0]
+        comp = group['comp'][0]
+        # TODO: seg_label and comp should be the same for all the lines
+        # associated to the source, shall we nevertheless check this is the
+        # case?
+
+        result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
+                            seg_label, comp])
+
+    return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
+                                          "seg_label", "comp"])
