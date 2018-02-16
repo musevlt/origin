@@ -2999,6 +2999,11 @@ def clean_line_table(table, *, z_pix_threshold=5):
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
         lbda, z, and flux.
+    z_pix_threshold: int
+        Pixel threshold on the spectral axis.  When two lines are nearer than
+        this threshold, they are considered as the same line. Note that the
+        association percolates and may associated lines further than the
+        threshold.
 
     Returns
     -------
