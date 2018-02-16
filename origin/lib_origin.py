@@ -2938,12 +2938,15 @@ def unique_sources(table):
       segmentation map;
     - comp: boolean flag true for complementary sources detected only in the
       cube before the PCA.
+    - line_cleaned_flag: boolean flag indicating if any of the lines associated
+      to the source was cleaned, i.e. there were duplicated lines at the same
+      wavelength found for this source and only one was kept.
 
     Parameters
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
-        ra, dec, flux, seg_label, and comp.
+        ra, dec, flux, seg_label, comp, and line_cleaned_flag.
 
     Returns
     -------
@@ -2968,11 +2971,15 @@ def unique_sources(table):
         # associated to the source, shall we nevertheless check this is the
         # case?
 
+        line_cleaned_flag = (True if np.sum(group["line_cleaned_flag"]) else
+                             False)
+
         result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
-                            seg_label, comp])
+                            seg_label, comp, line_cleaned_flag])
 
     return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
-                                          "seg_label", "comp"])
+                                          "seg_label", "comp",
+                                          "line_cleaned_flag"])
 
 
 def clean_line_table(table, *, z_pix_threshold=5):
