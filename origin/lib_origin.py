@@ -36,7 +36,6 @@ import logging
 import numpy as np
 import os.path
 import pyfftw
-import sys
 
 from astropy.table import Table, Column
 from astropy.utils.console import ProgressBar
@@ -61,18 +60,14 @@ from mpdaf.sdetect import Source
 __version__ = '3.0 beta'
 
 
-def whoami():
-    return sys._getframe(1).f_code.co_name
-
-
 def timeit(f):
     """Decorator which prints the execution time of a function."""
     @wraps(f)
     def timed(*args, **kw):
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger('origin')
         t0 = time()
         result = f(*args, **kw)
-        logger.debug('%s executed in %0.1fs', whoami(), time() - t0)
+        logger.debug('%s executed in %0.1fs', f.__name__, time() - t0)
         return result
     return timed
 
@@ -1880,9 +1875,12 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         npts1, npts2, dp = auto
         thresh_max = np.minimum(cube_local_min.max(), cube_local_max.max())
         thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
+
         # first exploration
-        index_pval1 = np.exp(np.linspace(np.log(thresh_min), np.log(thresh_max), npts1))
-        logger.debug('Iter 1 Threshold min %f max %f npts %d', thresh_min, thresh_max, len(index_pval1))
+        index_pval1 = np.exp(np.linspace(np.log(thresh_min),
+                                         np.log(thresh_max), npts1))
+        logger.debug('Iter 1 Threshold min %f max %f npts %d',
+                     thresh_min, thresh_max, len(index_pval1))
         for k, thresh in enumerate(ProgressBar(list(index_pval1[::-1]))):
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
                                                        cube_local_min,
@@ -1890,7 +1888,9 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f', k + 1, len(index_pval1), thresh, det_mit, det_Mit, est_purity)
+            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f',
+                         k + 1, len(index_pval1), thresh, det_mit, det_Mit,
+                         est_purity)
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1900,10 +1900,12 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
             if est_purity < purity - dp:
                 break
         thresh_min = thresh
+
         # 2nd iter
-        index_pval3 = np.exp(np.linspace(np.log(thresh_min), np.log(thresh_max), npts2))
-        logger.debug('Iter 2 Threshold min %f max %f npts %d', index_pval3[0], index_pval3[-1], len(index_pval3))
-        index_pval2 = []
+        index_pval3 = np.exp(np.linspace(np.log(thresh_min),
+                                         np.log(thresh_max), npts2))
+        logger.debug('Iter 2 Threshold min %f max %f npts %d',
+                     index_pval3[0], index_pval3[-1], len(index_pval3))
         for k, thresh in enumerate(ProgressBar(list(index_pval3))):
             if np.any(np.isclose(thresh, Tval_r)):
                 continue
@@ -1913,7 +1915,9 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('    %d/%d Threshold %f -data %d +data %d purity %f', k + 1, len(index_pval3), thresh, det_mit, det_Mit, est_purity)
+            logger.debug('    %d/%d Threshold %f -data %d +data %d purity %f',
+                         k + 1, len(index_pval3), thresh, det_mit, det_Mit,
+                         est_purity)
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1934,7 +1938,9 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('%d/%d Threshold %f -data %d +data %d purity %f', k + 1, len(threshlist), thresh, det_mit, det_Mit, est_purity)
+            logger.debug('%d/%d Threshold %f -data %d +data %d purity %f',
+                         k + 1, len(threshlist), thresh, det_mit, det_Mit,
+                         est_purity)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
             det_M.append(det_Mit)
@@ -1944,12 +1950,14 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         det_M = np.asanyarray(det_M)
 
     if Pval_r[-1] < purity:
-        logger.warning('Maximum computed purity %.2f is below %.2f', Pval_r[-1], purity)
+        logger.warning('Maximum computed purity %.2f is below %.2f',
+                       Pval_r[-1], purity)
         threshold = np.inf
     else:
         threshold = np.interp(purity, Pval_r, Tval_r)
         detect = np.interp(threshold, Tval_r, det_M)
-        logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f', threshold, detect, purity)
+        logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f',
+                     threshold, detect, purity)
 
     return threshold, Pval_r, Tval_r, det_m, det_M
 
@@ -2851,7 +2859,7 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
     for i in np.unique(Cat['ID']):
         # Source = group
         E = Cat[Cat['ID'] == i]
-        # TODO change to compute barycenter using flux 
+        # TODO change to compute barycenter using flux
         ra = E['ra'][0]
         dec = E['dec'][0]
         x_centroid = E['x'][0]
