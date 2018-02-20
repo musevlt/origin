@@ -1237,7 +1237,7 @@ class ORIGIN(object):
         self._loginfo('Save the numbers of iterations used by the'
                       ' testO2 for each spaxel in self.mapO2')
 
-        self.mapO2 = Image(data=mapO2, wcs=self.wcs)
+        self.mapO2 = Image(data=mapO2, wcs=self.wcs, copy=False)
 
         self._loginfo('04 Done')
 

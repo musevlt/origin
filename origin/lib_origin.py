@@ -141,7 +141,7 @@ def DCTMAT(nl, order):
 
     """
     yy, xx = np.mgrid[:nl, :order + 1]
-    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi * yy / nl))
+    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi / nl) * yy)
     D0[0, :] /= np.sqrt(2)
     return D0
 
@@ -182,7 +182,9 @@ def dct_residual(w_raw, order, var, approx):
     else:
         w_raw_var = w_raw / var
         D0T = D0.T
-        cont = Parallel()(delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j]) for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
+        cont = Parallel()(
+            delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j])
+            for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
         cont = np.asarray(cont).T.reshape(w_raw.shape)
     #    cont = np.empty_like(w_raw)
     #    for i in range(w_raw.shape[1]):
@@ -778,48 +780,49 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     """
     logger = logging.getLogger(__name__)
 
-    faint = cube_in.copy()
-
-    nl, nynx = faint.shape
-
     # nuisance part
     pypx = np.where(test > thresO2)[0]
-
     npix = len(pypx)
 
-    mapO2 = np.zeros(nynx)
+    faint = cube_in.copy()
+    mapO2 = np.zeros(faint.shape[1])
     nstop = 0
 
     with ProgressBar(npix) as bar:
         # greedy loop based on test
         tmp = 0
-        while True:
+        while len(pypx) > 0:
             tmp += 1
             mapO2[pypx] += 1
-            if len(pypx) == 0:
-                break
             if tmp > itermax:
                 nstop += 1
-                logger.info('Warning iterations stopped at %d' , tmp)
+                logger.info('Warning iterations stopped at %d', tmp)
                 break
+
             # vector data
             test_v = np.ravel(test)
             test_v = test_v[test_v > 0]
             nind = np.where(test_v <= thresO2)[0]
             sortind = np.argsort(test_v[nind])
+
             # at least one spectra is used to perform the test
-            l = 1 + int(len(nind) / Noise_population)
+            nb = 1 + int(len(nind) / Noise_population)
+
             # background estimation
-            b = np.mean(faint[:, nind[sortind[:l]]], axis=1)
+            b = np.mean(faint[:, nind[sortind[:nb]]], axis=1)
+
             # cube segmentation
             x_red = faint[:, pypx]
-            # orthogonal projection with background
-            x_red -= np.dot(np.dot(b[:, None], b[None, :]), x_red)
+
+            # orthogonal projection with background.
+            # The einsum version is less readable but also much faster.
+            # x_red -= np.dot(np.dot(b[:, None], b[None, :]), x_red)
+            # x_red -= np.dot(b[:, None] * b[None, :], x_red)
+            x_red -= np.einsum('i,j,jk->ik', b, b, x_red)
             x_red /= np.nansum(b**2)
 
             # remove spectral mean from residual data
-            mean_in_pca = np.mean(x_red, axis=1)
-            x_red_nomean = x_red - mean_in_pca[:, np.newaxis]
+            x_red -= x_red.mean(axis=1)[:, np.newaxis]
 
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
@@ -833,13 +836,16 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 # stop iteration earlier in order to keep residual sources
                 # with the hypothesis that this spectrum is slightly above
                 # the threshold (what we observe in data)
-                U, s, V = np.linalg.svd(x_red_nomean, full_matrices=False)
+                U, s, V = np.linalg.svd(x_red, full_matrices=False)
             else:
-                U, s, V = svds(x_red_nomean, k=1)
+                U, s, V = svds(x_red, k=1)
 
             # orthogonal projection
-            xest = np.dot(np.dot(U, U.T), faint)
-            faint -= xest
+            faint -= np.dot(np.dot(U, U.T), faint)
+            # FIXME: this does not work although it gives exactly the same
+            # result as above and roughly ten times faster. It would be good to
+            # find why.
+            # faint -= np.einsum('i,j,jk->ik', U[:, 0], U[:, 0], faint)
 
             # test
             test = O2test(faint)
@@ -870,6 +876,7 @@ def O2test(Cube_in):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
+    # np.einsum('ij,ij->j', Cube_in, Cube_in) / Cube_in.shape[0]
     return np.mean(Cube_in**2, axis=0)
 
 
