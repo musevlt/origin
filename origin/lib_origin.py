@@ -818,7 +818,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             # The einsum version is less readable but also much faster.
             # x_red -= np.dot(np.dot(b[:, None], b[None, :]), x_red)
             # x_red -= np.dot(b[:, None] * b[None, :], x_red)
-            x_red -= np.einsum('i,j,jk->ik', b, b, x_red)
+            x_red -= np.einsum('i,j,jk->ik', b, b, x_red, optimize=True)
             x_red /= np.nansum(b**2)
 
             # remove spectral mean from residual data
@@ -841,11 +841,12 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 U, s, V = svds(x_red, k=1)
 
             # orthogonal projection
-            faint -= np.dot(np.dot(U, U.T), faint)
+            # faint -= np.dot(np.dot(U, U.T), faint)
             # FIXME: this does not work although it gives exactly the same
             # result as above and roughly ten times faster. It would be good to
             # find why.
-            # faint -= np.einsum('i,j,jk->ik', U[:, 0], U[:, 0], faint)
+            faint -= np.einsum('i,j,jk->ik', U[:, 0], U[:, 0], faint,
+                               optimize=True)
 
             # test
             test = O2test(faint)
@@ -1713,7 +1714,8 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     # LPI iout2 pour debbugger
 
 
-def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, filter_act, both=True):
+def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
+                                 filter_act, both=True):
     """Filter the correl>thresh in + DATA by the correl>thresh in - DATA
     if both = True do the same in opposite
 
@@ -1728,18 +1730,10 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
            cube of local maxima from minus minimum correlation
     thresh : float
              a threshold value
-
     spat_size : int
                 spatiale size of the spatiale filter
     spect_size : int
                  spectral lenght of the spectral filter
-    map_in  : array
-              labels of source segmentation basedd on continuum
-    tol_spat : int
-               spatiale tolerance for the spatial merging
-
-    tol_spec : int
-               spectrale tolerance for the spectral merging
     filter_act : Bool
                  activate or deactivate the spatio spectral filter
                  default: True
@@ -1931,6 +1925,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         # first exploration
         index_pval1 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts1))
+        # make sure that last point is thresh_max (and not an
+        # approximate value due to linspace)
+        index_pval1[-1] = thresh_max
+
         logger.debug('Iter 1 Threshold min %f max %f npts %d',
                      thresh_min, thresh_max, len(index_pval1))
         for k, thresh in enumerate(ProgressBar(list(index_pval1[::-1]))):
@@ -1956,6 +1954,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         # 2nd iter
         index_pval3 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts2))
+        # make sure that last point is thresh_max (and not an
+        # approximate value due to linspace)
+        index_pval3[-1] = thresh_max
+
         logger.debug('Iter 2 Threshold min %f max %f npts %d',
                      index_pval3[0], index_pval3[-1], len(index_pval3))
         for k, thresh in enumerate(ProgressBar(list(index_pval3))):
