@@ -89,6 +89,18 @@ def ProgressBar(*args):
     return _ProgressBar(*args, ipython_widget=isnotebook())
 
 
+def orthogonal_projection(a, b):
+    """Compute the orthogonal projection: ``np.dot(np.dot(a, a.T), b)``."""
+    # Using multi_dot which is faster than np.dot(np.dot(a, a.T), b)
+    # Another option would be to use einsum, less readable but also very
+    # fast with Numpy 1.14+ and optimize=True. This seems to be as fast as
+    # multi_dot.
+    # return np.einsum('i,j,jk->ik', a, a, b, optimize=True)
+    if a.ndim == 1:
+        a = a[:, None]
+    return np.linalg.multi_dot([a, a.T, b])
+
+
 @timeit
 def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
     """Function to compute the limits in pixels for each zone.
@@ -815,10 +827,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             x_red = faint[:, pypx]
 
             # orthogonal projection with background.
-            # The einsum version is less readable but also much faster.
-            # x_red -= np.dot(np.dot(b[:, None], b[None, :]), x_red)
-            # x_red -= np.dot(b[:, None] * b[None, :], x_red)
-            x_red -= np.einsum('i,j,jk->ik', b, b, x_red, optimize=True)
+            x_red -= orthogonal_projection(b, x_red)
             x_red /= np.nansum(b**2)
 
             # remove spectral mean from residual data
@@ -841,12 +850,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 U, s, V = svds(x_red, k=1)
 
             # orthogonal projection
-            # faint -= np.dot(np.dot(U, U.T), faint)
-            # FIXME: this does not work although it gives exactly the same
-            # result as above and roughly ten times faster. It would be good to
-            # find why.
-            faint -= np.einsum('i,j,jk->ik', U[:, 0], U[:, 0], faint,
-                               optimize=True)
+            faint -= orthogonal_projection(U[:, 0], faint)
 
             # test
             test = O2test(faint)
@@ -2282,7 +2286,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     U, s, V = svds(data_in_pca, k=1)
 
     # orthogonal projection
-    xest = np.dot(np.dot(U, np.transpose(U)), data_in_pca)
+    xest = orthogonal_projection(U, data_in_pca)
     residual = data_std - np.reshape(xest, (nl, sizpsf, sizpsf))
 
     # LS deconv
@@ -2304,11 +2308,10 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     if order_dct is not None:
         # denoise eigen vector with DCT
         D0 = DCTMAT(nl, order_dct)
-        A = np.dot(D0, D0.T)
-        U = np.dot(A, U)
+        U = orthogonal_projection(D0, U)
 
     # orthogonal projection
-    xest = np.dot(np.dot(U, np.transpose(U)), data_st_pca)
+    xest = orthogonal_projection(U, data_st_pca)
     cont = np.reshape(xest, (nl, sizpsf, sizpsf))
     residual = data_std - cont
 
