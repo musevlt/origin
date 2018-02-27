@@ -1048,59 +1048,35 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     shape = cube_var.shape
     Nz, Ny, Nx = cube_var.shape
 
+    # Spatial convolution of the weighted data with the zero-mean FSF
+    logger.info('Step 1/3 and 2/3: '
+                'Spatial convolution of weighted data with the zero-mean FSF, '
+                'Computing Spatial part of the norm of the 3D atoms')
     if weights is None:  # one FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with '
-                    'the zero-mean FSF')
-        PSF_Moffat_m = np.ascontiguousarray(PSF_Moffat[:, ::-1, ::-1])
-        PSF_Moffat_m -= np.mean(PSF_Moffat_m, axis=(1, 2))[:, None, None]
+        PSF_Moffat = [PSF_Moffat]
 
-        cube_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i] = fftconvolve(cube_var[i], PSF_Moffat_m[i],
-                                      mode='same')
-        del cube_var
+    nfields = len(PSF_Moffat)
+    cube_fsf = np.zeros(shape, dtype=float)
+    norm_fsf = np.zeros(shape, dtype=float)
 
-        PSF_Moffat_m **= 2
-
-        # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
-                    'atoms')
-        norm_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i] = fftconvolve(inv_var[i], PSF_Moffat_m[i], mode='same')
-        del PSF_Moffat_m, inv_var
-    else:  # several FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with '
-                    'the zero-mean FSF')
-        nfields = len(PSF_Moffat)
-        PSF_Moffat_m = []
-        for n in range(nfields):
-            PSF_m = np.ascontiguousarray(PSF_Moffat[n][:, ::-1, ::-1])
-            PSF_m -= np.mean(PSF_m, axis=(1, 2))[:, np.newaxis, np.newaxis]
-            PSF_Moffat_m.append(PSF_m)
+    for n in range(nfields):
+        PSF_Moffat_m = np.ascontiguousarray(PSF_Moffat[n][:, ::-1, ::-1])
+        PSF_Moffat_m -= PSF_Moffat_m.mean(axis=(1, 2))[:, None, None]
 
         # build a weighting map per PSF and convolve
-        cube_fsf = np.zeros(shape, dtype=float)
+        cube_wght = weights[n] * cube_var if weights is not None else cube_var
         for i in ProgressBar(list(range(Nz))):
-            for n in range(nfields):
-                cube_fsf[i] += fftconvolve(weights[n] * cube_var[i],
-                                           PSF_Moffat_m[n][i], mode='same')
-        del cube_var
-
-        for n in range(nfields):
-            PSF_Moffat_m[n] **= 2
+            cube_fsf[i] += fftconvolve(cube_wght[i], PSF_Moffat_m[i],
+                                       mode='same')
 
         # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
-                    'atoms')
-        norm_fsf = np.zeros(shape, dtype=float)
+        PSF_Moffat_m **= 2
+        inv_var_wght = weights[n] * inv_var if weights is not None else inv_var
         for i in ProgressBar(list(range(Nz))):
-            for n in range(nfields):
-                norm_fsf[i] += fftconvolve(weights[n] * inv_var[i],
-                                           PSF_Moffat_m[n][i], mode='same')
-        del PSF_Moffat_m, inv_var
+            norm_fsf[i] += fftconvolve(inv_var_wght[i], PSF_Moffat_m[i],
+                                       mode='same')
+
+    del cube_var, inv_var
 
     # First cube of correlation values
     # initialization with the first profile
