@@ -702,23 +702,20 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     """
     cube_faint = cube_std.copy()
     mapO2 = np.zeros(cube_std.shape[1:])
-    # Spatial segmentation
     nstop = 0
-    with ProgressBar(NbArea) as bar:
-        for area_ind in range(1, NbArea + 1):
-            # limits of each spatial zone
-            ksel = (areamap == area_ind)
+    for area_ind in range(1, NbArea + 1):
+        # limits of each spatial zone
+        ksel = (areamap == area_ind)
 
-            # Data in this spatio-spectral zone
-            cube_temp = cube_std[:, ksel]
+        # Data in this spatio-spectral zone
+        cube_temp = cube_std[:, ksel]
 
-            thr = threshold_test[area_ind - 1]
-            test = testO2[area_ind - 1]
-            cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
-                cube_temp, test, thr, Noise_population, itermax)
-            mapO2[ksel] = mO2
-            nstop += kstop
-            bar.update()
+        thr = threshold_test[area_ind - 1]
+        test = testO2[area_ind - 1]
+        cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
+            cube_temp, test, thr, Noise_population, itermax)
+        mapO2[ksel] = mO2
+        nstop += kstop
 
     return cube_faint, mapO2, nstop
 
@@ -977,40 +974,34 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
     longxy = int(sizpsf // 2)
 
     Nl, Ny, Nx = cube.shape
-
-    correl = np.zeros((Nl, Ny, Nx))
-    correl_min = np.zeros((Nl, Ny, Nx))
-    profile = np.zeros((Nl, Ny, Nx))
+    correl = np.zeros(cube.shape)
+    correl_min = np.zeros(cube.shape)
+    profile = np.zeros(cube.shape)
 
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             logger.info('Area %d,%d / (%d,%d)',
                         numy + 1, numx + 1, NbSubcube, NbSubcube)
-            # limits of each spatial zone
+            # limits of each spatial zone, with PSF margins
             x1 = np.maximum(0, intx[numx] - longxy)
             x2 = np.minimum(intx[numx + 1] + longxy, Nx)
             y1 = np.maximum(0, inty[numy + 1] - longxy)
             y2 = np.minimum(inty[numy] + longxy, Ny)
 
+            mini_cube = cube[:, y1:y2, x1:x2]
+            mini_sigma = sigma[:, y1:y2, x1:x2]
+            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat,
+                                            weights, Dico, threads)
+
             x11 = intx[numx] - x1
             y11 = inty[numy + 1] - y1
             x22 = intx[numx + 1] - x1
             y22 = inty[numy] - y1
-
-            mini_cube = cube[:, y1:y2, x1:x2]
-            mini_sigma = sigma[:, y1:y2, x1:x2]
-
-            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat,
-                                            weights, Dico, threads)
-
-            correl[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                c[:, y11:y22, x11:x22]
-
-            profile[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                p[:, y11:y22, x11:x22]
-
-            correl_min[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                cm[:, y11:y22, x11:x22]
+            sy = slice(inty[numy + 1], inty[numy])
+            sx = slice(intx[numx], intx[numx + 1])
+            correl[:, sy, sx] = c[:, y11:y22, x11:x22]
+            profile[:, sy, sx] = p[:, y11:y22, x11:x22]
+            correl_min[:, sy, sx] = cm[:, y11:y22, x11:x22]
 
     return correl, profile, correl_min
 
@@ -1048,10 +1039,10 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
-    # data cube weighted by the MUSE covariance
-    cube_var = cube / np.sqrt(sigma)
     # Inverse of the MUSE covariance
     inv_var = 1. / sigma
+    # data cube weighted by the MUSE covariance
+    cube_var = cube * np.sqrt(inv_var)
 
     # Dimensions of the data
     shape = cube_var.shape

@@ -41,6 +41,7 @@ def test_origin():
         # TGLR computing (normalized correlations)
         my_origin = ORIGIN.load('tmp')
         my_origin.step05_compute_TGLR(ncpu=1)
+        # my_origin.step05_compute_TGLR(ncpu=1, NbSubcube=2)
         my_origin.write()
 
         # threshold applied on pvalues
