@@ -1029,6 +1029,23 @@ def _convolve_fsf(psf, cube, sigma, weights=None):
     return cube_fsf, norm_fsf
 
 
+def _convolve_profile(Dico, cube_fft, norm_fft, fshape, cslice):
+    # Second cube of correlation values
+    dico_fft = fft.rfftn(Dico, fshape)[:, None, None]
+    cube_profile = fft.irfftn(dico_fft * cube_fft, fshape, axes=(0,))
+    cube_profile = cube_profile[cslice]
+
+    Dico_sq = Dico ** 2
+    dico_fft = fft.rfftn(Dico_sq, fshape)[:, None, None]
+    norm_profile = fft.irfftn(dico_fft * norm_fft, fshape, axes=(0,))
+    norm_profile = norm_profile[cslice]
+
+    norm_profile[norm_profile <= 0] = np.inf
+    cube_profile /= np.sqrt(norm_profile)
+
+    return cube_profile
+
+
 @timeit
 def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     """Function to compute the cube of GLR test values obtained with the given
@@ -1094,116 +1111,36 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     # First cube of correlation values
     # initialization with the first profile
     logger.info('Step 3/3 Computing second cube of correlation values')
-    profile = np.empty(shape, dtype=np.int)
-    correl = np.full(shape, -np.inf)
-    correl_min = np.full(shape, np.inf)
 
-    profile = np.empty(shape, dtype=np.int)
-    correl = np.full(shape, -np.inf)
-    correl_min = np.full(shape, np.inf)
     Dico = np.array(Dico)
     Dico -= np.mean(Dico, axis=1)[:, None]
-    Dico_sq = Dico ** 2
 
-    if threads == 1:
-        # import pyfftw
-        # fft = pyfftw.interfaces.numpy_fft  # noqa
-        # pyfftw.interfaces.cache.enable()
+    s1 = np.array(cube_fsf.shape)
+    s2 = np.array((Dico.shape[1], 1, 1))
+    shape = s1 + s2 - 1
+    fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape[:1]]
+    # fslice = tuple([slice(0, int(sz)) for sz in shape])
 
-        s1 = np.array(cube_fsf.shape)
-        s2 = np.array((Dico.shape[1], 1, 1))
-        shape = s1 + s2 - 1
-        fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape[:1]]
-        # fslice = tuple([slice(0, int(sz)) for sz in shape])
+    startind = (shape - s1) // 2
+    endind = startind + s1
+    cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
 
-        startind = (shape - s1) // 2
-        endind = startind + s1
-        cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
+    cube_fft = fft.rfftn(cube_fsf, fshape, axes=(0,))
+    norm_fft = fft.rfftn(norm_fsf, fshape, axes=(0,))
 
-        cube_fft = fft.rfftn(cube_fsf, fshape, axes=(0,))
-        norm_fft = fft.rfftn(norm_fsf, fshape, axes=(0,))
+    nprofiles = len(Dico)
+    # cube_profile = Parallel(n_jobs=nprofiles, backend="threading")(
+    cube_profile = Parallel(n_jobs=min(nprofiles, threads))(
+        delayed(_convolve_profile)(Dico[k], cube_fft, norm_fft, fshape, cslice)
+        for k in range(nprofiles))
+    cube_profile = np.stack(cube_profile)
+    profile = cube_profile.argmax(axis=0)
+    correl = cube_profile.max(axis=0)
+    correl_min = cube_profile.min(axis=0)
 
-        for k in ProgressBar(list(range(len(Dico)))):
-            # Second cube of correlation values
-            dico_fft = fft.rfftn(Dico[k], fshape)[:, None, None]
-            cube_profile = fft.irfftn(dico_fft * cube_fft, fshape, axes=(0,))
-            # cube_profile = cube_profile[fslice].copy()
-            cube_profile = cube_profile[cslice]
-
-            dico_fft = fft.rfftn(Dico_sq[k], fshape)[:, None, None]
-            norm_profile = fft.irfftn(dico_fft * norm_fft, fshape, axes=(0,))
-            # norm_profile = norm_profile[fslice].copy()
-            norm_profile = norm_profile[cslice]
-
-            norm_profile[norm_profile <= 0] = np.inf
-            cube_profile /= np.sqrt(norm_profile)
-
-            profile[cube_profile > correl] = k
-            np.maximum(correl, cube_profile, out=correl)
-            np.minimum(correl_min, cube_profile, out=correl_min)
-
-        # Clear the caches!
-        np.fft.fftpack._fft_cache._dict.clear()
-        np.fft.fftpack._real_fft_cache._dict.clear()
-    else:
-
-        ndico = Dico.shape[1]
-        s = Nz + ndico - 1
-        if ndico / 2 == ndico // 2:
-            cc1 = ndico // 2 - 1
-            cc2 = -ndico // 2
-        else:
-            cc1 = ndico // 2
-            cc2 = -ndico // 2 + 1
-
-        logger.info('Compute the FFT planes...')
-        import pyfftw
-        temp = pyfftw.empty_aligned(s, dtype='float64')
-        fd_j = pyfftw.empty_aligned(s // 2 + 1, dtype='complex128')
-        flags = ['FFTW_DESTROY_INPUT', 'FFTW_MEASURE']
-        fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
-                             threads=threads)
-        temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-        ffsf = pyfftw.empty_aligned((s // 2 + 1, Ny, Nx), dtype='complex128')
-        fftfsf = pyfftw.FFTW(temp2, ffsf, direction='FFTW_FORWARD', axes=[0],
-                             flags=flags, threads=threads)
-        temp3 = pyfftw.empty_aligned((s // 2 + 1, Ny, Nx), dtype='complex128')
-        res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-        ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD',
-                                  axes=[0], flags=flags, threads=threads)
-
-        for k in ProgressBar(list(range(len(Dico)))):
-
-            # fftconvolve(cube_fsf[:,x,y], d_j)
-            d_j = Dico[k]
-            temp[:ndico] = d_j
-            temp[ndico:] = 0
-            fftd_j()  # fd_j=fft(d_j)
-
-            temp2[:Nz, :, :] = cube_fsf[:, :, :]
-            temp2[Nz:, :, :] = 0
-            fftfsf()  # fsf = fft(cube_fsf)
-            temp3[:] = ffsf[:, :, :] * fd_j[:, np.newaxis, np.newaxis]
-            ifft_object()
-            cube_profile = res[cc1:cc2, :, :].copy()
-
-            # fftconvolve(norm_fsf[:,x,y], d_j**2)
-            temp[:ndico] = Dico_sq[k]
-            temp[ndico:] = 0
-            fftd_j()  # fprof=fft(d_j**2)
-
-            temp2[:Nz, :, :] = norm_fsf[:, :, :]
-            temp2[Nz:, :, :] = 0
-            fftfsf()
-            temp3[:] = ffsf[:] * fd_j[:, np.newaxis, np.newaxis]
-            ifft_object()
-            norm_profile = res[cc1:cc2, :, :].copy()
-
-            norm_profile[norm_profile <= 0] = np.inf
-            tmp = cube_profile / np.sqrt(norm_profile)
-            profile[tmp > correl] = k
-            correl = np.maximum(correl, tmp)
-            correl_min = np.minimum(correl_min, tmp)
+    # Clear the caches
+    np.fft.fftpack._fft_cache._dict.clear()
+    np.fft.fftpack._real_fft_cache._dict.clear()
 
     return correl, profile, correl_min
 
