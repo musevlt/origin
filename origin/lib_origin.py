@@ -37,7 +37,6 @@ import numpy as np
 import os.path
 
 from astropy.table import Table, Column
-from astropy.utils.console import ProgressBar as _ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
@@ -85,8 +84,10 @@ def isnotebook():  # pragma: no cover
         return False      # Probably standard Python interpreter
 
 
-def ProgressBar(*args):
-    return _ProgressBar(*args, ipython_widget=isnotebook())
+def ProgressBar(*args, **kwargs):
+    from tqdm import tqdm, tqdm_notebook
+    func = tqdm_notebook if isnotebook() else tqdm
+    return func(*args, **kwargs)
 
 
 def orthogonal_projection(a, b):
@@ -1041,7 +1042,8 @@ def _convolve_profile(Dico, cube_fft, norm_fft, fshape, cslice):
     norm_profile = norm_profile[cslice]
 
     norm_profile[norm_profile <= 0] = np.inf
-    cube_profile /= np.sqrt(norm_profile)
+    np.sqrt(norm_profile, out=norm_profile)
+    cube_profile /= norm_profile
 
     return cube_profile
 
