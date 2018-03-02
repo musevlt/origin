@@ -1030,22 +1030,31 @@ def _convolve_fsf(psf, cube, sigma, weights=None):
     return cube_fsf, norm_fsf
 
 
-def _convolve_profile(Dico, cube_fft, norm_fft, fshape, cslice):
+def _convolve_profile(Dico, cube_fft, norm_fft, fshape, n_jobs, parallel):
     # Second cube of correlation values
-    dico_fft = fft.rfftn(Dico, fshape)[:, None, None]
-    cube_profile = fft.irfftn(dico_fft * cube_fft, fshape, axes=(0,))
-    cube_profile = cube_profile[cslice]
+    dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
+    cube_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
+                                      func=fft.irfftn)
+    dico_fft = fft.rfftn(Dico ** 2, fshape)[:, None] * norm_fft
+    norm_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
+                                      func=fft.irfftn)
 
-    Dico_sq = Dico ** 2
-    dico_fft = fft.rfftn(Dico_sq, fshape)[:, None, None]
-    norm_profile = fft.irfftn(dico_fft * norm_fft, fshape, axes=(0,))
-    norm_profile = norm_profile[cslice]
+    # dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
+    # cube_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
+    # dico_fft = fft.rfftn(Dico_sq, fshape)[:, None] * norm_fft
+    # norm_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
 
     norm_profile[norm_profile <= 0] = np.inf
     np.sqrt(norm_profile, out=norm_profile)
     cube_profile /= norm_profile
 
     return cube_profile
+
+
+def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
+    arr = np.array_split(arr, nslices, axis=-1)
+    out = parallel(delayed(func)(chunk, shape, axes=(0,)) for chunk in arr)
+    return np.concatenate(out, axis=-1)
 
 
 @timeit
@@ -1083,7 +1092,6 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     logger = logging.getLogger(__name__)
 
     # Dimensions of the data
-    shape = cube.shape
     Nz, Ny, Nx = cube.shape
 
     # Spatial convolution of the weighted data with the zero-mean FSF
@@ -1119,31 +1127,41 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
     s1 = np.array(cube_fsf.shape)
     s2 = np.array((Dico.shape[1], 1, 1))
-    shape = s1 + s2 - 1
-    fshape = [fftpack.helper.next_fast_len(int(d)) for d in shape[:1]]
-    # fslice = tuple([slice(0, int(sz)) for sz in shape])
-
-    startind = (shape - s1) // 2
+    fftshape = s1 + s2 - 1
+    fshape = [fftpack.helper.next_fast_len(int(d)) for d in fftshape[:1]]
+    startind = (fftshape - s1) // 2
     endind = startind + s1
     cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
 
-    cube_fft = fft.rfftn(cube_fsf, fshape, axes=(0,))
-    norm_fft = fft.rfftn(norm_fsf, fshape, axes=(0,))
+    with Parallel(n_jobs=threads, backend='threading') as parallel:
+        cube_fft = _convolve_spectral(parallel, threads, cube_fsf, fshape,
+                                      func=fft.rfftn)
+        norm_fft = _convolve_spectral(parallel, threads, norm_fsf, fshape,
+                                      func=fft.rfftn)
 
-    nprofiles = len(Dico)
-    # cube_profile = Parallel(n_jobs=nprofiles, backend="threading")(
-    cube_profile = Parallel(n_jobs=min(nprofiles, threads))(
-        delayed(_convolve_profile)(Dico[k], cube_fft, norm_fft, fshape, cslice)
-        for k in range(nprofiles))
-    cube_profile = np.stack(cube_profile)
-    profile = cube_profile.argmax(axis=0)
-    correl = cube_profile.max(axis=0)
-    correl_min = cube_profile.min(axis=0)
+    # cube_fft, norm_fft = Parallel(n_jobs=min(2, threads), backend='threading')(
+    #     delayed(fft.rfftn)(arr, fshape, axes=(0,))
+    #     for arr in (cube_fsf, norm_fsf))
 
-    # Clear the caches
-    np.fft.fftpack._fft_cache._dict.clear()
-    np.fft.fftpack._real_fft_cache._dict.clear()
+    cube_fft = cube_fft.reshape(cube_fft.shape[0], -1)
+    norm_fft = norm_fft.reshape(norm_fft.shape[0], -1)
+    profile = np.empty((Nz, Ny * Nx), dtype=np.int)
+    correl = np.full((Nz, Ny * Nx), -np.inf)
+    correl_min = np.full((Nz, Ny * Nx), np.inf)
 
+    with Parallel(n_jobs=threads, backend='threading') as parallel:
+        for k in ProgressBar(range(len(Dico))):
+            cube_profile = _convolve_profile(Dico[k], cube_fft, norm_fft,
+                                             fshape, threads, parallel)
+            cube_profile = cube_profile[cslice[0]]
+            # norm_profile = norm_profile[cslice]
+            profile[cube_profile > correl] = k
+            np.maximum(correl, cube_profile, out=correl)
+            np.minimum(correl_min, cube_profile, out=correl_min)
+
+    profile = profile.reshape(Nz, Ny, Nx)
+    correl = correl.reshape(Nz, Ny, Nx)
+    correl_min = correl_min.reshape(Nz, Ny, Nx)
     return correl, profile, correl_min
 
 
