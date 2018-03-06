@@ -2988,6 +2988,42 @@ def unique_sources(table):
                                           "line_cleaned_flag"])
 
 
+def remove_identical_duplicates(table):
+    """Remove strictly identical duplicated lines.
+
+    ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
+    set to the very same (x, y, z) position when computing the optimal
+    position.
+
+    For such duplicates, this function only keep the line with the highest
+    purity.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns ID, x,
+        y, z, and purity.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with only unique (x, y, z) rows.
+
+    """
+    table = table.copy()
+
+    # Sort by decreasing purity
+    table.sort('purity')
+    table.reverse()
+
+    # Find position of first unique (x, y, z)
+    _, idx = np.unique(table['x', 'y', 'z'], axis=0, return_index=True)
+
+    result = table[idx].copy()
+    result.sort(['ID', 'z'])
+
+    return result
+
 def clean_line_table(table, *, z_pix_threshold=5):
     """Remove duplicated lines and flag cleaned lines.
 
