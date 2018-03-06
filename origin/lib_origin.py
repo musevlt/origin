@@ -2492,6 +2492,12 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
 
+    # TODO: When computing the optimal position of the lines, we may end up
+    # with duplicated lines at the very same (x, y, z) position because we
+    # manage to correct for double, very near, detections.  We should then keep
+    # only one line.  It's better to keep the “purest” line, but the purity
+    # information is not available at this stage.
+
     # Initialization
     NL, NY, NX = RAW.shape
     Cat2_x_grid = []
