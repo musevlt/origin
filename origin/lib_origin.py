@@ -38,11 +38,14 @@ import os.path
 import pyfftw
 import sys
 
+from astropy.io import fits
 from astropy.table import Table, Column, MaskedColumn
 from astropy.utils.console import ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.nddata import NDDataRef
 from astropy.stats import gaussian_sigma_to_fwhm
+from astropy.wcs import WCS
 from functools import wraps
 from joblib import Parallel, delayed
 from scipy import stats
@@ -3110,3 +3113,69 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     table.sort(['ID', 'z'])
 
     return table
+
+
+def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
+    """Keep only relevant spectra and limit their extent around the line.
+
+    The “compute spectra” step creates a FITS file with the spectra (data and
+    variance) associated to each line.  These spectra are based on the full
+    MUSE wavelength grid.  This function:
+
+    - limits the spectra list to the list of lines present in the line_table
+      (e.g. if the table was processed by remove_identical_duplicates the
+      duplicated spectra will be removed);
+    - limit the wavelength grid of the spectra around the associated line.
+
+    TODO: Include the limiting of the spectra in the spectrum computation code.
+
+    Parameters
+    ----------
+    line_table: astropy.table.Table
+        An ORIGIN table of lines, this table must contain the columns:
+        num_line, profile, and z.
+    spectra: astropy.io.fits.hdu.hdulist.HDUList
+        An HDUList containing the spectra associated to each line.  It must
+        contain for each line identifier a “DATA<ID>” and a “STAT<ID>”
+        extension.
+    profile_fwhm: dictionary
+        A dictionary associating to each profile number the corresponding FWHM
+        in pixels.
+    size_fwhm: float
+        The length of the spectrum to extract around the line in FWHM factor.
+
+    Returns
+    -------
+    astropy.io.fits.hdu.hdulist.HDUList
+        An HDUList with only the relevant, wavelength limited spectra, with the
+        same extension names as in the input.
+
+    """
+    radius = {profile: np.ceil(fwhm * size_fwhm / 2) for profile, fwhm in
+              profile_fwhm.items()}
+
+    result = fits.HDUList()
+
+    for row in line_table:
+        num_line, line_profile, line_z = row[['num_line', 'profile', 'z']]
+        data_hdu = spectra[f"DATA{num_line}"]
+        stat_hdu = spectra[f"STAT{num_line}"]
+
+        spec_data = NDDataRef(data=data_hdu.data, wcs=WCS(data_hdu.header))
+        spec_stat = NDDataRef(data=stat_hdu.data, wcs=WCS(stat_hdu.header))
+
+        zmin = int(np.max([0, line_z - radius[line_profile]]))
+        zmax = int(np.min([line_z + radius[line_profile],
+                           len(spec_data.data)]))
+
+        spec_data = spec_data[zmin:zmax]
+        spec_stat = spec_stat[zmin:zmax]
+
+        result.append(fits.ImageHDU(data=spec_data.data,
+                                    header=spec_data.wcs.to_header(),
+                                    name=f"DATA{num_line}"))
+        result.append(fits.ImageHDU(data=spec_stat.data,
+                                    header=spec_stat.wcs.to_header(),
+                                    name=f"STAT{num_line}"))
+
+    return result
