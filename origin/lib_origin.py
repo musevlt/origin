@@ -2947,11 +2947,16 @@ def unique_sources(table):
     - line_merged_flag: boolean flag indicating if any of the lines associated
       to the source was merged with another nearby line.
 
+    Note: The n_lines contains the number of unique lines associated to the
+    source, but for computing the position of the source, we are using all the
+    duplicated lines as shredded sources may have identical lines found at
+    different positions.
+
     Parameters
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
-        ra, dec, flux, seg_label, comp, and line_merged_flag.
+        ra, dec, flux, seg_label, comp, merged_in, and line_merged_flag.
 
     Returns
     -------
@@ -2968,7 +2973,7 @@ def unique_sources(table):
         ra_waverage = np.average(group['ra'], weights=group['flux'])
         dec_waverage = np.average(group['dec'], weights=group['flux'])
 
-        n_lines = len(group)
+        n_lines = len(group[group['merged_in'].mask])
 
         seg_label = group['seg_label'][0]
         comp = group['comp'][0]
