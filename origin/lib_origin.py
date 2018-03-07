@@ -38,7 +38,7 @@ import os.path
 import pyfftw
 import sys
 
-from astropy.table import Table, Column
+from astropy.table import Table, Column, MaskedColumn
 from astropy.utils.console import ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -2944,15 +2944,14 @@ def unique_sources(table):
       segmentation map;
     - comp: boolean flag true for complementary sources detected only in the
       cube before the PCA.
-    - line_cleaned_flag: boolean flag indicating if any of the lines associated
-      to the source was cleaned, i.e. there were duplicated lines at the same
-      wavelength found for this source and only one was kept.
+    - line_merged_flag: boolean flag indicating if any of the lines associated
+      to the source was merged with another nearby line.
 
     Parameters
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
-        ra, dec, flux, seg_label, comp, and line_cleaned_flag.
+        ra, dec, flux, seg_label, comp, and line_merged_flag.
 
     Returns
     -------
@@ -2977,15 +2976,15 @@ def unique_sources(table):
         # associated to the source, shall we nevertheless check this is the
         # case?
 
-        line_cleaned_flag = (True if np.sum(group["line_cleaned_flag"]) else
-                             False)
+        line_merged_flag = (True if np.sum(group["line_merged_flag"]) else
+                            False)
 
         result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
-                            seg_label, comp, line_cleaned_flag])
+                            seg_label, comp, line_merged_flag])
 
     return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
                                           "seg_label", "comp",
-                                          "line_cleaned_flag"])
+                                          "line_merged_flag"])
 
 
 def remove_identical_duplicates(table):
@@ -3024,23 +3023,23 @@ def remove_identical_duplicates(table):
 
     return result
 
-def clean_line_table(table, *, z_pix_threshold=5):
-    """Remove duplicated lines and flag cleaned lines.
+
+def merge_similar_lines(table, *, z_pix_threshold=5):
+    """Merge and flag possibily duplicated lines.
 
     Some ORIGIN tables associate several identical lines at different positions
-    to the same object (same ID).  In that case, we don't want duplicated lines
-    (i.e. lines within a given threshold) associated to the same object.
+    to the same object (same ID).  Lines are considered as duplicated if they
+    are withing the given threshold in the spectral (z) axis.
 
-    For each object ID and for each group of lines defined by the spectral
-    proximity threshold, we keep only the brightest line.  We also flag the
-    objects for which we have removed some line because the fluxes are not
-    reliable.
+    We mark the duplicated lines as merged into the line of highest purity and
+    we flag the object as having duplicated lines in the table, as the
+    information may not be reliable.
 
     Parameters
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
-        lbda, z, and flux.
+        z, num_line, and purity.
     z_pix_threshold: int
         Pixel threshold on the spectral axis.  When two lines are nearer than
         this threshold, they are considered as the same line. Note that the
@@ -3050,17 +3049,29 @@ def clean_line_table(table, *, z_pix_threshold=5):
     Returns
     -------
     astropy.table.Table
-        Table with unique lines per ID.
+        Table with the same rows and with the supplementary merged_in and
+        line_merged_flag columns.
 
     """
     table = table.copy()
+
+    # We use the table grouping functionality of astropy to browse by object
+    # and group of identical lines.  Table grouping does not allow to modify
+    # the underlying table, so we first browse the groups and get the indexes
+    # of rows to modify and then we perform the modifications on the full
+    # table.
+    # List of row indexes to flag has having been merged.
+    idx_to_flag = []
+    # Dictionary associating line identifiers (from num_line column) to the
+    # index of the row that have been merged with this line.
+    merge_dict = {}
+    # Column containing the row indexes to access them while in groups.
     table.add_column(Column(data=np.arange(len(table), dtype=int),
                             name="_idx"))
 
-    idx_to_flag = []
-    idx_to_remove = []
-
     for group in table.group_by('ID').groups:
+        # TODO: If astropy guaranties that grouping retains the row order, it
+        # is faster to sort by z before grouping (and before adding _idx).
         group.sort('z')
 
         # Boolean array of the same length of the group indicating for each
@@ -3076,14 +3087,21 @@ def clean_line_table(table, *, z_pix_threshold=5):
 
         for subgroup in group.group_by(line_groups).groups:
             if len(subgroup) > 1:
-                subgroup.sort('flux')
-                idx_to_flag.append(subgroup[-1]['_idx'])
-                idx_to_remove += list(subgroup['_idx'][:-1])
+                subgroup.sort('purity')
+                idx_to_flag += list(subgroup['_idx'])
+                merge_dict[subgroup['num_line'][-1]] = subgroup['_idx'][:-1]
 
-    table['line_cleaned_flag'] = False
-    table['line_cleaned_flag'][idx_to_flag] = True
+    table['line_merged_flag'] = False
+    table['line_merged_flag'][idx_to_flag] = True
 
-    table.remove_rows(idx_to_remove)
+    table.add_column(MaskedColumn(data=np.full(len(table), -9999, dtype=int),
+                                  name="merged_in",
+                                  mask=np.full(len(table), True),
+                                  fill_value=-9999))
+    for line_id, row_indexes in merge_dict.items():
+        table['merged_in'][row_indexes] = line_id
+
     table.remove_columns('_idx')
+    table.sort(['ID', 'z'])
 
     return table
