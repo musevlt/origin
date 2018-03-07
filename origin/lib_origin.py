@@ -3031,7 +3031,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     to the same object (same ID).  Lines are considered as duplicated if they
     are withing the given threshold in the spectral (z) axis.
 
-    We mark the duplicated lines as merged into the line of highest purity and
+    We mark the duplicated lines as merged into the line of highest flux and
     we flag the object as having duplicated lines in the table, as the
     information may not be reliable.
 
@@ -3087,7 +3087,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
 
         for subgroup in group.group_by(line_groups).groups:
             if len(subgroup) > 1:
-                subgroup.sort('purity')
+                subgroup.sort('flux')
                 idx_to_flag += list(subgroup['_idx'])
                 merge_dict[subgroup['num_line'][-1]] = subgroup['_idx'][:-1]
 
