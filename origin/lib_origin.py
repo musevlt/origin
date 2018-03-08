@@ -48,6 +48,7 @@ from astropy.stats import gaussian_sigma_to_fwhm
 from astropy.wcs import WCS
 from functools import wraps
 from joblib import Parallel, delayed
+from photutils import detect_threshold, detect_sources
 from scipy import stats
 from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
@@ -3179,3 +3180,103 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
                                     name=f"STAT{num_line}"))
 
     return result
+
+def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
+                 out_dir, *, mask_size=50):
+    """Create the mask of each source.
+
+    This function create the masks and sky masks of the sources in the line
+    table.  For each source, a mask is created for each line by segmenting the
+    image taken from the correlation cube around the position of the line.
+    Then the mask of all the lines is combined to produce the mask of the
+    source.
+
+    The sky mask of each source is done by taking the sky mask from the
+    correlation map and removing the mask of the source.
+
+    TODO: Implement parallel processing.
+
+    Parameters
+    ----------
+    line_table: astropy.table.Table
+        An ORIGIN table of lines, this table must contain the columns: ID, ra,
+        dec, z, and profile.
+    source_table: astropy.table.Table
+        An ORIGIN table containing the source list.  This table is used to get
+        the position of the source.
+    profile_fwhm: dictionary
+        A dictionary associating to each profile number the corresponding FWHM
+        in pixels.
+    correl_cube: mpdaf.obj.Cube
+        The correlation cube.
+    segmap: mpdaf.obj.Image
+        The segmentation map.
+    out_dir: str
+        The directory into which the masks will be created.
+    mask_size: int
+        The width in pixel for the square masks.
+
+    """
+    source_table = source_table.copy()
+    source_table.add_index('ID')
+
+    # Spacial WCS of the cube
+    spatial_wcs = correl_cube[0, :, :].wcs.wcs
+
+    by_id = line_table.group_by('ID')
+
+    for key, group in zip(by_id.groups.keys, by_id.groups):
+        source_id = key['ID']
+
+        source_ra, source_dec = source_table.loc[source_id]['ra', 'dec']
+        source_x, source_y = spatial_wcs.all_world2pix(
+            source_ra * u.deg, source_dec * u.deg, 0
+        )
+
+        correl = correl_cube.subcube(
+            center=(source_y, source_x),
+            size=mask_size,
+            unit_center=None, unit_size=None
+        )
+
+        # Empty source mask
+        source_mask = correl[0, :, :]
+        source_mask.mask = np.zeros_like(source_mask.data)
+        source_mask.data = np.zeros_like(source_mask.data, dtype=bool)
+
+        # Positions of the group lines in the sub-cube
+        lines_x, lines_y = correl.wcs.wcs.all_world2pix(group['ra'],
+                                                        group['dec'], 0)
+
+        for x_line, y_line, z_line, prof_line in zip(
+                lines_x, lines_y, group['z'], group['profile']):
+            # Integers for pixel positions
+            x_line, y_line = int(x_line), int(y_line)
+            fwhm_line = np.round(profile_fwhm[prof_line]).astype(int)
+
+            corr_image = correl.get_image(
+                    wave=(z_line - fwhm_line, z_line + fwhm_line),
+                    unit_wave=None, is_sum=True)
+
+            # Image segmentation with photoutils. TODO: tweak parameters
+            threshold = detect_threshold(corr_image.data, snr=3)
+            segmap = detect_sources(corr_image.data, threshold, npixels=5)
+            seg_line = segmap.data[x_line, y_line]
+
+            # Add the line mask to the source mask
+            source_mask.data |= (segmap.data == seg_line)
+
+        # Check that there is no unmasked pixels on the edge of the mask
+        is_wrong = (np.sum(source_mask.data[0, :]) +
+                    np.sum(source_mask.data[-1, :]) +
+                    np.sum(source_mask.data[:, 0]) +
+                    np.sum(source_mask.data[:, -1]))
+        if is_wrong:
+            with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
+                out.write(f"{source_id}\n")
+
+        # Fits can't contain boolean array, revert to integer.
+        source_mask.data = source_mask.data.astype(int)
+
+        source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
+                          savemask="none")
