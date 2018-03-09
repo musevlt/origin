@@ -3199,8 +3199,8 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
     Parameters
     ----------
     line_table: astropy.table.Table
-        An ORIGIN table of lines, this table must contain the columns: ID, ra,
-        dec, z, and profile.
+        An ORIGIN table of lines, this table must contain the columns: ID, x0,
+        y0, z0, and profile.
     source_table: astropy.table.Table
         An ORIGIN table containing the source list.  This table is used to get
         the position of the source.
@@ -3223,15 +3223,30 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
     # Spacial WCS of the cube
     spatial_wcs = correl_cube[0, :, :].wcs.wcs
 
+    # Add pixel positions of the sources in the main WCS.
+    source_table['ra'].unit, source_table['dec'].unit = u.deg, u.deg
+    sources_x, sources_y = spatial_wcs.all_world2pix(
+        source_table['ra'], source_table['dec'], 0)
+    source_table.add_column(Column(data=sources_x, name="x"))
+    source_table.add_column(Column(data=sources_y, name="y"))
+
+    # The segmentation must be done at the exact position of the lines found by
+    # ORIGIN (x0, y0, z0) and not the computed “optimal” position (x, y, z, ra,
+    # and dec).  Using this last postion may cause problem when it falls just
+    # outside the segment.  We compute ra0 and dec0 to easily find the line
+    # positions in the sub-cubes.
+    line_table = line_table.copy()
+    ra0, dec0 = spatial_wcs.all_pix2world(
+        line_table['x0'], line_table['y0'], 0)
+    line_table.add_column(Column(data=ra0, name="ra0", unit=u.deg))
+    line_table.add_column(Column(data=dec0, name="dec0", unit=u.deg))
+
     by_id = line_table.group_by('ID')
 
     for key, group in zip(by_id.groups.keys, by_id.groups):
         source_id = key['ID']
 
-        source_ra, source_dec = source_table.loc[source_id]['ra', 'dec']
-        source_x, source_y = spatial_wcs.all_world2pix(
-            source_ra * u.deg, source_dec * u.deg, 0
-        )
+        source_x, source_y = source_table.loc[source_id]['x', 'y']
 
         correl = correl_cube.subcube(
             center=(source_y, source_x),
@@ -3245,11 +3260,11 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
         source_mask.data = np.zeros_like(source_mask.data, dtype=bool)
 
         # Positions of the group lines in the sub-cube
-        lines_x, lines_y = correl.wcs.wcs.all_world2pix(group['ra'],
-                                                        group['dec'], 0)
+        lines_x, lines_y = correl.wcs.wcs.all_world2pix(group['ra0'],
+                                                        group['dec0'], 0)
 
         for x_line, y_line, z_line, prof_line in zip(
-                lines_x, lines_y, group['z'], group['profile']):
+                lines_x, lines_y, group['z0'], group['profile']):
             # Integers for pixel positions
             x_line, y_line = int(x_line), int(y_line)
             fwhm_line = np.round(profile_fwhm[prof_line]).astype(int)
