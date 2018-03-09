@@ -122,28 +122,28 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
         # Combine the line mask to the source mask with OR
         source_mask.data |= (segmap.data == seg_line)
 
-        # If verbose, also plot the masked correlation map of the source.
-        if verbose:
-            masked_cormap = corr_image.data.copy()
-            masked_cormap[~source_mask.data] = np.nan
-            fig, ax = plt.subplots()
-            ax.imshow(masked_cormap)
-            fig.suptitle(f"S{source_id} masked correlation map")
-            fig.savefig(f"{out_dir}/S{source_id}_masked_corr.png")
-            plt.close(fig)
+    # If verbose, also plot the masked correlation map of the source.
+    if verbose:
+        masked_cormap = corr_image.data.copy()
+        masked_cormap[~source_mask.data] = np.nan
+        fig, ax = plt.subplots()
+        ax.imshow(masked_cormap, origin='lower')
+        fig.suptitle(f"S{source_id} masked correlation map")
+        fig.savefig(f"{out_dir}/S{source_id}_masked_corr.png")
+        plt.close(fig)
 
-        # Count number of true pixels in the edges of the mask.  If it's not
-        # 0 that means that the mask touch the edge for the image and there may
-        # be a problem.
-        is_wrong = (np.sum(source_mask.data[0, :]) +
-                    np.sum(source_mask.data[-1, :]) +
-                    np.sum(source_mask.data[:, 0]) +
-                    np.sum(source_mask.data[:, -1]))
+    # Count number of true pixels in the edges of the mask.  If it's not
+    # 0 that means that the mask touch the edge for the image and there may
+    # be a problem.
+    is_wrong = (np.sum(source_mask.data[0, :]) +
+                np.sum(source_mask.data[-1, :]) +
+                np.sum(source_mask.data[:, 0]) +
+                np.sum(source_mask.data[:, -1]))
 
-        # Convert the mask to integer before saving to FITS.
-        source_mask.data = source_mask.data.astype(int)
-        source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
-                          savemask="none")
+    # Convert the mask to integer before saving to FITS.
+    source_mask.data = source_mask.data.astype(int)
+    source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
+                      savemask="none")
 
-        if is_wrong:
-            return source_id
+    if is_wrong:
+        return source_id
