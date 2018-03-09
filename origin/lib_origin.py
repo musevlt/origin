@@ -3261,7 +3261,7 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
             # Image segmentation with photoutils. TODO: tweak parameters
             threshold = detect_threshold(corr_image.data, snr=3)
             segmap = detect_sources(corr_image.data, threshold, npixels=5)
-            seg_line = segmap.data[x_line, y_line]
+            seg_line = segmap.data[y_line, x_line]  # maps are y, x
 
             # Add the line mask to the source mask
             source_mask.data |= (segmap.data == seg_line)
