@@ -48,7 +48,6 @@ from astropy.stats import gaussian_sigma_to_fwhm
 from astropy.wcs import WCS
 from functools import wraps
 from joblib import Parallel, delayed
-from photutils import detect_threshold, detect_sources
 from scipy import stats
 from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
@@ -61,6 +60,8 @@ from time import time
 
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
+
+from .source_masks import gen_source_mask
 
 __version__ = '3.0 beta'
 
@@ -3182,7 +3183,7 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
     return result
 
 def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
-                 out_dir, *, mask_size=50):
+                 out_dir, *, mask_size=50, plot_problems=True):
     """Create the mask of each source.
 
     This function create the masks and sky masks of the sources in the line
@@ -3215,6 +3216,9 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
         The directory into which the masks will be created.
     mask_size: int
         The width in pixel for the square masks.
+    plot_problems: bool
+        If true, the problematic sources will be reprocessed by gen_source_mask
+        in verbose mode to produce various plots of the mask creation process.
 
     """
     source_table = source_table.copy()
@@ -3233,65 +3237,37 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
     # The segmentation must be done at the exact position of the lines found by
     # ORIGIN (x0, y0, z0) and not the computed “optimal” position (x, y, z, ra,
     # and dec).  Using this last postion may cause problem when it falls just
-    # outside the segment.  We compute ra0 and dec0 to easily find the line
-    # positions in the sub-cubes.
+    # outside the segment.  We replace ra, dec, and z by the initial values.
     line_table = line_table.copy()
     ra0, dec0 = spatial_wcs.all_pix2world(
         line_table['x0'], line_table['y0'], 0)
-    line_table.add_column(Column(data=ra0, name="ra0", unit=u.deg))
-    line_table.add_column(Column(data=dec0, name="dec0", unit=u.deg))
+    line_table['ra'], line_table['dec'] = ra0, dec0
+    line_table['z'] = line_table['z0']
+    # We also add a fwhm column containing the FWHM of the line profile as
+    # it is used for mask creation.
+    line_table.add_column(Column(
+        data=[profile_fwhm[profile] for profile in line_table['profile']],
+        name="fwhm"
+    ))
 
     by_id = line_table.group_by('ID')
 
     for key, group in zip(by_id.groups.keys, by_id.groups):
         source_id = key['ID']
-
         source_x, source_y = source_table.loc[source_id]['x', 'y']
 
-        correl = correl_cube.subcube(
-            center=(source_y, source_x),
-            size=mask_size,
-            unit_center=None, unit_size=None
+        gen_mask_return = gen_source_mask(
+            source_id, source_x, source_y,
+            lines=group, correl_cube=correl_cube, cont_sky=None,
+            out_dir=out_dir, radec_is_xy=True
         )
 
-        # Empty source mask
-        source_mask = correl[0, :, :]
-        source_mask.mask = np.zeros_like(source_mask.data)
-        source_mask.data = np.zeros_like(source_mask.data, dtype=bool)
-
-        # Positions of the group lines in the sub-cube
-        lines_x, lines_y = correl.wcs.wcs.all_world2pix(group['ra0'],
-                                                        group['dec0'], 0)
-
-        for x_line, y_line, z_line, prof_line in zip(
-                lines_x, lines_y, group['z0'], group['profile']):
-            # Integers for pixel positions
-            x_line, y_line = int(x_line), int(y_line)
-            fwhm_line = np.round(profile_fwhm[prof_line]).astype(int)
-
-            corr_image = correl.get_image(
-                    wave=(z_line - fwhm_line, z_line + fwhm_line),
-                    unit_wave=None, is_sum=True)
-
-            # Image segmentation with photoutils. TODO: tweak parameters
-            threshold = detect_threshold(corr_image.data, snr=3)
-            segmap = detect_sources(corr_image.data, threshold, npixels=5)
-            seg_line = segmap.data[y_line, x_line]  # maps are y, x
-
-            # Add the line mask to the source mask
-            source_mask.data |= (segmap.data == seg_line)
-
-        # Check that there is no unmasked pixels on the edge of the mask
-        is_wrong = (np.sum(source_mask.data[0, :]) +
-                    np.sum(source_mask.data[-1, :]) +
-                    np.sum(source_mask.data[:, 0]) +
-                    np.sum(source_mask.data[:, -1]))
-        if is_wrong:
+        if gen_mask_return is not None:
             with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
-                out.write(f"{source_id}\n")
-
-        # Fits can't contain boolean array, revert to integer.
-        source_mask.data = source_mask.data.astype(int)
-
-        source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
-                          savemask="none")
+                out.write(f"{gen_mask_return}\n")
+            if plot_problems:
+                gen_mask_return = gen_source_mask(
+                    source_id, source_x, source_y,
+                    lines=group, correl_cube=correl_cube, cont_sky=None,
+                    out_dir=out_dir, radec_is_xy=True, verbose=True
+                )
