@@ -122,14 +122,13 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
         # Combine the line mask to the source mask with OR
         source_mask.data |= (segmap.data == seg_line)
 
-    # If verbose, also plot the masked correlation map of the source.
+    # If verbose, also plot the masked of each source.
     if verbose:
-        masked_cormap = corr_image.data.copy()
-        masked_cormap[~source_mask.data] = np.nan
         fig, ax = plt.subplots()
-        ax.imshow(masked_cormap, origin='lower')
-        fig.suptitle(f"S{source_id} masked correlation map")
-        fig.savefig(f"{out_dir}/S{source_id}_masked_corr.png")
+        im = ax.imshow(source_mask.data, origin='lower')
+        fig.colorbar(im)
+        fig.suptitle(f"S{source_id} mask")
+        fig.savefig(f"{out_dir}/S{source_id}_mask.png")
         plt.close(fig)
 
     # Count number of true pixels in the edges of the mask.  If it's not
