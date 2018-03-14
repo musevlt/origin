@@ -35,16 +35,15 @@ import astropy.units as u
 import logging
 import numpy as np
 import os.path
-import pyfftw
 
 from astropy.table import Table, Column
-from astropy.utils.console import ProgressBar as _ProgressBar
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
 from functools import wraps
 from joblib import Parallel, delayed
-from scipy import stats
+from numpy import fft
+from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
@@ -85,8 +84,22 @@ def isnotebook():  # pragma: no cover
         return False      # Probably standard Python interpreter
 
 
-def ProgressBar(*args):
-    return _ProgressBar(*args, ipython_widget=isnotebook())
+def ProgressBar(*args, **kwargs):
+    from tqdm import tqdm, tqdm_notebook
+    func = tqdm_notebook if isnotebook() else tqdm
+    return func(*args, **kwargs)
+
+
+def orthogonal_projection(a, b):
+    """Compute the orthogonal projection: ``np.dot(np.dot(a, a.T), b)``."""
+    # Using multi_dot which is faster than np.dot(np.dot(a, a.T), b)
+    # Another option would be to use einsum, less readable but also very
+    # fast with Numpy 1.14+ and optimize=True. This seems to be as fast as
+    # multi_dot.
+    # return np.einsum('i,j,jk->ik', a, a, b, optimize=True)
+    if a.ndim == 1:
+        a = a[:, None]
+    return np.linalg.multi_dot([a, a.T, b])
 
 
 @timeit
@@ -141,7 +154,7 @@ def DCTMAT(nl, order):
 
     """
     yy, xx = np.mgrid[:nl, :order + 1]
-    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi * yy / nl))
+    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi / nl) * yy)
     D0[0, :] /= np.sqrt(2)
     return D0
 
@@ -182,7 +195,9 @@ def dct_residual(w_raw, order, var, approx):
     else:
         w_raw_var = w_raw / var
         D0T = D0.T
-        cont = Parallel()(delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j]) for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
+        cont = Parallel()(
+            delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j])
+            for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
         cont = np.asarray(cont).T.reshape(w_raw.shape)
     #    cont = np.empty_like(w_raw)
     #    for i in range(w_raw.shape[1]):
@@ -688,23 +703,20 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     """
     cube_faint = cube_std.copy()
     mapO2 = np.zeros(cube_std.shape[1:])
-    # Spatial segmentation
     nstop = 0
-    with ProgressBar(NbArea) as bar:
-        for area_ind in range(1, NbArea + 1):
-            # limits of each spatial zone
-            ksel = (areamap == area_ind)
+    for area_ind in range(1, NbArea + 1):
+        # limits of each spatial zone
+        ksel = (areamap == area_ind)
 
-            # Data in this spatio-spectral zone
-            cube_temp = cube_std[:, ksel]
+        # Data in this spatio-spectral zone
+        cube_temp = cube_std[:, ksel]
 
-            thr = threshold_test[area_ind - 1]
-            test = testO2[area_ind - 1]
-            cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
-                cube_temp, test, thr, Noise_population, itermax)
-            mapO2[ksel] = mO2
-            nstop += kstop
-            bar.update()
+        thr = threshold_test[area_ind - 1]
+        test = testO2[area_ind - 1]
+        cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
+            cube_temp, test, thr, Noise_population, itermax)
+        mapO2[ksel] = mO2
+        nstop += kstop
 
     return cube_faint, mapO2, nstop
 
@@ -778,48 +790,46 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     """
     logger = logging.getLogger(__name__)
 
-    faint = cube_in.copy()
-
-    nl, nynx = faint.shape
-
     # nuisance part
     pypx = np.where(test > thresO2)[0]
-
     npix = len(pypx)
 
-    mapO2 = np.zeros(nynx)
+    faint = cube_in.copy()
+    mapO2 = np.zeros(faint.shape[1])
     nstop = 0
 
     with ProgressBar(npix) as bar:
         # greedy loop based on test
         tmp = 0
-        while True:
+        while len(pypx) > 0:
             tmp += 1
             mapO2[pypx] += 1
-            if len(pypx) == 0:
-                break
             if tmp > itermax:
                 nstop += 1
-                logger.info('Warning iterations stopped at %d' , tmp)
+                logger.info('Warning iterations stopped at %d', tmp)
                 break
+
             # vector data
             test_v = np.ravel(test)
             test_v = test_v[test_v > 0]
             nind = np.where(test_v <= thresO2)[0]
             sortind = np.argsort(test_v[nind])
+
             # at least one spectra is used to perform the test
-            l = 1 + int(len(nind) / Noise_population)
+            nb = 1 + int(len(nind) / Noise_population)
+
             # background estimation
-            b = np.mean(faint[:, nind[sortind[:l]]], axis=1)
+            b = np.mean(faint[:, nind[sortind[:nb]]], axis=1)
+
             # cube segmentation
             x_red = faint[:, pypx]
-            # orthogonal projection with background
-            x_red -= np.dot(np.dot(b[:, None], b[None, :]), x_red)
+
+            # orthogonal projection with background.
+            x_red -= orthogonal_projection(b, x_red)
             x_red /= np.nansum(b**2)
 
             # remove spectral mean from residual data
-            mean_in_pca = np.mean(x_red, axis=1)
-            x_red_nomean = x_red - mean_in_pca[:, np.newaxis]
+            x_red -= x_red.mean(axis=1)[:, np.newaxis]
 
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
@@ -833,13 +843,12 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
                 # stop iteration earlier in order to keep residual sources
                 # with the hypothesis that this spectrum is slightly above
                 # the threshold (what we observe in data)
-                U, s, V = np.linalg.svd(x_red_nomean, full_matrices=False)
+                U, s, V = np.linalg.svd(x_red, full_matrices=False)
             else:
-                U, s, V = svds(x_red_nomean, k=1)
+                U, s, V = svds(x_red, k=1)
 
             # orthogonal projection
-            xest = np.dot(np.dot(U, U.T), faint)
-            faint -= xest
+            faint -= orthogonal_projection(U[:, 0], faint)
 
             # test
             test = O2test(faint)
@@ -870,6 +879,7 @@ def O2test(Cube_in):
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
     """
+    # np.einsum('ij,ij->j', Cube_in, Cube_in) / Cube_in.shape[0]
     return np.mean(Cube_in**2, axis=0)
 
 
@@ -965,42 +975,86 @@ def Correlation_GLR_test_zone(cube, sigma, PSF_Moffat, weights, Dico,
     longxy = int(sizpsf // 2)
 
     Nl, Ny, Nx = cube.shape
-
-    correl = np.zeros((Nl, Ny, Nx))
-    correl_min = np.zeros((Nl, Ny, Nx))
-    profile = np.zeros((Nl, Ny, Nx))
+    correl = np.zeros(cube.shape)
+    correl_min = np.zeros(cube.shape)
+    profile = np.zeros(cube.shape)
 
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             logger.info('Area %d,%d / (%d,%d)',
                         numy + 1, numx + 1, NbSubcube, NbSubcube)
-            # limits of each spatial zone
+            # limits of each spatial zone, with PSF margins
             x1 = np.maximum(0, intx[numx] - longxy)
             x2 = np.minimum(intx[numx + 1] + longxy, Nx)
             y1 = np.maximum(0, inty[numy + 1] - longxy)
             y2 = np.minimum(inty[numy] + longxy, Ny)
 
+            mini_cube = cube[:, y1:y2, x1:x2]
+            mini_sigma = sigma[:, y1:y2, x1:x2]
+            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat,
+                                            weights, Dico, threads)
+
             x11 = intx[numx] - x1
             y11 = inty[numy + 1] - y1
             x22 = intx[numx + 1] - x1
             y22 = inty[numy] - y1
-
-            mini_cube = cube[:, y1:y2, x1:x2]
-            mini_sigma = sigma[:, y1:y2, x1:x2]
-
-            c, p, cm = Correlation_GLR_test(mini_cube, mini_sigma, PSF_Moffat,
-                                            weights, Dico, threads)
-
-            correl[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                c[:, y11:y22, x11:x22]
-
-            profile[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                p[:, y11:y22, x11:x22]
-
-            correl_min[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] = \
-                cm[:, y11:y22, x11:x22]
+            sy = slice(inty[numy + 1], inty[numy])
+            sx = slice(intx[numx], intx[numx + 1])
+            correl[:, sy, sx] = c[:, y11:y22, x11:x22]
+            profile[:, sy, sx] = p[:, y11:y22, x11:x22]
+            correl_min[:, sy, sx] = cm[:, y11:y22, x11:x22]
 
     return correl, profile, correl_min
+
+
+def _convolve_fsf(psf, cube, sigma, weights=None):
+    # Inverse of the MUSE covariance
+    inv_var = 1. / sigma
+    # data cube weighted by the MUSE covariance
+    cube_var = cube * np.sqrt(inv_var)
+
+    if weights is not None:
+        cube_var *= weights
+        inv_var *= weights
+
+    psf = np.ascontiguousarray(psf[::-1, ::-1])
+    psf -= psf.mean()
+
+    # build a weighting map per PSF and convolve
+    cube_fsf = fftconvolve(cube_var, psf, mode='same')
+
+    # Spatial part of the norm of the 3D atom
+    psf **= 2
+    norm_fsf = fftconvolve(inv_var, psf, mode='same')
+
+    return cube_fsf, norm_fsf
+
+
+def _convolve_profile(Dico, cube_fft, norm_fft, fshape, n_jobs, parallel):
+    # Second cube of correlation values
+    dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
+    cube_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
+                                      func=fft.irfftn)
+    dico_fft = fft.rfftn(Dico ** 2, fshape)[:, None] * norm_fft
+    norm_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
+                                      func=fft.irfftn)
+
+    # dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
+    # cube_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
+    # dico_fft = fft.rfftn(Dico_sq, fshape)[:, None] * norm_fft
+    # norm_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
+
+    norm_profile[norm_profile <= 0] = np.inf
+    np.sqrt(norm_profile, out=norm_profile)
+    cube_profile /= norm_profile
+
+    return cube_profile
+
+
+def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
+    arr = np.array_split(arr, nslices, axis=-1)
+    out = parallel(delayed(func)(chunk, shape, axes=(0,)) for chunk in arr)
+    return np.concatenate(out, axis=-1)
 
 
 @timeit
@@ -1036,155 +1090,78 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     Author: Antony Schutz (antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
-    # data cube weighted by the MUSE covariance
-    cube_var = cube / np.sqrt(sigma)
-    # Inverse of the MUSE covariance
-    inv_var = 1. / sigma
 
     # Dimensions of the data
-    shape = cube_var.shape
-    Nz, Ny, Nx = cube_var.shape
+    Nz, Ny, Nx = cube.shape
 
+    # Spatial convolution of the weighted data with the zero-mean FSF
+    logger.info('Step 1/3 and 2/3: '
+                'Spatial convolution of weighted data with the zero-mean FSF, '
+                'Computing Spatial part of the norm of the 3D atoms')
     if weights is None:  # one FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with '
-                    'the zero-mean FSF')
-        PSF_Moffat_m = np.ascontiguousarray(PSF_Moffat[:, ::-1, ::-1])
-        PSF_Moffat_m -= np.mean(PSF_Moffat_m, axis=(1, 2))[:, None, None]
+        PSF_Moffat = [PSF_Moffat]
+        weights = [None]
 
-        cube_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
-            cube_fsf[i] = fftconvolve(cube_var[i], PSF_Moffat_m[i],
-                                      mode='same')
-        del cube_var
+    nfields = len(PSF_Moffat)
 
-        PSF_Moffat_m **= 2
-
-        # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
-                    'atoms')
-        norm_fsf = np.empty(shape)
-        for i in ProgressBar(list(range(Nz))):
-            norm_fsf[i] = fftconvolve(inv_var[i], PSF_Moffat_m[i], mode='same')
-        del PSF_Moffat_m, inv_var
-    else:  # several FSF
-        # Spatial convolution of the weighted data with the zero-mean FSF
-        logger.info('Step 1/3 Spatial convolution of the weighted data with '
-                    'the zero-mean FSF')
-        nfields = len(PSF_Moffat)
-        PSF_Moffat_m = []
-        for n in range(nfields):
-            PSF_m = np.ascontiguousarray(PSF_Moffat[n][:, ::-1, ::-1])
-            PSF_m -= np.mean(PSF_m, axis=(1, 2))[:, np.newaxis, np.newaxis]
-            PSF_Moffat_m.append(PSF_m)
-
-        # build a weighting map per PSF and convolve
-        cube_fsf = np.zeros(shape, dtype=float)
-        for i in ProgressBar(list(range(Nz))):
-            for n in range(nfields):
-                cube_fsf[i] += fftconvolve(weights[n] * cube_var[i],
-                                           PSF_Moffat_m[n][i], mode='same')
-        del cube_var
-
-        for n in range(nfields):
-            PSF_Moffat_m[n] **= 2
-
-        # Spatial part of the norm of the 3D atom
-        logger.info('Step 2/3 Computing Spatial part of the norm of the 3D '
-                    'atoms')
-        norm_fsf = np.zeros(shape, dtype=float)
-        for i in ProgressBar(list(range(Nz))):
-            for n in range(nfields):
-                norm_fsf[i] += fftconvolve(weights[n] * inv_var[i],
-                                           PSF_Moffat_m[n][i], mode='same')
-        del PSF_Moffat_m, inv_var
+    with Parallel(n_jobs=threads) as parallel:
+        for nf in range(nfields):
+            res = parallel(ProgressBar([
+                delayed(_convolve_fsf)(PSF_Moffat[nf][i], cube[i],
+                                       sigma[i], weights=weights[nf])
+                for i in range(Nz)
+            ]))
+            res = [np.stack(arr) for arr in zip(*res)]
+            if nf == 0:
+                cube_fsf, norm_fsf = res
+            else:
+                cube_fsf += res[0]
+                norm_fsf += res[1]
 
     # First cube of correlation values
     # initialization with the first profile
     logger.info('Step 3/3 Computing second cube of correlation values')
-    profile = np.empty(shape, dtype=np.int)
-    correl = np.full(shape, -np.inf)
-    correl_min = np.full(shape, np.inf)
 
-    profile = np.empty(shape, dtype=np.int)
-    correl = np.full(shape, -np.inf)
-    correl_min = np.full(shape, np.inf)
     Dico = np.array(Dico)
     Dico -= np.mean(Dico, axis=1)[:, None]
-    Dico_sq = Dico ** 2
 
-    if threads == 1:
-        for k in ProgressBar(list(range(len(Dico)))):
-            # Second cube of correlation values
-            d_j = Dico[k][:, None, None]
-            d_j2 = Dico_sq[k][:, None, None]
-            cube_profile = fftconvolve(cube_fsf, d_j, mode='same')
-            norm_profile = fftconvolve(norm_fsf, d_j2, mode='same')
-            norm_profile[norm_profile <= 0] = np.inf
-            cube_profile /= np.sqrt(norm_profile)
+    s1 = np.array(cube_fsf.shape)
+    s2 = np.array((Dico.shape[1], 1, 1))
+    fftshape = s1 + s2 - 1
+    fshape = [fftpack.helper.next_fast_len(int(d)) for d in fftshape[:1]]
+    startind = (fftshape - s1) // 2
+    endind = startind + s1
+    cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
 
+    with Parallel(n_jobs=threads, backend='threading') as parallel:
+        cube_fft = _convolve_spectral(parallel, threads, cube_fsf, fshape,
+                                      func=fft.rfftn)
+        norm_fft = _convolve_spectral(parallel, threads, norm_fsf, fshape,
+                                      func=fft.rfftn)
+
+    # cube_fft, norm_fft = Parallel(n_jobs=min(2, threads), backend='threading')(
+    #     delayed(fft.rfftn)(arr, fshape, axes=(0,))
+    #     for arr in (cube_fsf, norm_fsf))
+
+    cube_fft = cube_fft.reshape(cube_fft.shape[0], -1)
+    norm_fft = norm_fft.reshape(norm_fft.shape[0], -1)
+    profile = np.empty((Nz, Ny * Nx), dtype=np.int)
+    correl = np.full((Nz, Ny * Nx), -np.inf)
+    correl_min = np.full((Nz, Ny * Nx), np.inf)
+
+    with Parallel(n_jobs=threads, backend='threading') as parallel:
+        for k in ProgressBar(range(len(Dico))):
+            cube_profile = _convolve_profile(Dico[k], cube_fft, norm_fft,
+                                             fshape, threads, parallel)
+            cube_profile = cube_profile[cslice[0]]
+            # norm_profile = norm_profile[cslice]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
             np.minimum(correl_min, cube_profile, out=correl_min)
-    else:
 
-        ndico = Dico.shape[1]
-        s = Nz + ndico - 1
-        if ndico / 2 == ndico // 2:
-            cc1 = ndico // 2 - 1
-            cc2 = -ndico // 2
-        else:
-            cc1 = ndico // 2
-            cc2 = -ndico // 2 + 1
-
-        logger.info('Compute the FFT planes...')
-        temp = pyfftw.empty_aligned(s, dtype='float64')
-        fd_j = pyfftw.empty_aligned(s // 2 + 1, dtype='complex128')
-        flags = ['FFTW_DESTROY_INPUT', 'FFTW_PATIENT']
-        fftd_j = pyfftw.FFTW(temp, fd_j, direction='FFTW_FORWARD', flags=flags,
-                             threads=threads)
-        temp2 = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-        ffsf = pyfftw.empty_aligned((s // 2 + 1, Ny, Nx), dtype='complex128')
-        fftfsf = pyfftw.FFTW(temp2, ffsf, direction='FFTW_FORWARD', axes=[0],
-                             flags=flags, threads=threads)
-        temp3 = pyfftw.empty_aligned((s // 2 + 1, Ny, Nx), dtype='complex128')
-        res = pyfftw.empty_aligned((s, Ny, Nx), dtype='float64')
-        ifft_object = pyfftw.FFTW(temp3, res, direction='FFTW_BACKWARD',
-                                  axes=[0], flags=flags, threads=threads)
-
-        for k in ProgressBar(list(range(len(Dico)))):
-
-            # fftconvolve(cube_fsf[:,x,y], d_j)
-            d_j = Dico[k]
-            temp[:ndico] = d_j
-            temp[ndico:] = 0
-            fftd_j()  # fd_j=fft(d_j)
-
-            temp2[:Nz, :, :] = cube_fsf[:, :, :]
-            temp2[Nz:, :, :] = 0
-            fftfsf()  # fsf = fft(cube_fsf)
-            temp3[:] = ffsf[:, :, :] * fd_j[:, np.newaxis, np.newaxis]
-            ifft_object()
-            cube_profile = res[cc1:cc2, :, :].copy()
-
-            # fftconvolve(norm_fsf[:,x,y], d_j**2)
-            temp[:ndico] = Dico_sq[k]
-            temp[ndico:] = 0
-            fftd_j()  # fprof=fft(d_j**2)
-
-            temp2[:Nz, :, :] = norm_fsf[:, :, :]
-            temp2[Nz:, :, :] = 0
-            fftfsf()
-            temp3[:] = ffsf[:] * fd_j[:, np.newaxis, np.newaxis]
-            ifft_object()
-            norm_profile = res[cc1:cc2, :, :].copy()
-
-            norm_profile[norm_profile <= 0] = np.inf
-            tmp = cube_profile / np.sqrt(norm_profile)
-            profile[tmp > correl] = k
-            correl = np.maximum(correl, tmp)
-            correl_min = np.minimum(correl_min, tmp)
-
+    profile = profile.reshape(Nz, Ny, Nx)
+    correl = correl.reshape(Nz, Ny, Nx)
+    correl_min = correl_min.reshape(Nz, Ny, Nx)
     return correl, profile, correl_min
 
 
@@ -1678,7 +1655,8 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     # LPI iout2 pour debbugger
 
 
-def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, filter_act, both=True):
+def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
+                                 filter_act, both=True):
     """Filter the correl>thresh in + DATA by the correl>thresh in - DATA
     if both = True do the same in opposite
 
@@ -1693,18 +1671,10 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size, 
            cube of local maxima from minus minimum correlation
     thresh : float
              a threshold value
-
     spat_size : int
                 spatiale size of the spatiale filter
     spect_size : int
                  spectral lenght of the spectral filter
-    map_in  : array
-              labels of source segmentation basedd on continuum
-    tol_spat : int
-               spatiale tolerance for the spatial merging
-
-    tol_spec : int
-               spectrale tolerance for the spectral merging
     filter_act : Bool
                  activate or deactivate the spatio spectral filter
                  default: True
@@ -1896,6 +1866,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         # first exploration
         index_pval1 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts1))
+        # make sure that last point is thresh_max (and not an
+        # approximate value due to linspace)
+        index_pval1[-1] = thresh_max
+
         logger.debug('Iter 1 Threshold min %f max %f npts %d',
                      thresh_min, thresh_max, len(index_pval1))
         for k, thresh in enumerate(ProgressBar(list(index_pval1[::-1]))):
@@ -1921,6 +1895,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         # 2nd iter
         index_pval3 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts2))
+        # make sure that last point is thresh_max (and not an
+        # approximate value due to linspace)
+        index_pval3[-1] = thresh_max
+
         logger.debug('Iter 2 Threshold min %f max %f npts %d',
                      index_pval3[0], index_pval3[-1], len(index_pval3))
         for k, thresh in enumerate(ProgressBar(list(index_pval3))):
@@ -2245,7 +2223,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     U, s, V = svds(data_in_pca, k=1)
 
     # orthogonal projection
-    xest = np.dot(np.dot(U, np.transpose(U)), data_in_pca)
+    xest = orthogonal_projection(U, data_in_pca)
     residual = data_std - np.reshape(xest, (nl, sizpsf, sizpsf))
 
     # LS deconv
@@ -2267,11 +2245,10 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     if order_dct is not None:
         # denoise eigen vector with DCT
         D0 = DCTMAT(nl, order_dct)
-        A = np.dot(D0, D0.T)
-        U = np.dot(A, U)
+        U = orthogonal_projection(D0, U)
 
     # orthogonal projection
-    xest = np.dot(np.dot(U, np.transpose(U)), data_st_pca)
+    xest = orthogonal_projection(U, data_st_pca)
     cont = np.reshape(xest, (nl, sizpsf, sizpsf))
     residual = data_std - cont
 
