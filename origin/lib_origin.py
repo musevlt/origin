@@ -3182,40 +3182,49 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
 
     return result
 
-def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
-                 out_dir, *, mask_size=50, plot_problems=True):
+
+def create_masks(line_table, source_table, profile_fwhm, correl_cube,
+                 correl_threshold, std_cube, std_threshold, segmap, out_dir, *,
+                 mask_size=50, seg_thres_factor=.5, plot_problems=True):
     """Create the mask of each source.
 
-    This function create the masks and sky masks of the sources in the line
-    table.  For each source, a mask is created for each line by segmenting the
-    image taken from the correlation cube around the position of the line.
-    Then the mask of all the lines is combined to produce the mask of the
-    source.
+    This function creates the masks and sky masks of the sources in the line
+    table using the ``origin.source_masks.gen_source_mask`` function on each
+    source. The primary source masks are created using the correl_cube while
+    the complementary source masks are created using the std_cube.
 
-    The sky mask of each source is done by taking the sky mask from the
-    correlation map and removing the mask of the source.
+    The correl_cube and std_cube are expected to have the same WCS.
 
     TODO: Implement parallel processing.
 
     Parameters
     ----------
     line_table: astropy.table.Table
-        An ORIGIN table of lines, this table must contain the columns: ID, x0,
-        y0, z0, and profile.
+        ORIGIN table of lines, this table must contain the columns: ID, x0, y0,
+        z0, comp, and profile.
     source_table: astropy.table.Table
-        An ORIGIN table containing the source list.  This table is used to get
-        the position of the source.
+        ORIGIN table containing the source list.  This table is used to get the
+        position of the source.
     profile_fwhm: dictionary
-        A dictionary associating to each profile number the corresponding FWHM
-        in pixels.
+        Dictionary associating to each profile number the corresponding FWHM in
+        pixels.
     correl_cube: mpdaf.obj.Cube
-        The correlation cube.
+        Correlation cube where primary sources where detected.
+    correl_threshold: float
+        Threshold used for detection of sources in the correl_cube.
+    std_cube: mpdaf.obj.Cube
+        STD cube where complementary sources where detected.
+    std_threshold: float
+        Threshold used for detection of sources in the STD cube.
     segmap: mpdaf.obj.Image
-        The segmentation map.
+        Segmentation map.
     out_dir: str
-        The directory into which the masks will be created.
+        Directory into which the masks will be created.
     mask_size: int
-        The width in pixel for the square masks.
+        Width in pixel for the square masks.
+    seg_thres_factor: float
+        Factor applied to the detection thresholds to get the threshold used
+        for segmentation. The default is to take half of it.
     plot_problems: bool
         If true, the problematic sources will be reprocessed by gen_source_mask
         in verbose mode to produce various plots of the mask creation process.
@@ -3256,10 +3265,17 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
 
+        if source_table.loc[source_id]['comp'] == 0:
+            detection_cube = correl_cube
+            threshold = correl_threshold * seg_thres_factor
+        else:
+            detection_cube = std_cube
+            threshold = std_threshold * seg_thres_factor
+
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
-            lines=group, correl_cube=correl_cube, cont_sky=None,
-            out_dir=out_dir, radec_is_xy=True
+            lines=group, detection_cube=detection_cube, threshold=threshold,
+            cont_sky=None, out_dir=out_dir, radec_is_xy=True
         )
 
         if gen_mask_return is not None:
@@ -3268,6 +3284,7 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube, segmap,
             if plot_problems:
                 gen_mask_return = gen_source_mask(
                     source_id, source_x, source_y,
-                    lines=group, correl_cube=correl_cube, cont_sky=None,
-                    out_dir=out_dir, radec_is_xy=True, verbose=True
+                    lines=group, detection_cube=detection_cube,
+                    threshold=threshold, cont_sky=None, out_dir=out_dir,
+                    radec_is_xy=True, verbose=True
                 )

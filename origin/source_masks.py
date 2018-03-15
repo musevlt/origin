@@ -5,16 +5,18 @@ import numpy as np
 from photutils import detect_sources, detect_threshold
 
 
-def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
-                    out_dir, *, mask_size=50, seg_snr=3, seg_npixel=5,
+def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
+                    cont_sky, out_dir, *, mask_size=50, seg_npixel=5,
                     radec_is_xy=False, verbose=False):
-    """Generate a mask for the source segmenting the correlation maps.
+    """Generate a mask for the source segmenting the detection cube.
 
     This function generates a mask for a source by combining the masks of each
-    of its lines created by the segmentation of the correlation map of each
-    one.
+    of its lines.  The mask of a line is created by segmenting the max image
+    extracted from the detection cube around the line wavelength.  For primary
+    ORIGIN sources, the correlation cube should be used, for complementary
+    sources, the STD cube should be used.
 
-    The sky mask of each source is computing by intersecting the reverse of the
+    The sky mask of each source is computed by intersecting the reverse of the
     source mask and the continuum sky mask.
     TODO: Implement the sky mask.
 
@@ -37,19 +39,19 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
         - ra, dec: the position of the line in degrees
         - z: the pixel position of the line in the wavelength axis
         - fwhm: the full with at half maximum of the line in pixels
-    correl_cube: mpdaf.obj.Cube
-        The correlation cube.
+    detection_cube: mpdaf.obj.Cube
+        Cube the lines where detected in.
+    threshold: float
+        Threshold used for segmentation. Should be lower (e.g. 50%) than the
+        threshold used for source detection.
     cont_sky: mpdaf.obj.Image
-        The continuum sky mask.
+        Continuum sky mask.
     out_dir: string
         Name of the output directory to create the masks in.
     mask_size: int
-        The size in pixels of the (square) masks.
-    seg_snr: float
-        The signal to noise ratio used by photutils to compute the threshold
-        during the segmentation.
+        Size in pixels of the (square) masks.
     seg_npixel:
-        The minimum number of pixels used by photutils for the segmentation.
+        Minimum number of pixels used by photutils for the segmentation.
     radec_is_xy: bool
         True if the position is given in pixel instead of RA, Dec.
     verbose: true
@@ -63,21 +65,21 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
     if radec_is_xy:
         source_x, source_y = ra, dec
     else:
-        source_x, source_y = correl_cube[0, :, :].wcs.wcs.all_world2pix(
+        source_x, source_y = detection_cube[0, :, :].wcs.wcs.all_world2pix(
             ra, dec, 0)
 
-    subcorrel = correl_cube.subcube(
+    sub_cube = detection_cube.subcube(
         center=(source_y, source_x), size=mask_size,
         unit_center=None, unit_size=None)
 
     # Empty (0) source mask
-    source_mask = subcorrel[0, :, :]
+    source_mask = sub_cube[0, :, :]
     source_mask.mask = np.zeros_like(source_mask.data)
     source_mask.data = np.zeros_like(source_mask.data, dtype=bool)
 
     # Pixel position of the lines in the sub-cube
     lines['ra'].unit, lines['dec'].unit = u.deg, u.deg
-    lines_x, lines_y = subcorrel.wcs.wcs.all_world2pix(
+    lines_x, lines_y = sub_cube.wcs.wcs.all_world2pix(
         lines['ra'], lines['dec'], 0)
 
     for x_line, y_line, z_line, fwhm_line, num_line in zip(
@@ -87,12 +89,11 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
         min_z = int(z_line - fwhm_line)
         max_z = int(z_line + fwhm_line)
 
-        corr_image = subcorrel.get_image(
-            wave=(min_z, max_z), unit_wave=None, is_sum=True)
+        max_map = sub_cube.get_image(
+            wave=(min_z, max_z), unit_wave=None, agg_method="max")
 
-        # Image segmentation with photutils.
-        threshold = detect_threshold(corr_image.data, snr=seg_snr)
-        segmap = detect_sources(corr_image.data, threshold, seg_npixel)
+        max_map.data[max_map.mask] = -9999.
+        segmap = detect_sources(max_map.data, threshold, seg_npixel)
 
         # Segment associated to the line (maps are y, x)
         # The position to look for the value of the segment must be integers,
@@ -102,9 +103,10 @@ def gen_source_mask(source_id, ra, dec, lines, correl_cube, cont_sky,
         seg_line = segmap.data[y_line, x_line]
 
         if verbose:
+            max_map.write(f"{out_dir}/S{source_id}_L{num_line}_cor.fits")
             # Correlation map plot
             fig, ax = plt.subplots()
-            im = ax.imshow(corr_image.data, origin='lower')
+            im = ax.imshow(max_map.data, origin='lower')
             ax.scatter(x_line, y_line)
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / correlation map")
