@@ -14,48 +14,52 @@ origin.py contains an oriented-object interface to run the ORIGIN software
 
 from __future__ import absolute_import, division
 
-from astropy.coordinates import SkyCoord
-from astropy.io import fits
-from astropy.table import Table, vstack
 import astropy.units as u
 import glob
 import logging
 import matplotlib.pyplot as plt
-from matplotlib.colors import BoundaryNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
-from scipy import stats
 import os.path
 import shutil
 import sys
 import warnings
 import yaml
 
+from astropy.coordinates import SkyCoord
+from astropy.io import fits
+from astropy.table import Table, vstack
+from matplotlib.colors import BoundaryNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy import stats
+
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.sdetect import Catalog
 from mpdaf.tools import write_hdulist_to
-from .lib_origin import Spatial_Segmentation, \
-    Correlation_GLR_test, Correlation_GLR_test_zone, \
-    Construct_Object_Catalogue, \
-    dct_residual, \
-    Compute_Standardized_data, \
-    Compute_GreedyPCA_area, \
-    Compute_local_max_zone, \
-    Compute_PCA_threshold, \
-    Create_local_max_cat, \
-    Estimation_Line, \
-    Compute_threshold_purity, \
-    CleanCube, \
-    Purity_Estimation, \
-    area_segmentation_square_fusion, \
-    area_segmentation_sources_fusion, \
-    area_segmentation_convex_fusion, \
-    area_growing, \
-    area_segmentation_final, \
-    __version__
 
+from .lib_origin import (
+    area_growing,
+    area_segmentation_convex_fusion,
+    area_segmentation_final,
+    area_segmentation_sources_fusion,
+    area_segmentation_square_fusion,
+    CleanCube,
+    Compute_GreedyPCA_area,
+    Compute_local_max_zone,
+    Compute_PCA_threshold,
+    Compute_Standardized_data,
+    Compute_threshold_purity,
+    Construct_Object_Catalogue,
+    Correlation_GLR_test,
+    Correlation_GLR_test_zone,
+    Create_local_max_cat,
+    dct_residual,
+    Estimation_Line,
+    Purity_Estimation,
+    Spatial_Segmentation,
+    __version__
+)
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -97,9 +101,9 @@ class ORIGIN(object):
 
         Attributes
         ----------
-        path                   : string
+        path                   : str
                                  Path where the ORIGIN data will be stored.
-        name                   : string
+        name                   : str
                                  Name of the session and basename for the
                                  sources.
         param                  : dict
@@ -108,9 +112,9 @@ class ORIGIN(object):
                                  Raw data.
         var                    : array (Nz, Ny, Nx)
                                  Variance.
-        Nx                     : integer
+        Nx                     : int
                                  Number of columns
-        Ny                     : integer
+        Ny                     : int
                                  Number of rows
         Nz                     : int
                                  Number of spectral channels
@@ -145,7 +149,7 @@ class ORIGIN(object):
         self.ima_dct           : `~mpdaf.obj.Image`
                                  Mean of DCT continuum cube along the
                                  wavelength axis. Result of step01.
-        nbAreas                : integer
+        nbAreas                : int
                                  Number of area (segmentation) for the PCA
                                  computation. Result of step02.
         areamap                : `~mpdaf.obj.Image`
@@ -220,27 +224,27 @@ class ORIGIN(object):
                                  Catalog returned by step09.
     """
 
-    def __init__(self, path, name, param, filename, fieldmap, profiles, PSF,
-                 FWHM_PSF, imawhite, cube_std, cont_dct,
-                 areamap, thresO2, testO2, histO2, binO2, meaO2, stdO2,
-                 cube_faint, mapO2, cube_correl, maxmap, cube_profile,
-                 cube_local_max, cube_local_min, segmap, Pval_r, index_pval,
-                 Det_M, Det_m, Cat0, zm, ym, xm, Pval_r_comp, index_pval_comp,
-                 Det_M_comp, Det_m_comp, Cat1, spectra, Cat2):
+    def __init__(self, filename, segmap, name='origin', path='.',
+                 fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
+                 param=None, imawhite=None, cube_std=None, cont_dct=None,
+                 areamap=None, thresO2=None, testO2=None, histO2=None,
+                 binO2=None, meaO2=None, stdO2=None, cube_faint=None,
+                 mapO2=None, cube_correl=None, maxmap=None, cube_profile=None,
+                 cube_local_max=None, cube_local_min=None, Pval_r=None,
+                 index_pval=None, Det_M=None, Det_m=None,
+                 Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
+                 index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
+                 Cat1=None, spectra=None, Cat2=None):
         # loggers
         setup_logging(name='origin', level=logging.DEBUG,
                       color=False, fmt='%(name)s[%(levelname)s]: %(message)s',
                       stream=sys.stdout)
 
-        if os.path.exists('%s/%s/%s.log' % (path, name, name)):
-            setup_logfile(name='origfile', level=logging.DEBUG,
-                          logfile='%s/%s/%s.log' % (path, name,
-                                                    name),
-                          fmt='%(asctime)s %(message)s')
-        else:
-            setup_logfile(name='origfile', level=logging.DEBUG,
-                          logfile='%s/%s.log' % (path, name),
-                          fmt='%(asctime)s %(message)s')
+        logfile = '%s/%s/%s.log' % (path, name, name)
+        if not os.path.exists(logfile):
+            logfile = '%s/%s.log' % (path, name)
+        setup_logfile(name='origfile', level=logging.DEBUG,
+                      logfile=logfile, fmt='%(asctime)s %(message)s')
         self._log_stdout = logging.getLogger('origin')
         self._log_file = logging.getLogger('origfile')
         self._log_file.setLevel(logging.INFO)
@@ -279,95 +283,10 @@ class ORIGIN(object):
         self.segmap = Image(segmap)
 
         # List of spectral profile
-        self.param['profiles'] = profiles
-        if profiles is None:
-            profiles = CURDIR + '/Dico_FWHM_2_12.fits'
-        self._loginfo('Load dictionary of spectral profile %s' % profiles)
-        self.profiles = []
-        self.FWHM_profiles = []
-        with fits.open(profiles) as fprof:
-            for hdu in fprof[1:]:
-                self.profiles.append(hdu.data)
-                self.FWHM_profiles.append(hdu.header['FWHM'])
-
-        # check that the profiles have the same size
-        if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
-            raise IOError('The profiles must have the same size')
+        self._read_profiles(profiles)
 
         # FSF
-        # FSF cube(s)
-        # map fileds in the case of MUSE mosaic
-        self.wfields = None
-        if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header '
-                          'keywords')
-            Nfsf = 13
-            if 'FSFMODE' in cub.primary_header:
-                # FSF created from FSF*** keywords
-                PSF, fwhm_pix, fwhm_arcsec = get_FSF_from_cube_keywords(cub,
-                                                                        Nfsf)
-                self.param['PSF'] = cub.primary_header['FSFMODE']
-                nfields = cub.primary_header['NFIELDS']
-                if nfields == 1:  # just one FSF
-                    # Normalization
-                    self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, np.newaxis,
-                                                              np.newaxis]
-                    # mean of the fwhm of the FSF in pixel
-                    self.FWHM_PSF = np.mean(fwhm_pix)
-                    self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-                    self._loginfo('mean FWHM of the FSFs = %.2f pixels'
-                                  % self.FWHM_PSF)
-                else:  # mosaic: one FSF cube per field
-                    self.PSF = []
-                    self.FWHM_PSF = []
-                    for i in range(nfields):
-                        # Normalization
-                        self.PSF.append(PSF[i] / np.sum(PSF[i], axis=(1, 2))[:, np.newaxis, np.newaxis])
-                        # mean of the fwhm of the FSF in pixel
-                        fwhm = np.mean(fwhm_pix[i])
-                        self.FWHM_PSF.append(fwhm)
-                        self._loginfo('mean FWHM of the FSFs' +
-                                      ' (field %d) = %.2f pixels' % (i, fwhm))
-                    self._loginfo('Compute weight maps from field map %s' % fieldmap)
-                    fmap = FieldsMap(fieldmap, nfields=nfields)
-                    # weighted field map
-                    self.wfields = fmap.compute_weights()
-                    self.param['FWHM PSF'] = self.FWHM_PSF
-            else:
-                raise IOError('PSF are not described in the FITS header' +
-                              'of the cube')
-
-        else:
-            if type(PSF) is str:
-                self._loginfo('Load FSFs from %s' % PSF)
-                self.param['PSF'] = PSF
-
-                cubePSF = Cube(PSF)
-                if cubePSF.shape[1] != cubePSF.shape[2]:
-                    raise IOError('PSF must be a square image.')
-                if not cubePSF.shape[1] % 2:
-                    raise IOError('The spatial size of the PSF must be odd.')
-                if cubePSF.shape[0] != self.Nz:
-                    raise IOError('PSF and data cube have not the same' +
-                                  'dimensions along the spectral axis.')
-                self.PSF = cubePSF._data
-                # mean of the fwhm of the FSF in pixel
-                self.FWHM_PSF = np.mean(FWHM_PSF)
-                self.param['FWHM PSF'] = FWHM_PSF.tolist()
-                self._loginfo('mean FWHM of the FSFs = %.2f pixels' % self.FWHM_PSF)
-            else:
-                nfields = len(PSF)
-                self.PSF = []
-                self.wfields = []
-                self.FWHM_PSF = FWHM_PSF.tolist()
-                for n in range(nfields):
-                    self._loginfo('Load FSF from %s' % PSF[n])
-                    self.PSF.append(Cube(PSF[n])._data)
-                    # weighted field map
-                    self._loginfo('Load weight maps from %s' % fieldmap[n])
-                    self.wfields.append(Image(fieldmap[n])._data)
-                    self._loginfo('mean FWHM of the FSFs' +
-                                  ' (field %d) = %.2f pixels' % (n, FWHM_PSF[n]))
+        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF)
 
         # additional images
         if imawhite is None:
@@ -375,8 +294,10 @@ class ORIGIN(object):
         else:
             self.ima_white = imawhite
 
-        del cub
+        # free memory
+        cub = None
 
+        # Define attributes with default values for all the processing steps
         # step1
         self.cube_std = cube_std
         self.cont_dct = cont_dct
@@ -425,8 +346,8 @@ class ORIGIN(object):
         self._loginfo('00 Done')
 
     @classmethod
-    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
-             name='origin'):
+    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
+             FWHM_PSF=None, name='origin'):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -435,19 +356,18 @@ class ORIGIN(object):
         - MUSE PSF
         - parameters used to segment the cube in different zones.
 
-
         Parameters
         ----------
-        cube        : string
+        cube        : str
                       Cube FITS file name
-        segmap      : string
+        segmap      : str
                       Segmentation map FITS filename
-        fieldmap    : string
+        fieldmap    : str
                       FITS file containing the field map (mosaic)
-        profiles    : string
+        profiles    : str
                       FITS of spectral profiles
                       If None, a default dictionary of 20 profiles is used.
-        PSF         : string
+        PSF         : str
                       Cube FITS filename containing a MUSE PSF per wavelength.
                       If None, PSF are computed with a Moffat function
                       (13x13 pixels, beta=2.6, fwhm1=0.76, fwhm2=0.66,
@@ -460,18 +380,9 @@ class ORIGIN(object):
                       has this name. The ORIGIN.load() method will be used to
                       load a session, continue it or create a new from it.
         """
-        return cls(path='.', name=name, param=None, filename=cube,
-                   fieldmap=fieldmap, profiles=profiles, PSF=PSF,
-                   FWHM_PSF=FWHM_PSF, imawhite=None, cube_std=None,
-                   cont_dct=None, areamap=None,
-                   thresO2=None, testO2=None, histO2=None, binO2=None,
-                   meaO2=None, stdO2=None, cube_faint=None, mapO2=None,
-                   cube_correl=None, maxmap=None, cube_profile=None,
-                   cube_local_max=None, cube_local_min=None, segmap=segmap,
-                   Pval_r=None, index_pval=None, Det_M=None, Det_m=None,
-                   Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
-                   index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
-                   Cat1=None, spectra=None, Cat2=None)
+        return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
+                   profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
+                   segmap=segmap)
 
     @classmethod
     def load(cls, folder, newname=None):
@@ -482,10 +393,10 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        folder  : string
+        folder  : str
                   Folder name (with the relative path) where the ORIGIN data
                   have been stored.
-        newname : string
+        newname : str
                   New name for this session.
                   This parameter lets the user to load a previous session but
                   continue in a new one.
@@ -708,12 +619,12 @@ class ORIGIN(object):
                    meaO2=meaO2, stdO2=stdO2, cube_faint=cube_faint,
                    mapO2=mapO2, cube_correl=cube_correl, maxmap=maxmap,
                    cube_profile=cube_profile, cube_local_max=cube_local_max,
-                   cube_local_min=cube_local_min, segmap=param['segmap'], Pval_r=Pval_r,
-                   index_pval=index_pval, Det_M=Det_M, Det_m=Det_m, Cat0=Cat0,
-                   zm=zm, ym=ym, xm=xm, Pval_r_comp=Pval_r_comp,
-                   index_pval_comp=index_pval_comp, Det_M_comp=Det_M_comp,
-                   Det_m_comp=Det_m_comp, Cat1=Cat1, spectra=spectra,
-                   Cat2=Cat2)
+                   cube_local_min=cube_local_min, segmap=param['segmap'],
+                   Pval_r=Pval_r, index_pval=index_pval, Det_M=Det_M,
+                   Det_m=Det_m, Cat0=Cat0, zm=zm, ym=ym, xm=xm,
+                   Pval_r_comp=Pval_r_comp, index_pval_comp=index_pval_comp,
+                   Det_M_comp=Det_M_comp, Det_m_comp=Det_m_comp, Cat1=Cat1,
+                   spectra=spectra, Cat2=Cat2)
 
     def _loginfo(self, *args):
         self._log_file.info(*args)
@@ -807,6 +718,99 @@ class ORIGIN(object):
             self._Cat2b = ncat
         return self._Cat2b
 
+    def _read_profiles(self, profiles=None):
+        """Read the list of spectral profile."""
+        self.param['profiles'] = profiles
+        if profiles is None:
+            profiles = CURDIR + '/Dico_FWHM_2_12.fits'
+        self._loginfo('Load dictionary of spectral profile %s' % profiles)
+        self.profiles = []
+        self.FWHM_profiles = []
+        with fits.open(profiles) as fprof:
+            for hdu in fprof[1:]:
+                self.profiles.append(hdu.data)
+                self.FWHM_profiles.append(hdu.header['FWHM'])
+
+        # check that the profiles have the same size
+        if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
+            raise IOError('The profiles must have the same size')
+
+    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None):
+        """Read FSF cube(s).
+        With fieldmap in the case of MUSE mosaic
+        """
+        self.wfields = None
+        if PSF is None or FWHM_PSF is None:
+            self._loginfo('Compute FSFs from the datacube FITS header '
+                          'keywords')
+            if 'FSFMODE' not in cube.primary_header:
+                raise IOError('PSF are not described in the FITS header'
+                              'of the cube')
+
+            # FSF created from FSF*** keywords
+            Nfsf = 13
+            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, Nfsf)
+            self.param['PSF'] = cube.primary_header['FSFMODE']
+            nfields = cube.primary_header['NFIELDS']
+            if nfields == 1:  # just one FSF
+                # Normalization
+                self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, None, None]
+                # mean of the fwhm of the FSF in pixel
+                self.FWHM_PSF = np.mean(fwhm_pix)
+                self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
+                self._loginfo('mean FWHM of the FSFs = %.2f pixels',
+                              self.FWHM_PSF)
+            else:  # mosaic: one FSF cube per field
+                self.PSF = []
+                self.FWHM_PSF = []
+                for i in range(nfields):
+                    # Normalization
+                    norm = np.sum(PSF[i], axis=(1, 2))[:, None, None]
+                    self.PSF.append(PSF[i] / norm)
+                    # mean of the fwhm of the FSF in pixel
+                    fwhm = np.mean(fwhm_pix[i])
+                    self.FWHM_PSF.append(fwhm)
+                    self._loginfo('mean FWHM of the FSFs'
+                                  ' (field %d) = %.2f pixels', i, fwhm)
+                self._loginfo('Compute weight maps from field map %s',
+                              fieldmap)
+                fmap = FieldsMap(fieldmap, nfields=nfields)
+                # weighted field map
+                self.wfields = fmap.compute_weights()
+                self.param['FWHM PSF'] = self.FWHM_PSF
+        else:
+            if isinstance(PSF, str):
+                self._loginfo('Load FSFs from %s' % PSF)
+                self.param['PSF'] = PSF
+
+                cubePSF = Cube(PSF)
+                if cubePSF.shape[1] != cubePSF.shape[2]:
+                    raise IOError('PSF must be a square image.')
+                if not cubePSF.shape[1] % 2:
+                    raise IOError('The spatial size of the PSF must be odd.')
+                if cubePSF.shape[0] != self.Nz:
+                    raise IOError('PSF and data cube have not the same' +
+                                  'dimensions along the spectral axis.')
+                self.PSF = cubePSF._data
+                # mean of the fwhm of the FSF in pixel
+                self.FWHM_PSF = np.mean(FWHM_PSF)
+                self.param['FWHM PSF'] = FWHM_PSF.tolist()
+                self._loginfo('mean FWHM of the FSFs = %.2f pixels',
+                              self.FWHM_PSF)
+            else:
+                nfields = len(PSF)
+                self.PSF = []
+                self.wfields = []
+                self.FWHM_PSF = FWHM_PSF.tolist()
+                for n in range(nfields):
+                    self._loginfo('Load FSF from %s' % PSF[n])
+                    self.PSF.append(Cube(PSF[n])._data)
+                    # weighted field map
+                    self._loginfo('Load weight maps from %s' % fieldmap[n])
+                    self.wfields.append(Image(fieldmap[n])._data)
+                    self._loginfo('mean FWHM of the FSFs'
+                                  ' (field %d) = %.2f pixels', n, FWHM_PSF[n])
+
     def write(self, path=None, erase=False):
         """Save the current session in a folder that will have the name of the
         ORIGIN object (self.name)
@@ -817,10 +821,11 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        path  : string
-                Path where the folder (self.name) will be stored.
+        path  : str
+            Path where the folder (self.name) will be stored.
         erase : bool
-                Remove the folder if it exists
+            Remove the folder if it exists.
+
         """
         self._loginfo('Writing...')
         # path
@@ -858,15 +863,15 @@ class ORIGIN(object):
         # PSF
         if type(self.PSF) is list:
             for i, psf in enumerate(self.PSF):
-                Cube(data=psf, mask=np.ma.nomask).write('%s' % path2 +
-                                                        '/cube_psf_%02d.fits' % i)
+                Cube(data=psf, mask=np.ma.nomask).write(
+                    '%s' % path2 + '/cube_psf_%02d.fits' % i)
         else:
-            Cube(data=self.PSF, mask=np.ma.nomask).write('%s' % path2 +
-                                                         '/cube_psf.fits')
+            Cube(data=self.PSF, mask=np.ma.nomask).write(
+                '%s' % path2 + '/cube_psf.fits')
         if self.wfields is not None:
             for i, wfield in enumerate(self.wfields):
-                Image(data=wfield, mask=np.ma.nomask).write('%s' % path2 +
-                                                            '/wfield_%02d.fits' % i)
+                Image(data=wfield, mask=np.ma.nomask).write(
+                    '%s' % path2 + '/wfield_%02d.fits' % i)
 
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits' % path2)
@@ -989,7 +994,7 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        dct_order   : integer
+        dct_order   : int
                       The number of atom to keep for the dct decomposition
         dct_approx : bool
                      if True, the DCT computation is approximated
@@ -1175,14 +1180,11 @@ class ORIGIN(object):
 
         Parameters
         ----------
-
         Noise_population    :   float
                                 Fraction of spectra used to estimate
                                 the background signature
-
-        itermax             :   integer
+        itermax             :   int
                                 Maximum number of iterations
-
         threshold_list      :   list
                                 User given list of threshold (not pfa) to apply
                                 on each area, the list is of lenght nbAreas
@@ -1237,7 +1239,7 @@ class ORIGIN(object):
         self._loginfo('Save the numbers of iterations used by the'
                       ' testO2 for each spaxel in self.mapO2')
 
-        self.mapO2 = Image(data=mapO2, wcs=self.wcs)
+        self.mapO2 = Image(data=mapO2, wcs=self.wcs, copy=False)
 
         self._loginfo('04 Done')
 
@@ -1261,14 +1263,14 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        NbSubcube   :   integer
+        NbSubcube   :   int
                         Number of sub-cubes for the spatial segmentation
                         If NbSubcube>1 the correlation and local maximas and
                         minimas are performed on smaller subcube and combined
                         after. Useful to avoid swapp
-        neighboors  :   integer
+        neighboors  :   int
                         Connectivity of contiguous voxels
-        ncpu        :   integer
+        ncpu        :   int
                         Number of CPUs used
 
         Returns
@@ -1343,10 +1345,10 @@ class ORIGIN(object):
         ----------
         purity : float
                  purity to automatically compute the threshold
-        tol_spat : integer
+        tol_spat : int
                    spatial tolerance for the spatial merging (distance in pixels)
                    TODO en fonction du FWHM
-        tol_spec : integer
+        tol_spec : int
                    spectral tolerance for the spatial merging (distance in pixels)
         spat_size : int
                 spatiale size of the spatiale filter
@@ -1418,21 +1420,21 @@ class ORIGIN(object):
         if threshold is not None:
             self.param['threshold'] = threshold
 
-        self.Cat0, self.det_correl_min = \
-            Create_local_max_cat(self.param['threshold'], self.cube_local_max.data,
-                                 self.cube_local_min.data, self.segmap.data,
-                                 self.param['spat_size'], self.param['spect_size'],
-                                 self.param['tol_spat'], self.param['tol_spec'],
-                                 True, self.cube_profile._data, self.wcs,
-                                 self.wave)
-
+        self.Cat0, self.det_correl_min = Create_local_max_cat(
+            self.param['threshold'], self.cube_local_max.data,
+            self.cube_local_min.data, self.segmap.data,
+            self.param['spat_size'], self.param['spect_size'],
+            self.param['tol_spat'], self.param['tol_spec'],
+            True, self.cube_profile._data, self.wcs,
+            self.wave
+        )
         _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0' +
-                      ' (%d sources %d lines)' % (len(np.unique(self.Cat0['ID'])), len(self.Cat0)))
-
+        self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
+                      len(np.unique(self.Cat0['ID'])), len(self.Cat0))
         self._loginfo('07 Done')
 
-    def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1), threshlist=None):
+    def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1),
+                              threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
         merging in order to create an complematary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
@@ -1552,7 +1554,7 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        grid_dxy   : integer
+        grid_dxy   : int
                      Maximum spatial shift for the grid
 
         Returns
@@ -1593,9 +1595,8 @@ class ORIGIN(object):
 
         self._loginfo('09 Done')
 
-    def step11_write_sources(self, path=None, overwrite=True,
-                             fmt='default', src_vers='0.1',
-                             author='undef', ncpu=1):
+    def step11_write_sources(self, path=None, overwrite=True, fmt='default',
+                             src_vers='0.1', author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
         write the final sources.
 
@@ -1730,7 +1731,7 @@ class ORIGIN(object):
         ----------
         log10     : bool
                     Draw histogram in logarithmic scale or not
-        ncol      : integer
+        ncol      : int
                     Number of colomns in the subplots
         legend    : bool
                     If true, write pfa and threshold values as legend
@@ -1819,9 +1820,9 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        area      : integer in [1, nbAreas]
+        area      : int in [1, nbAreas]
                     Area ID
-        pfa_test  : float or string
+        pfa_test  : float or str
                     PFA of the test (if 'step03', the value set during step03
                     is used)
         log10     : bool
@@ -1896,9 +1897,9 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        area: integer in [1, nbAreas]
+        area: int in [1, nbAreas]
                 if None draw the full map for all areas
-        iteration : integer
+        iteration : int
                     Display the nuisance/bacground pixels at iteration k
         ax        : matplotlib.Axes
                     The Axes instance in which the image is drawn
@@ -2054,7 +2055,7 @@ class ORIGIN(object):
     def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
 
-        src_ind : integer
+        src_ind : int
                   Index of the object in self.Cat0
         ax1     : matplotlib.Axes
                   The Axes instance in which the NB image around the source is
