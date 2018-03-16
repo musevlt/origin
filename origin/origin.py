@@ -1661,12 +1661,22 @@ class ORIGIN(object):
             the fitted line FWHM.
 
         """
+        self._loginfo('Step10 - Results cleaning')
+
         if self.Cat2 is None:
             raise IOError('Run the step 09 to initialize self.Cat2')
+
+        self.param['merge_lines_z_threshold'] = merge_lines_z_threshold
+        self.param['spectrum_size_fwhm'] = spectrum_size_fwhm
 
         unique_lines = remove_identical_duplicates(self.Cat2)
         self.Cat3_lines = merge_similar_lines(unique_lines)
         self.Cat3_sources = unique_sources(self.Cat3_lines)
+
+        self._loginfo('Save the unique source catalogue in self.Cat3_sources' +
+                      ' (%d lines)' % len(self.Cat3_sources))
+        self._loginfo('Save the clenaed lines in self.Cat3_lines' +
+                      ' (%d lines)' % len(self.Cat3_lines))
 
         # TODO: maybe modify trim_spectra_hdulist to work on the spectrum list
         hdulist = fits.HDUList([fits.PrimaryHDU()])
@@ -1681,6 +1691,7 @@ class ORIGIN(object):
             self.Cat3_lines, hdulist, self.FWHM_profiles,
             size_fwhm=spectrum_size_fwhm)
 
+        self._loginfo('Step 10 - Done')
     def step12_write_sources(self, path=None, overwrite=True, fmt='default',
                              src_vers='0.1', author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
