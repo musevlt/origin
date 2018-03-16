@@ -77,6 +77,10 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     sky_mask = cont_sky.subimage(
         center=(source_y, source_x), size=mask_size,
         unit_center=None, unit_size=None)
+    # When the source is at the edge of the cube, the sky mask may be “masked”
+    # for regions outside of the cube.  We set these regions to 0 (not sky) in
+    # the sky mask as we don't know their content.
+    sky_mask[sky_mask.mask] = 0
 
     # Empty (0) source mask
     source_mask = sub_cube[0, :, :]
