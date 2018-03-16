@@ -62,6 +62,11 @@ def test_origin():
         my_origin.step09_compute_spectra()
         my_origin.write()
 
+        # cleaned results
+        my_origin = ORIGIN.load('tmp2')
+        my_origin.step10_clean_results()
+        my_origin.write()
+
         # list of source objects
         my_origin = ORIGIN.load('tmp2')
         cat = my_origin.step12_write_sources(ncpu=1)

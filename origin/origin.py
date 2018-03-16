@@ -56,8 +56,12 @@ from .lib_origin import (
     Create_local_max_cat,
     dct_residual,
     Estimation_Line,
+    merge_similar_lines,
     Purity_Estimation,
+    remove_identical_duplicates,
     Spatial_Segmentation,
+    trim_spectra_hdulist,
+    unique_sources,
     __version__
 )
 
@@ -234,7 +238,8 @@ class ORIGIN(object):
                  index_pval=None, Det_M=None, Det_m=None,
                  Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
                  index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
-                 Cat1=None, spectra=None, Cat2=None):
+                 Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
+                 Cat3_sources=None, Cat3_spectra=None):
         # loggers
         setup_logging(name='origin', level=logging.DEBUG,
                       color=False, fmt='%(name)s[%(levelname)s]: %(message)s',
@@ -343,6 +348,9 @@ class ORIGIN(object):
         self.spectra = spectra
         self.Cat2 = Cat2
         self._Cat2b = None
+        self.Cat3_lines = Cat3_lines
+        self.Cat3_sources = Cat3_sources
+        self.Cat3_spectra = Cat3_spectra
         self._loginfo('00 Done')
 
     @classmethod
@@ -607,6 +615,20 @@ class ORIGIN(object):
         else:
             Cat2 = None
 
+        # step10
+        if os.path.isfile('%s/Cat3_lines.fits' % folder):
+            Cat3_lines = Table.read('%s/Cat3_lines.fits' % folder)
+        else:
+            Cat3_lines = None
+        if os.path.isfile('%s/Cat3_sources.fits' % folder):
+            Cat3_sources = Table.read('%s/Cat3_sources.fits' % folder)
+        else:
+            Cat3_sources = None
+        if os.path.isfile('%s/Cat3_spectra.fits' % folder):
+            Cat3_spectra = fits.open('%s/Cat3_spectra.fits' % folder)
+        else:
+            Cat3_spectra = None
+
         if newname is not None:
             name = newname
 
@@ -624,7 +646,8 @@ class ORIGIN(object):
                    Det_m=Det_m, Cat0=Cat0, zm=zm, ym=ym, xm=xm,
                    Pval_r_comp=Pval_r_comp, index_pval_comp=index_pval_comp,
                    Det_M_comp=Det_M_comp, Det_m_comp=Det_m_comp, Cat1=Cat1,
-                   spectra=spectra, Cat2=Cat2)
+                   spectra=spectra, Cat2=Cat2, Cat3_lines=Cat3_lines,
+                   Cat3_sources=Cat3_sources, Cat3_spectra=Cat3_spectra)
 
     def _loginfo(self, *args):
         self._log_file.info(*args)
@@ -986,6 +1009,16 @@ class ORIGIN(object):
                 if hdu is not None:
                     hdulist.append(hdu)
             write_hdulist_to(hdulist, '%s/spectra.fits' % path2, overwrite=True)
+
+        # step 10
+        if self.Cat3_lines is not None:
+            self.Cat3_lines.write('%s/Cat3_lines.fits' % path2, overwrite=True)
+        if self.Cat3_sources is not None:
+            self.Cat3_sources.write('%s/Cat3_sources.fits' % path2,
+                                    overwrite=True)
+        if self.Cat3_spectra is not None:
+            self.Cat3_spectra.writeto('%s/Cat3_spectra.fits' % path2,
+                                      overwrite=True)
 
         self._loginfo("Current session saved in %s" % path2)
 
@@ -1594,6 +1627,59 @@ class ORIGIN(object):
                       'self.spectra')
 
         self._loginfo('09 Done')
+
+    def step10_clean_results(self, *, merge_lines_z_threshold=5,
+                             spectrum_size_fwhm=3):
+        """Clean the various results.
+
+        This step does several things to “clean” the results of ORIGIN:
+
+        - The Cat2 line table may contain several lines found at the very same
+          x, y, z position in the cube. Only the line with the highest purity
+          is kept in the table.
+        - Some lines are associated to the same source but are very near
+          considering their z positions.  The lines are all marked as merged in
+          the brightest line of the group (but are kept in the line table).
+        - The FITS file containing the spectra is cleaned to keep only the
+          lines from the cleaned line table. The spectrum around each line
+          is trimmed around the line position.
+        - A table of unique sources is created.
+
+        Attributes added to the ORIGIN object:
+        - `Cat3_lines`: clean table of lines;
+        - `Cat3_sources`: table of unique sources
+        - `Cat3_spectra`: trimmed spectra. For a given <num_line>, the
+            spectrum is in `DATA<num_line>` extension and the variance in
+            the `STAT<num_line>` extension.
+
+        Parameters
+        ----------
+        merge_lines_z_threshold: int
+            z axis pixel threshold used when merging similar lines.
+        spectrum_size_fwhm: float
+            The length of the spectrum to keep around each line as a factor of
+            the fitted line FWHM.
+
+        """
+        if self.Cat2 is None:
+            raise IOError('Run the step 09 to initialize self.Cat2')
+
+        unique_lines = remove_identical_duplicates(self.Cat2)
+        self.Cat3_lines = merge_similar_lines(unique_lines)
+        self.Cat3_sources = unique_sources(self.Cat3_lines)
+
+        # TODO: maybe modify trim_spectra_hdulist to work on the spectrum list
+        hdulist = fits.HDUList([fits.PrimaryHDU()])
+        for i in range(len(self.spectra)):
+            hdu = self.spectra[i].get_data_hdu(name='DATA%d' % i,
+                                               savemask='nan')
+            hdulist.append(hdu)
+            hdu = self.spectra[i].get_stat_hdu(name='STAT%d' % i)
+            if hdu is not None:
+                hdulist.append(hdu)
+        self.Cat3_spectra = trim_spectra_hdulist(
+            self.Cat3_lines, hdulist, self.FWHM_profiles,
+            size_fwhm=spectrum_size_fwhm)
 
     def step12_write_sources(self, path=None, overwrite=True, fmt='default',
                              src_vers='0.1', author='undef', ncpu=1):
