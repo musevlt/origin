@@ -45,7 +45,9 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         Threshold used for segmentation. Should be lower (e.g. 50%) than the
         threshold used for source detection.
     cont_sky: mpdaf.obj.Image
-        Continuum sky mask.
+        Sky mask obtained from a segmentation of the continuum. Must be on the
+        same spatial WCS as the detection cube. The pixels must have a value of
+        1 at the sky positions, 0 otherwise.
     out_dir: string
         Name of the output directory to create the masks in.
     mask_size: int
@@ -69,6 +71,10 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             ra, dec, 0)
 
     sub_cube = detection_cube.subcube(
+        center=(source_y, source_x), size=mask_size,
+        unit_center=None, unit_size=None)
+
+    sky_mask = cont_sky.subimage(
         center=(source_y, source_x), size=mask_size,
         unit_center=None, unit_size=None)
 
@@ -124,13 +130,18 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         # Combine the line mask to the source mask with OR
         source_mask.data |= (segmap.data == seg_line)
 
-    # If verbose, also plot the masked of each source.
+    sky_mask[source_mask.data] = 0
+
+    # If verbose, also plot the mask and sky mask of the source.
     if verbose:
         fig, ax = plt.subplots()
         im = ax.imshow(source_mask.data, origin='lower')
         fig.colorbar(im)
         fig.suptitle(f"S{source_id} mask")
         fig.savefig(f"{out_dir}/S{source_id}_mask.png")
+        im = ax.imshow(sky_mask.data, origin='lower')
+        fig.suptitle(f"S{source_id} sky mask")
+        fig.savefig(f"{out_dir}/S{source_id}_skymask.png")
         plt.close(fig)
 
     # Count number of true pixels in the edges of the mask.  If it's not
@@ -145,6 +156,9 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     source_mask.data = source_mask.data.astype(int)
     source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
                       savemask="none")
+
+    sky_mask.write(f"{out_dir}/sky-mask-%0.5d.fits" % source_id,
+                   savemask="none")
 
     if is_wrong:
         return source_id

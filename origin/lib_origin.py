@@ -3219,7 +3219,8 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
     std_threshold: float
         Threshold used for detection of sources in the STD cube.
     segmap: mpdaf.obj.Image
-        Segmentation map.
+        Segmentation map. Must have the same spatial WCS as the cube. The sky
+        must be in segment 0.
     out_dir: str
         Directory into which the masks will be created.
     mask_size: int
@@ -3261,6 +3262,11 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
         name="fwhm"
     ))
 
+    # Convert segmap to sky map (1 where sky)
+    skymap = segmap.copy()
+    skymap.data[skymap.data != 0] = -1
+    skymap.data += 1
+
     by_id = line_table.group_by('ID')
 
     for key, group in zip(by_id.groups.keys, by_id.groups):
@@ -3277,7 +3283,7 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=None, out_dir=out_dir, radec_is_xy=True
+            cont_sky=skymap, out_dir=out_dir, radec_is_xy=True
         )
 
         if gen_mask_return is not None:
@@ -3287,6 +3293,6 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
                 gen_mask_return = gen_source_mask(
                     source_id, source_x, source_y,
                     lines=group, detection_cube=detection_cube,
-                    threshold=threshold, cont_sky=None, out_dir=out_dir,
+                    threshold=threshold, cont_sky=skymap, out_dir=out_dir,
                     radec_is_xy=True, verbose=True
                 )
