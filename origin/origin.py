@@ -54,6 +54,7 @@ from .lib_origin import (
     Correlation_GLR_test,
     Correlation_GLR_test_zone,
     Create_local_max_cat,
+    create_masks,
     dct_residual,
     Estimation_Line,
     merge_similar_lines,
@@ -1692,6 +1693,65 @@ class ORIGIN(object):
             size_fwhm=spectrum_size_fwhm)
 
         self._loginfo('Step 10 - Done')
+
+    def step11_create_masks(self, path=None, overwrite=True, mask_size=50,
+                            seg_thres_factor=.5):
+        """Create source masks and sky masks.
+
+        This step create the mask and sky mask for each source.
+
+        Parameters
+        ----------
+        path : str
+            Path where the masks will be saved.
+        overwrite : bool
+            Overwrite the folder if it already exists
+        mask_size: int
+            Widht in pixel for the square masks.
+        seg_thres_factor: float
+            Factor applied to the detection threshold to get the threshold used
+            for mask creation.
+        """
+        if self.Cat3_lines is None:
+            raise IOError('Run the step 10.')
+
+        self._loginfo('Step11 - Mask creation')
+
+        self.param['mask_size'] = mask_size
+        self.param['seg_thres_factor'] = seg_thres_factor
+
+        if path is not None and not os.path.exists(path):
+            raise IOError("Invalid path: {0}".format(path))
+
+        if path is None:
+            out_dir = '%s/%s/masks' % (self.path, self.name)
+        else:
+            path = os.path.normpath(path)
+            out_dir = '%s/%s/masks' % (path, self.name)
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        else:
+            if overwrite:
+                shutil.rmtree(out_dir)
+                os.makedirs(out_dir)
+
+        create_masks(
+            line_table=self.Cat3_lines,
+            source_table=self.Cat3_sources,
+            profile_fwhm=self.FWHM_profiles,
+            correl_cube=self.cube_correl,
+            correl_threshold=self.threshold_correl,
+            std_cube=self.cube_std,
+            std_threshold=self.threshold_std,
+            segmap=self.segmap,
+            out_dir=out_dir,
+            mask_size=mask_size,
+            seg_thres_factor=seg_thres_factor,
+            plot_problems=True)
+
+        self._loginfo('Step11 - Mask done')
+
     def step12_write_sources(self, path=None, overwrite=True, fmt='default',
                              src_vers='0.1', author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
