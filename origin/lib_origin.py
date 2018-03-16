@@ -3142,9 +3142,8 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
         An HDUList containing the spectra associated to each line.  It must
         contain for each line identifier a “DATA<ID>” and a “STAT<ID>”
         extension.
-    profile_fwhm: dictionary
-        A dictionary associating to each profile number the corresponding FWHM
-        in pixels.
+    profile_fwhm: list
+        List of the profile FWHMs. The index in the list is the profile number.
     size_fwhm: float
         The length of the spectrum to extract around the line in FWHM factor.
 
@@ -3155,8 +3154,7 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
         same extension names as in the input.
 
     """
-    radius = {profile: np.ceil(fwhm * size_fwhm / 2) for profile, fwhm in
-              profile_fwhm.items()}
+    radius = np.ceil(np.array(profile_fwhm) * size_fwhm / 2)
 
     result = fits.HDUList()
 
@@ -3207,9 +3205,8 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
     source_table: astropy.table.Table
         ORIGIN table containing the source list.  This table is used to get the
         position of the source.
-    profile_fwhm: dictionary
-        Dictionary associating to each profile number the corresponding FWHM in
-        pixels.
+    profile_fwhm: list
+        List of the profile FWHMs. The index in the list is the profile number.
     correl_cube: mpdaf.obj.Cube
         Correlation cube where primary sources where detected.
     correl_threshold: float
