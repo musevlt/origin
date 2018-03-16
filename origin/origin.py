@@ -1595,7 +1595,7 @@ class ORIGIN(object):
 
         self._loginfo('09 Done')
 
-    def step11_write_sources(self, path=None, overwrite=True, fmt='default',
+    def step12_write_sources(self, path=None, overwrite=True, fmt='default',
                              src_vers='0.1', author='undef', ncpu=1):
         """add corresponding RA/DEC to each referent pixel of each group and
         write the final sources.
@@ -1632,10 +1632,10 @@ class ORIGIN(object):
                        source (MUSE-CUBE)
         """
         # Add RA-DEC to the catalogue
-        self._loginfo('Step 10 - Sources creation')
+        self._loginfo('Step 12 - Sources creation')
         self._loginfo('Add RA-DEC to the catalogue')
         if self.Cat1 is None:
-            raise IOError('Run the step 10 to initialize self.Cat2')
+            raise IOError('Run the step 09 to initialize self.Cat2')
 
         # path
         if path is not None and not os.path.exists(path):
@@ -1676,7 +1676,7 @@ class ORIGIN(object):
         catF = Catalog.from_path(path_src, fmt='working')
         catF.write(catname, overwrite=overwrite)
 
-        self._loginfo('10 Done')
+        self._loginfo('12 Done')
 
         return catF
 
