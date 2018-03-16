@@ -100,7 +100,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         max_z = int(z_line + fwhm_line)
 
         max_map = sub_cube.get_image(
-            wave=(min_z, max_z), unit_wave=None, agg_method="max")
+            wave=(min_z, max_z), unit_wave=None, method="max")
 
         max_map.data[max_map.mask] = -9999.
         segmap = detect_sources(max_map.data, threshold, seg_npixel)
