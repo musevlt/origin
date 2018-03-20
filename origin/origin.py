@@ -1278,7 +1278,7 @@ class ORIGIN(object):
 
         self._loginfo('04 Done')
 
-    def step05_compute_TGLR(self, NbSubcube=1, neighboors=26, ncpu=4):
+    def step05_compute_TGLR(self, NbSubcube=1, neighbors=26, ncpu=4):
         """Compute the cube of GLR test values.
 
         The test is done on the cube containing the faint signal
@@ -1303,7 +1303,7 @@ class ORIGIN(object):
                         If NbSubcube>1 the correlation and local maximas and
                         minimas are performed on smaller subcube and combined
                         after. Useful to avoid swapp
-        neighboors  :   int
+        neighbors   :   int
                         Connectivity of contiguous voxels
         ncpu        :   int
                         Number of CPUs used
@@ -1323,12 +1323,12 @@ class ORIGIN(object):
                                  Local maxima from minus min correlation
         """
         self._loginfo('Step 05 - GLR test(NbSubcube=%d' % NbSubcube +
-                      ', neighboors=%d)' % neighboors)
+                      ', neighbors=%d)' % neighbors)
 
         if self.cube_faint is None:
             raise IOError('Run the step 04 to initialize self.cube_faint')
 
-        self.param['neighboors'] = neighboors
+        self.param['neighbors'] = neighbors
         self.param['NbSubcube'] = NbSubcube
 
         # TGLR computing (normalized correlations)
@@ -1360,7 +1360,7 @@ class ORIGIN(object):
 
         self._loginfo('Compute p-values of local maximum of correlation values')
         cube_local_max, cube_local_min = Compute_local_max_zone(
-            correl, cm, self.mask, intx, inty, NbSubcube, neighboors)
+            correl, cm, self.mask, intx, inty, NbSubcube, neighbors)
         self._loginfo('Save self.cube_local_max from max correlations')
         self.cube_local_max = Cube(data=cube_local_max, wave=self.wave,
                                    wcs=self.wcs, mask=np.ma.nomask, copy=False)
@@ -1514,7 +1514,7 @@ class ORIGIN(object):
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
             Compute_local_max_zone(self.cube_std.data, self.cube_std.data,
                                    self.mask, intx, inty, self.param['NbSubcube'],
-                                   self.param['neighboors'])
+                                   self.param['neighbors'])
 
         # complementary catalog
         cube_local_max_faint_dct, cube_local_min_faint_dct = \

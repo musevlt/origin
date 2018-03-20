@@ -277,7 +277,7 @@ def createradvar(cu, ot):
 def fusion_areas(label, MinSize, MaxSize, option=None):
     """Function which merge areas which have a surface less than
     MinSize if the size after merging is less than MaxSize.
-    The criteria of neighboor can be related to the minimum surface
+    The criteria of neighbor can be related to the minimum surface
     or to the compactness of the output area
 
     Parameters
@@ -309,11 +309,11 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
             cu_size = np.sum(cu)
 
             if cu_size > 0 and cu_size < MinSize:
-                # search for neighboor
+                # search for neighbors
                 labdil = label[n, :, :].copy()
                 labdil = binary_dilation(labdil, iterations=1)
 
-                # only neighboor
+                # only neighbors
                 test = np.sum(label * labdil[np.newaxis, :, :], axis=(1, 2)) > 0
 
                 indice = np.where(test == 1)[0]
@@ -323,7 +323,7 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
                 # BOUCLER SUR LES CANDIDATS
                 ot = label[indice, :, :]
 
-                # test size of current with neighboor
+                # test size of current with neighbor
                 if option is None:
                     test = np.sum(ot, axis=(1, 2))
                 elif option == 'var':
@@ -1174,7 +1174,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
 @timeit
 def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
-                           NbSubcube, neighboors):
+                           NbSubcube, neighbors):
     """Function to compute the local max of T_GLR values for each zone
 
     Parameters
@@ -1193,7 +1193,7 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
                 Number of subcube in the spatial segmentation
     threshold : float
                 The threshold applied to the p-values cube
-    neighboors: int
+    neighbors:  int
                 Number of connected components
 
     Returns
@@ -1234,7 +1234,7 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
             # Cube of pvalues for each zone
             cube_Local_max_temp, cube_Local_min_temp = Compute_localmax(
                 correl_temp_edge, correl_temp_edge_min, mask_temp_edge,
-                neighboors)
+                neighbors)
 
             cube_Local_max[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] =\
                 cube_Local_max_temp[:, y11:y22, x11:x22]
@@ -1271,7 +1271,7 @@ def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
 
 
 def Compute_localmax(correl_temp_edge, correl_temp_edge_min,
-                     mask_temp_edge, neighboors):
+                     mask_temp_edge, neighbors):
     """Function to compute the local maxima of the maximum correlation and
     local maxima of minus the minimum correlation
     distribution
@@ -1284,7 +1284,7 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min,
                         T_GLR values with edges excluded (from min correlation)
     mask_temp_edge   :  array
                         mask array (true if pixel is masked)
-    neighboors       :  int
+    neighbors        :  int
                         Number of connected components
     Returns
     -------
@@ -1295,7 +1295,7 @@ def Compute_localmax(correl_temp_edge, correl_temp_edge_min,
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
     # connected components
-    conn = (neighboors + 1)**(1 / 3.)
+    conn = (neighbors + 1)**(1 / 3.)
     # local maxima of maximum correlation
     Max_filter = filters.maximum_filter(correl_temp_edge, size=(conn, conn, conn))
     Local_max_mask = (correl_temp_edge == Max_filter)
@@ -1450,8 +1450,8 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
 def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
     """recursive function to perform the spatial merging.
     if neighborhood are close spatially to a lines: they are merged,
-    then the neighboor of the seed is analysed if they are enough close to
-    the current line (a neighboor of the original seed) they are merged
+    then the neighbor of the seed is analysed if they are enough close to
+    the current line (a neighbor of the original seed) they are merged
     only if the frequency is enough close (surrogate) if the frequency is
     different it is rejected.
     If two line (or a group of lines and a new line) are:
@@ -2714,8 +2714,8 @@ def Construct_Object(k, ktot, cols, units, desc, fmt, step_wave,
         th = param['threshold_list']
         for i, th in enumerate(param['threshold_list']):
             src.header['OR_THL%02d' % i] = ('%0.2f' % th, 'OR input Threshold per area')
-    if 'neighboors' in param.keys():
-        src.OR_NG = (param['neighboors'], 'OR input Neighboors')
+    if 'neighbors' in param.keys():
+        src.OR_NG = (param['neighbors'], 'OR input Neighbors')
     if 'NbSubcube' in param.keys():
         src.OR_NS = (param['NbSubcube'], 'OR input Nb of subcubes for the spatial segmentation')
     if 'tol_spat' in param.keys():
