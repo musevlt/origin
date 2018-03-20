@@ -600,14 +600,19 @@ class ORIGIN(object):
             _format_cat(Cat1, 1)
         else:
             Cat1 = None
+
         # step09
-        if os.path.isfile('%s/spectra.fits' % folder):
+        def load_spectra(filename):
             spectra = []
-            with fits.open('%s/spectra.fits' % folder) as fspectra:
+            with fits.open(filename) as fspectra:
                 for i in range(len(fspectra) // 2):
                     spectra.append(Spectrum('%s/spectra.fits' % folder,
                                             hdulist=fspectra,
                                             ext=('DATA%d' % i, 'STAT%d' % i)))
+            return spectra
+
+        if os.path.isfile('%s/spectra.fits' % folder):
+            spectra = load_spectra('%s/spectra.fits' % folder)
         else:
             spectra = None
         if os.path.isfile('%s/Cat2.fits' % folder):
@@ -626,7 +631,7 @@ class ORIGIN(object):
         else:
             Cat3_sources = None
         if os.path.isfile('%s/Cat3_spectra.fits' % folder):
-            Cat3_spectra = fits.open('%s/Cat3_spectra.fits' % folder)
+            Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder)
         else:
             Cat3_spectra = None
 
@@ -1010,8 +1015,7 @@ class ORIGIN(object):
                 hdu = spectra[i].get_stat_hdu(name='STAT%d' % i)
                 if hdu is not None:
                     hdulist.append(hdu)
-            write_hdulist_to(hdulist, '%s/spectra.fits' % path2,
-                             overwrite=True)
+            write_hdulist_to(hdulist, outname, overwrite=True)
 
         if self.spectra is not None:
             save_spectra(self.spectra, '%s/spectra.fits' % path2)
