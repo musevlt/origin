@@ -1000,16 +1000,21 @@ class ORIGIN(object):
             self.Cat2.write('%s/Cat2.fits' % path2, overwrite=True)
         if self.Cat2b is not None:
             self.Cat2b.write('%s/Cat2b.fits' % path2, overwrite=True)
-        if self.spectra is not None:
+
+        def save_spectra(spectra, outname):
             hdulist = fits.HDUList([fits.PrimaryHDU()])
-            for i in range(len(self.spectra)):
-                hdu = self.spectra[i].get_data_hdu(name='DATA%d' % i,
-                                                   savemask='nan')
+            for i in range(len(spectra)):
+                hdu = spectra[i].get_data_hdu(name='DATA%d' % i,
+                                              savemask='nan')
                 hdulist.append(hdu)
-                hdu = self.spectra[i].get_stat_hdu(name='STAT%d' % i)
+                hdu = spectra[i].get_stat_hdu(name='STAT%d' % i)
                 if hdu is not None:
                     hdulist.append(hdu)
-            write_hdulist_to(hdulist, '%s/spectra.fits' % path2, overwrite=True)
+            write_hdulist_to(hdulist, '%s/spectra.fits' % path2,
+                             overwrite=True)
+
+        if self.spectra is not None:
+            save_spectra(self.spectra, '%s/spectra.fits' % path2)
 
         # step 10
         if self.Cat3_lines is not None:
@@ -1018,8 +1023,7 @@ class ORIGIN(object):
             self.Cat3_sources.write('%s/Cat3_sources.fits' % path2,
                                     overwrite=True)
         if self.Cat3_spectra is not None:
-            self.Cat3_spectra.writeto('%s/Cat3_spectra.fits' % path2,
-                                      overwrite=True)
+            save_spectra(self.Cat3_spectra, '%s/Cat3_spectra.fits' % path2)
 
         self._loginfo("Current session saved in %s" % path2)
 
@@ -1679,17 +1683,8 @@ class ORIGIN(object):
         self._loginfo('Save the clenaed lines in self.Cat3_lines' +
                       ' (%d lines)' % len(self.Cat3_lines))
 
-        # TODO: maybe modify trim_spectra_hdulist to work on the spectrum list
-        hdulist = fits.HDUList([fits.PrimaryHDU()])
-        for i in range(len(self.spectra)):
-            hdu = self.spectra[i].get_data_hdu(name='DATA%d' % i,
-                                               savemask='nan')
-            hdulist.append(hdu)
-            hdu = self.spectra[i].get_stat_hdu(name='STAT%d' % i)
-            if hdu is not None:
-                hdulist.append(hdu)
         self.Cat3_spectra = trim_spectra_hdulist(
-            self.Cat3_lines, hdulist, self.FWHM_profiles,
+            self.Cat3_lines, self.spectra, self.FWHM_profiles,
             size_fwhm=spectrum_size_fwhm)
 
         self._loginfo('Step 10 - Done')

@@ -36,13 +36,10 @@ import logging
 import numpy as np
 import os.path
 
-from astropy.io import fits
 from astropy.table import Table, Column, MaskedColumn
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
-from astropy.nddata import NDDataRef
 from astropy.stats import gaussian_sigma_to_fwhm
-from astropy.wcs import WCS
 from functools import wraps
 from joblib import Parallel, delayed
 from numpy import fft
@@ -2988,8 +2985,7 @@ def unique_sources(table):
         # associated to the source, shall we nevertheless check this is the
         # case?
 
-        line_merged_flag = (True if np.sum(group["line_merged_flag"]) else
-                            False)
+        line_merged_flag = np.any(group["line_merged_flag"])
 
         result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
                             seg_label, comp, line_merged_flag])
@@ -3156,29 +3152,14 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
     """
     radius = np.ceil(np.array(profile_fwhm) * size_fwhm / 2)
 
-    result = fits.HDUList()
+    result = []
 
     for row in line_table:
         num_line, line_profile, line_z = row[['num_line', 'profile', 'z']]
-        data_hdu = spectra[f"DATA{num_line}"]
-        stat_hdu = spectra[f"STAT{num_line}"]
-
-        spec_data = NDDataRef(data=data_hdu.data, wcs=WCS(data_hdu.header))
-        spec_stat = NDDataRef(data=stat_hdu.data, wcs=WCS(stat_hdu.header))
-
+        sp = spectra[num_line]
         zmin = int(np.max([0, line_z - radius[line_profile]]))
-        zmax = int(np.min([line_z + radius[line_profile],
-                           len(spec_data.data)]))
-
-        spec_data = spec_data[zmin:zmax]
-        spec_stat = spec_stat[zmin:zmax]
-
-        result.append(fits.ImageHDU(data=spec_data.data,
-                                    header=spec_data.wcs.to_header(),
-                                    name=f"DATA{num_line}"))
-        result.append(fits.ImageHDU(data=spec_stat.data,
-                                    header=spec_stat.wcs.to_header(),
-                                    name=f"STAT{num_line}"))
+        zmax = int(np.min([line_z + radius[line_profile], sp.shape[0]]))
+        result.append(sp[zmin:zmax])
 
     return result
 
