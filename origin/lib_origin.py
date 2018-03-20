@@ -57,8 +57,7 @@ from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
 
 from .source_masks import gen_source_mask
-
-__version__ = '3.0 beta'
+from .version import __version__
 
 
 def timeit(f):

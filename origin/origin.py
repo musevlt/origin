@@ -63,8 +63,8 @@ from .lib_origin import (
     Spatial_Segmentation,
     trim_spectra_hdulist,
     unique_sources,
-    __version__
 )
+from .version import __version__
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 

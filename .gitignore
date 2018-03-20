@@ -5,6 +5,7 @@
 *.egg-info/
 .coverage
 .tox/
+_githash.py
 tags
 build/
 dist/
@@ -12,3 +13,5 @@ doc/api/
 doc/_build/
 htmlcov/
 .ipynb_checkpoints/
+.pytest_cache/
+tmp*.log
