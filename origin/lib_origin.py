@@ -3157,9 +3157,8 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
     for row in line_table:
         num_line, line_profile, line_z = row[['num_line', 'profile', 'z']]
         sp = spectra[num_line]
-        zmin = int(np.max([0, line_z - radius[line_profile]]))
-        zmax = int(np.min([line_z + radius[line_profile], sp.shape[0]]))
-        result.append(sp[zmin:zmax])
+        result.append(sp.subspec(line_z - radius[line_profile],
+                                 line_z + radius[line_profile], unit=None))
 
     return result
 
