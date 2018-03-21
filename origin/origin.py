@@ -1,7 +1,9 @@
 """
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
+---------------------------------------------------------
+
 This software has been developped by Carole Clastres under the supervision of
-David Mary (Lagrange institute, University of Nice) and ported to python by
+David Mary (Lagrange institute, University of Nice) and ported to Python by
 Laure Piqueras (CRAL). From November 2016 the software is updated by
 Antony Schutz.
 
@@ -28,6 +30,7 @@ import yaml
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table, vstack
+from astropy.utils import lazyproperty
 from matplotlib.colors import BoundaryNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import stats
@@ -230,6 +233,7 @@ class ORIGIN(object):
     """
 
     def __init__(self, filename, segmap, name='origin', path='.',
+                 loglevel='DEBUG', logcolor=False,
                  fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
                  param=None, imawhite=None, cube_std=None, cont_dct=None,
                  areamap=None, thresO2=None, testO2=None, histO2=None,
@@ -241,30 +245,29 @@ class ORIGIN(object):
                  index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
                  Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
                  Cat3_sources=None, Cat3_spectra=None):
-        # loggers
-        setup_logging(name='origin', level=logging.DEBUG,
-                      color=False, fmt='%(name)s[%(levelname)s]: %(message)s',
-                      stream=sys.stdout)
 
+        # stdout logger
+        setup_logging(name='origin', level=loglevel, color=logcolor,
+                      fmt='%(levelname)-05s: %(message)s', stream=sys.stdout)
+        self._log_stdout = logging.getLogger('origin')
+
+        # file logger
         logfile = '%s/%s/%s.log' % (path, name, name)
         if not os.path.exists(logfile):
             logfile = '%s/%s.log' % (path, name)
         setup_logfile(name='origfile', level=logging.DEBUG,
                       logfile=logfile, fmt='%(asctime)s %(message)s')
-        self._log_stdout = logging.getLogger('origin')
         self._log_file = logging.getLogger('origfile')
         self._log_file.setLevel(logging.INFO)
 
-        # log
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)' % __version__)
 
-        # init
         self.path = path
         self.name = name
         self.param = param or {}
 
         # MUSE data cube
-        self._loginfo('Read the Data Cube %s' % filename)
+        self._loginfo('Read the Data Cube %s', filename)
         self.param['cubename'] = filename
         cub = Cube(filename)
 
@@ -284,7 +287,7 @@ class ORIGIN(object):
         self.Nz, self.Ny, self.Nx = cub.shape
 
         # segmap
-        self._loginfo('Read the Segmentation Map %s' % segmap)
+        self._loginfo('Read the Segmentation Map %s', segmap)
         self.param['segmap'] = segmap
         self.segmap = Image(segmap)
 
@@ -295,10 +298,7 @@ class ORIGIN(object):
         self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF)
 
         # additional images
-        if imawhite is None:
-            self.ima_white = cub.mean(axis=0)
-        else:
-            self.ima_white = imawhite
+        self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
 
         # free memory
         cub = None
@@ -307,10 +307,7 @@ class ORIGIN(object):
         # step1
         self.cube_std = cube_std
         self.cont_dct = cont_dct
-        self._ima_dct = None
-        self._ima_std = None
         # step 2
-        self._nbAreas = None
         self.areamap = areamap
         # step3
         self.thresO2 = thresO2
@@ -356,7 +353,7 @@ class ORIGIN(object):
 
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
-             FWHM_PSF=None, name='origin'):
+             FWHM_PSF=None, name='origin', loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -391,7 +388,7 @@ class ORIGIN(object):
         """
         return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   segmap=segmap)
+                   segmap=segmap, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
     def load(cls, folder, newname=None):
@@ -663,30 +660,27 @@ class ORIGIN(object):
         self._log_file.warning(*args)
         self._log_stdout.warning(*args)
 
-    @property
+    @lazyproperty
     def ima_dct(self):
         """DCT image"""
-        if self._ima_dct is None and self.cont_dct is not None:
-            self._ima_dct = self.cont_dct.mean(axis=0)
-        return self._ima_dct
+        if self.cont_dct is not None:
+            return self.cont_dct.mean(axis=0)
 
     @property
     def ima_std(self):
         """STD image"""
-        if self._ima_std is None and self.cube_std is not None:
-            self._ima_std = self.cube_std.mean(axis=0)
-        return self._ima_std
+        if self.cube_std is not None:
+            return self.cube_std.mean(axis=0)
 
-    @property
+    @lazyproperty
     def nbAreas(self):
         """Number of area (segmentation) for the PCA"""
-        if self._nbAreas is None and self.areamap is not None:
+        if self.areamap is not None:
             labels = np.unique(self.areamap._data)
             if 0 in labels:  # expmap=0
-                self._nbAreas = len(labels) - 1
+                return len(labels) - 1
             else:
-                self._nbAreas = len(labels)
-        return self._nbAreas
+                return len(labels)
 
     @property
     def threshold_correl(self):
@@ -1089,7 +1083,6 @@ class ORIGIN(object):
         maxsize :   int
                     Lenght in pixel of the side of maximum surface wanted
 
-
         Returns
         -------
 
@@ -1401,7 +1394,6 @@ class ORIGIN(object):
                  default (5,15,0.1
         threshlist : list
                  list of thresholds to compute the purity
-
 
         Returns
         -------
