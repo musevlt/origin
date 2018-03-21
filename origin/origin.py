@@ -1674,10 +1674,10 @@ class ORIGIN(object):
         self.Cat3_lines = merge_similar_lines(unique_lines)
         self.Cat3_sources = unique_sources(self.Cat3_lines)
 
-        self._loginfo('Save the unique source catalogue in self.Cat3_sources' +
-                      ' (%d lines)' % len(self.Cat3_sources))
-        self._loginfo('Save the clenaed lines in self.Cat3_lines' +
-                      ' (%d lines)' % len(self.Cat3_lines))
+        self._loginfo('Save the unique source catalogue in self.Cat3_sources'
+                      ' (%d lines)', len(self.Cat3_sources))
+        self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
+                      len(self.Cat3_lines))
 
         self.Cat3_spectra = trim_spectrum_list(
             self.Cat3_lines, self.spectra, self.FWHM_profiles,
