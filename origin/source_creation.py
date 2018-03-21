@@ -1,0 +1,230 @@
+"""Source file creation code."""
+import logging
+import os
+
+from astropy import units as u
+from mpdaf.obj import Cube, Image, Spectrum
+from mpdaf.sdetect.source import Source
+from numpy.ma import is_masked
+
+from .lib_origin import __version__ as origin_version
+
+
+def create_source(source_info, source_lines, origin_params, cube_cor_filename,
+                  mask_filename, skymask_filename, spectra_fits_filename,
+                  version, profile_fwhm, *, author="", size=5, save_to=None):
+    """Create a MPDAF source for the source.
+
+    This function create a MPDAF source object for the origin source.
+
+    Parameters
+    ----------
+    source_info: astropy.table.Row
+        Row corresponding to the source from the Cat3_sources catalogue.
+    source_lines: astropy.table.Table
+        Line table (Cat3_lines) limited to the lines of the source.
+    origin_params: dict
+        Dictionary of the parameters for the ORIGIN run.
+    cube_cor_filename: str
+        Name of the file containing the correlation cube of the ORIGIN run.
+    mask_filename: str
+        Name of the file containing the mask of the source.
+    skymask_filename: str:
+        Name of the file containing the sky mask of the source.
+    spectra_fits_filename: str
+        Name of the FITS file containing the spectra of the lines.
+    version: str
+        Version number stored in the source.
+    profile_fwhm: list of int
+        List of line profile FWHM in pixel. The index in the list is the
+        profile number.
+    author: str
+        Name of the author.
+    size: float
+        Side of the square used for cut-outs around the source position (for
+        images and sub-cubes) in arc-seconds.
+    save_to: str
+        If not None, the source will be saved to the given file.
+
+
+    Returns
+    -------
+    mpdaf.sdetect.source.Source
+
+    """
+    logger = logging.getLogger(__name__)
+
+    data_cube = Cube(origin_params['cubename']).subcube(
+        (source_info['dec'], source_info['ra']), size=size, unit_size=u.arcsec
+    )
+    correl_cube = Cube(cube_cor_filename).subcube(
+        (source_info['dec'], source_info['ra']), size=size, unit_size=u.arcsec
+    )
+
+    source = Source.from_data(
+        source_info['ID'], source_info['ra'], source_info['dec'],
+        ("ORIGIN", origin_version, os.path.basename(origin_params['cubename']),
+         data_cube.primary_header.get('CUBE_V', ""))
+    )
+
+    # Information about the source in the headers
+    source.header["SRC_V"] = version, "Source version"
+    source.add_history("Source created with ORIGIN", author)
+
+    source.header["OR_X"] = source_info['x'], "x position in pixels"
+    source.header["OR_Y"] = source_info['y'], "y position in pixels"
+    source.header["OR_SEG"] = (source_info['seg_label'],
+                               "Label in the segmentation map")
+    source.header["OR_V"] = origin_version, "ORIGIN version"
+
+    # source_header_keyword: (key_in_origin_param, description)
+    parameters_to_add = {
+        "OR_PROF": ("profiles", "OR input, spectral profiles"),
+        "OR_FSF": ("PSF", "OR input, FSF cube"),
+        "OR_PFAA": ("pfa_areas", "OR input, PFA used to create the area map"),
+        "OR_SIZA": ("size_areas", "OR input, side size in pixels"),
+        "OR_MSIZA": ("minsize_areas", "OR input, minimum area size in pixels"),
+        "OR_NA": ("nbareas", "OR number of areas"),
+        "OR_EXP": ("expmap", "OR input, exposure map"),
+        "OR_DCT": ("dct_order", "OR input, DCT order"),
+        "OR_FBG": ("Noise_population",
+                   "OR input: fraction of spectra estimated"),
+        "OR_PFAT": ("pfa_test", "OR input, PFA test"),
+        "OR_ITMAX": ("itermax", "OR input, maximum number of iterations"),
+        "OR_THL%02d": ("threshold_list", "OR input threshold per area"),
+        "OR_NG": ("neighbors", "OR input, neighbors"),
+        "OR_NS": ("NbSubCube", "OR input, number of sub-cubes for the spatial "
+                  "segmentation"),
+        "OR_DXY": ("tol_spat", "OR input, spatial tolerance for the spatial "
+                   "merging (distance in pixels)"),
+        "OR_DZ": ("tol_spec", "OR input, spectral tolerance for the spatial "
+                  "merging (distance in pixels)"),
+        "OR_SXY": ("spat_size", "OR input, spatial size of the spatial "
+                   "filter"),
+        "OR_SZ": ("spect_size", "OR input, spectral length of the spectral "
+                  "filter"),
+        "OR_NXZ": ("grid_dxy", "OR input, grid Nxy"),
+    }
+    for keyword, (param_key, description) in parameters_to_add.items():
+        if param_key == "threshold_list" and param_key in origin_params:
+            for idx, threshold in enumerate(origin_params['threshold_list']):
+                source.header[keyword % idx] = ("%0.2f" % threshold,
+                                                description)
+        elif param_key in origin_params:
+            source.header[keyword] = param_key, description
+        else:
+            logger.debug("Parameter %s absent of the parameter list.",
+                         param_key)
+
+    source.header["COMP_CAT"] = source_info['comp']
+    if source.COMP_CAT:
+        threshold_keyword, purity_keyword = "threshold2", "purity2"
+    else:
+        threshold_keyword, purity_keyword = "threshold", "purity"
+    source.header["OR_TH"] = ("%0.2f" % origin_params[threshold_keyword],
+                              "OR input, threshold")
+    source.header["OR_PURI"] = ("%0.2f" % origin_params[purity_keyword],
+                                "OR input, purity")
+
+    # Mini-cubes
+    source.cubes["MUSE_CUBE"] = data_cube
+    source.cubes["OR_CORREL"] = correl_cube
+
+    # Maps
+    # No need to use add_white_image or add_cube as we already have the
+    # sub-cubes.
+    source.images["MUSE_WHITE"] = data_cube.mean(axis=0)
+    # The MAXMAP is the max of the correlation cube
+    source.images["OR_MAXMAP"] = correl_cube.max(axis=0)
+    # Using add_image, the image size is taken from the white map.
+    source.add_image(Image(mask_filename), "OR_MASK")
+    source.add_image(Image(skymask_filename), "OR_MASK_SKY")
+    source.add_image(Image(origin_params['segmap']), "OR_SEGMAP")
+
+    # Full source spectra
+    source.extract_spectra(data_cube, obj_mask="OR_MASK",
+                           sky_mask="OR_MASK_SKY")
+    source.spectra['OR_CORR'] = (correl_cube * source.images['OR_MASK']).mean(
+        axis=(1, 2))
+
+    # Per line data: the line table, the spectrum of each line, the narrow band
+    # map from the data and from the correlation cube.
+    # Content of the line table in the source
+    line_columns = ["NUM_LINE",
+                    "RA_ORI",
+                    "DEC_ORI",
+                    "LBDA_ORI",
+                    "FWHM_ORI",
+                    "FLUX_ORI",
+                    "GLR",
+                    "PROF",
+                    "PURITY"]
+    line_units = [None,
+                  u.deg,
+                  u.deg,
+                  u.Angstrom,
+                  u.Angstrom,
+                  u.erg / (u.s * u.cm**2),
+                  None,
+                  None,
+                  None]
+    line_fmt = ["d",
+                ".2f",
+                ".2f",
+                ".2f",
+                ".2f",
+                ".1f",
+                ".1f",
+                "d",
+                ".2f"]
+    # If the line is a complementary one, the GLR column is replace by STD
+    if source.COMP_CAT:
+        line_columns[6] = "STD"
+
+    # We put all the ORIGIN lines in an ORI_LINES tables but keep only the
+    # unique lines in the LINES tables.
+    source.add_table(source_lines, "ORI_LINES")
+
+    # TODO: Should we add the narrow band images and spectra for all the bands
+    # or only for those that are not merged?
+
+    for line in [_ for _ in source_lines if is_masked(_['merged_in'])]:
+        num_line = line['num_line']
+        ra_ori, dec_ori = line['ra'], line['dec']
+        lbda_ori = line['lbda']
+        prof = line['profile']
+        fwhm_ori = (profile_fwhm[prof] *
+                    data_cube.wave.get_step(unit=u.Angstrom))
+        flux_ori = line['flux']
+        if source.COMP_CAT:
+            glr_std = line['STD']
+        else:
+            glr_std = line['T_GLR']
+        purity = line['purity']
+
+        source.add_line(
+            cols=line_columns,
+            values=[num_line, ra_ori, dec_ori, lbda_ori, fwhm_ori, flux_ori,
+                    glr_std, prof, purity],
+            units=line_units,
+            fmt=line_fmt,
+            desc=None)
+
+        source.spectra[f"ORI_SPEC_{num_line}"] = Spectrum(
+            filename=spectra_fits_filename,
+            ext=(f"DATA{num_line}", f"STAT{num_line}")
+        )
+
+        source.add_narrow_band_image_lbdaobs(
+            data_cube, f"NB_LINE_{num_line}", lbda=lbda_ori,
+            width=2*fwhm_ori, is_sum=True, subtract_off=True)
+
+        # TODO: Do we want the sum or the max?
+        source.add_narrow_band_image_lbdaobs(
+            correl_cube, f"OR_CORR_{num_line}", lbda=lbda_ori,
+            width=2*fwhm_ori, is_sum=True, subtract_off=False)
+
+    if save_to is not None:
+        source.write(save_to)
+
+    return source
