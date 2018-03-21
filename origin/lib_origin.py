@@ -2943,7 +2943,8 @@ def unique_sources(table):
     of each line using the flux as weight.  The resulting table contains:
 
     - ID: the identifier of the source (unique);
-    - ra, dec: the position
+    - ra, dec: the RA, Dec position in degrees
+    - x, y: the spatial position in pixels,
     - n_lines: the number of lines associated to the source;
     - seg_label: the label of the segment associated to the source in the
       segmentation map;
@@ -2961,7 +2962,7 @@ def unique_sources(table):
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns: ID,
-        ra, dec, flux, seg_label, comp, merged_in, and line_merged_flag.
+        ra, dec, x, y, flux, seg_label, comp, merged_in, and line_merged_flag.
 
     Returns
     -------
@@ -2978,6 +2979,9 @@ def unique_sources(table):
         ra_waverage = np.average(group['ra'], weights=group['flux'])
         dec_waverage = np.average(group['dec'], weights=group['flux'])
 
+        x_waverage = np.average(group['x'], weights=group['flux'])
+        y_waverage = np.average(group['y'], weights=group['flux'])
+
         n_lines = len(group[group['merged_in'].mask])
 
         seg_label = group['seg_label'][0]
@@ -2988,11 +2992,12 @@ def unique_sources(table):
 
         line_merged_flag = np.any(group["line_merged_flag"])
 
-        result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
-                            seg_label, comp, line_merged_flag])
+        result_rows.append([group_id, ra_waverage, dec_waverage, x_waverage,
+                            y_waverage, n_lines, seg_label, comp,
+                            line_merged_flag])
 
-    return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
-                                          "seg_label", "comp",
+    return Table(rows=result_rows, names=["ID", "ra", "dec", "x", "y",
+                                          "n_lines", "seg_label", "comp",
                                           "line_merged_flag"])
 
 
@@ -3213,11 +3218,6 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
     """
     source_table = source_table.copy()
     source_table.add_index('ID')
-
-    # Add pixel positions of the sources in the main WCS.
-    source_table['ra'].unit, source_table['dec'].unit = u.deg, u.deg
-    source_table['y'], source_table['x'] = correl_cube.wcs.sky2pix(
-        np.array([source_table['dec'], source_table['ra']]).T).T
 
     # The segmentation must be done at the exact position of the lines found by
     # ORIGIN (x0, y0, z0) and not the computed “optimal” position (x, y, z, ra,
