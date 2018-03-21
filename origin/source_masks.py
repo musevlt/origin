@@ -94,8 +94,9 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         max_map = sub_cube.get_image(
             wave=(min_z, max_z), unit_wave=None, method="max")
 
-        segmap = detect_sources(max_map.data, threshold, seg_npixel,
-                                mask=max_map.mask)
+        # NOTE: photutils will have a mask=max_map.mask param in 0.5
+        max_map.data[max_map.mask] = -9999.
+        segmap = detect_sources(max_map.data, threshold, seg_npixel)
 
         # Segment associated to the line (maps are y, x)
         # The position to look for the value of the segment must be integers,
