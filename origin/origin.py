@@ -61,7 +61,7 @@ from .lib_origin import (
     Purity_Estimation,
     remove_identical_duplicates,
     Spatial_Segmentation,
-    trim_spectra_hdulist,
+    trim_spectrum_list,
     unique_sources,
 )
 from .version import __version__
@@ -1687,7 +1687,7 @@ class ORIGIN(object):
         self._loginfo('Save the clenaed lines in self.Cat3_lines' +
                       ' (%d lines)' % len(self.Cat3_lines))
 
-        self.Cat3_spectra = trim_spectra_hdulist(
+        self.Cat3_spectra = trim_spectrum_list(
             self.Cat3_lines, self.spectra, self.FWHM_profiles,
             size_fwhm=spectrum_size_fwhm)
 
