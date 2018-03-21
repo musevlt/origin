@@ -705,7 +705,11 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     cube_faint = cube_std.copy()
     mapO2 = np.zeros(cube_std.shape[1:])
     nstop = 0
-    for area_ind in range(1, NbArea + 1):
+    area_iter = range(1, NbArea + 1)
+    if NbArea > 1:
+        area_iter = ProgressBar(area_iter)
+
+    for area_ind in area_iter:
         # limits of each spatial zone
         ksel = (areamap == area_ind)
 
@@ -799,15 +803,15 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     mapO2 = np.zeros(faint.shape[1])
     nstop = 0
 
-    with ProgressBar(npix) as bar:
+    with ProgressBar(total=npix, miniters=0) as bar:
         # greedy loop based on test
-        tmp = 0
+        nbiter = 0
         while len(pypx) > 0:
-            tmp += 1
+            nbiter += 1
             mapO2[pypx] += 1
-            if tmp > itermax:
+            if nbiter > itermax:
                 nstop += 1
-                logger.info('Warning iterations stopped at %d', tmp)
+                logger.info('Warning iterations stopped at %d', nbiter)
                 break
 
             # vector data
@@ -856,7 +860,9 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
 
             # nuisance part
             pypx = np.where(test > thresO2)[0]
-            bar.update(npix - len(pypx))
+            bar.update(npix - len(pypx) - bar.n)
+
+        bar.update(npix - len(pypx) - bar.n)
 
     return faint, mapO2, nstop
 
