@@ -1,6 +1,10 @@
 import os
+import sys
 from setuptools import setup, find_packages
 from subprocess import check_output
+
+if sys.version_info[:2] < (3, 5):
+    sys.exit('Origin supports Python 3.5+ only')
 
 # Read version.py
 __version__ = None
@@ -39,6 +43,7 @@ setup(
     include_package_data=True,
     package_data={'origin': ['Dico_FWHM_2_12.fits']},
     zip_safe=False,
+    python_requires='>=3.5',
     install_requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'mpdaf',
                       'tqdm', 'joblib', 'PyYAML', 'photutils'],
     tests_require=['pytest'],
