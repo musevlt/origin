@@ -597,12 +597,21 @@ class ORIGIN(object):
             Cat1 = None
 
         # step09
-        def load_spectra(filename):
+        def load_spectra(filename, *, idlist=None):
+            """
+            If no idlist is provided, all the extensions are read as
+            a succession of DATA / STAT parts or a spectrum.
+
+            If an idlist is provided, the extensions DATA<ID> and STAT<ID> for
+            each ID is read and the resulting spectrum is appended to the list.
+            """
             spectra = []
             with fits.open(filename) as fspectra:
-                for i in range(len(fspectra) // 2):
-                    spectra.append(Spectrum('%s/spectra.fits' % folder,
-                                            hdulist=fspectra,
+                if idlist is None:
+                    idlist = np.arange(len(fspectra) // 2)
+
+                for i in idlist:
+                    spectra.append(Spectrum(hdulist=fspectra,
                                             ext=('DATA%d' % i, 'STAT%d' % i)))
             return spectra
 
@@ -626,7 +635,8 @@ class ORIGIN(object):
         else:
             Cat3_sources = None
         if os.path.isfile('%s/Cat3_spectra.fits' % folder):
-            Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder)
+            Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder,
+                                        idlist=Cat3_lines['num_line'])
         else:
             Cat3_spectra = None
 
@@ -998,13 +1008,27 @@ class ORIGIN(object):
         if self.Cat2b is not None:
             self.Cat2b.write('%s/Cat2b.fits' % path2, overwrite=True)
 
-        def save_spectra(spectra, outname):
+        def save_spectra(spectra, outname, *, idlist=None):
+            """
+            The spectra are saved to a FITS file with two extension per
+            spectrum, a DATA<ID> one and a STAT<ID> one. If no idlist is
+            provided, the ID is the index of the spectrum in the spectra list.
+            If an idlist is provided, the ID in the value of the list at the
+            index of the spectrum.
+
+            This is important because the ID in the extension names is the
+            num_line identifying the lines.
+            """
+            if idlist is None:
+                idlist = np.arange(len(spectra))
+
             hdulist = fits.HDUList([fits.PrimaryHDU()])
-            for i in range(len(spectra)):
-                hdu = spectra[i].get_data_hdu(name='DATA%d' % i,
-                                              savemask='nan')
+
+            for idx, spec_id in enumerate(idlist):
+                hdu = spectra[idx].get_data_hdu(name='DATA%d' % spec_id,
+                                                savemask='nan')
                 hdulist.append(hdu)
-                hdu = spectra[i].get_stat_hdu(name='STAT%d' % i)
+                hdu = spectra[idx].get_stat_hdu(name='STAT%d' % spec_id)
                 if hdu is not None:
                     hdulist.append(hdu)
             write_hdulist_to(hdulist, outname, overwrite=True)
@@ -1019,7 +1043,8 @@ class ORIGIN(object):
             self.Cat3_sources.write('%s/Cat3_sources.fits' % path2,
                                     overwrite=True)
         if self.Cat3_spectra is not None:
-            save_spectra(self.Cat3_spectra, '%s/Cat3_spectra.fits' % path2)
+            save_spectra(self.Cat3_spectra, '%s/Cat3_spectra.fits' % path2,
+                         idlist=self.Cat3_lines['num_line'])
 
         self._loginfo("Current session saved in %s" % path2)
 
