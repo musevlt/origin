@@ -2,12 +2,12 @@
 from astropy import units as u
 from matplotlib import pyplot as plt
 import numpy as np
-from photutils import detect_sources, detect_threshold
+from photutils import detect_sources
 
 
 def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                     cont_sky, out_dir, *, mask_size=50, seg_npixel=5,
-                    radec_is_xy=False, verbose=False):
+                    verbose=False, unit_center=None, unit_size=None):
     """Generate a mask for the source segmenting the detection cube.
 
     This function generates a mask for a source by combining the masks of each
@@ -54,8 +54,6 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         Size in pixels of the (square) masks.
     seg_npixel:
         Minimum number of pixels used by photutils for the segmentation.
-    radec_is_xy: bool
-        True if the position is given in pixel instead of RA, Dec.
     verbose: true
         If true, the correlation map and the segmentation map images associated
         to each line will also be saved in the output directory.
@@ -64,19 +62,13 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     # We will modify the table
     lines = lines.copy()
 
-    if radec_is_xy:
-        source_x, source_y = ra, dec
-    else:
-        source_x, source_y = detection_cube[0, :, :].wcs.wcs.all_world2pix(
-            ra, dec, 0)
-
     sub_cube = detection_cube.subcube(
-        center=(source_y, source_x), size=mask_size,
-        unit_center=None, unit_size=None)
-
+        center=(dec, ra), size=mask_size,
+        unit_center=unit_center, unit_size=unit_size)
     sky_mask = cont_sky.subimage(
-        center=(source_y, source_x), size=mask_size,
-        unit_center=None, unit_size=None)
+        center=(dec, ra), size=mask_size,
+        unit_center=unit_center, unit_size=unit_size)
+
     # When the source is at the edge of the cube, the sky mask may be “masked”
     # for regions outside of the cube.  We set these regions to 0 (not sky) in
     # the sky mask as we don't know their content.
@@ -102,6 +94,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         max_map = sub_cube.get_image(
             wave=(min_z, max_z), unit_wave=None, method="max")
 
+        # NOTE: photutils will have a mask=max_map.mask param in 0.5
         max_map.data[max_map.mask] = -9999.
         segmap = detect_sources(max_map.data, threshold, seg_npixel)
 
@@ -139,7 +132,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     # If verbose, also plot the mask and sky mask of the source.
     if verbose:
         fig, ax = plt.subplots()
-        im = ax.imshow(source_mask.data, origin='lower')
+        im = ax.imshow(source_mask.data.astype(int), origin='lower')
         fig.colorbar(im)
         fig.suptitle(f"S{source_id} mask")
         fig.savefig(f"{out_dir}/S{source_id}_mask.png")

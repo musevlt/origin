@@ -3216,36 +3216,27 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
     source_table = source_table.copy()
     source_table.add_index('ID')
 
-    # Spacial WCS of the cube
-    spatial_wcs = correl_cube[0, :, :].wcs.wcs
-
     # Add pixel positions of the sources in the main WCS.
     source_table['ra'].unit, source_table['dec'].unit = u.deg, u.deg
-    sources_x, sources_y = spatial_wcs.all_world2pix(
-        source_table['ra'], source_table['dec'], 0)
-    source_table.add_column(Column(data=sources_x, name="x"))
-    source_table.add_column(Column(data=sources_y, name="y"))
+    source_table['y'], source_table['x'] = correl_cube.wcs.sky2pix(
+        np.array([source_table['dec'], source_table['ra']]).T).T
 
     # The segmentation must be done at the exact position of the lines found by
     # ORIGIN (x0, y0, z0) and not the computed “optimal” position (x, y, z, ra,
     # and dec).  Using this last postion may cause problem when it falls just
     # outside the segment.  We replace ra, dec, and z by the initial values.
     line_table = line_table.copy()
-    ra0, dec0 = spatial_wcs.all_pix2world(
-        line_table['x0'], line_table['y0'], 0)
-    line_table['ra'], line_table['dec'] = ra0, dec0
+    line_table['dec'], line_table['ra'] = correl_cube.wcs.pix2sky(
+        np.array([line_table['y0'], line_table['x0']]).T).T
     line_table['z'] = line_table['z0']
     # We also add a fwhm column containing the FWHM of the line profile as
     # it is used for mask creation.
-    line_table.add_column(Column(
-        data=[profile_fwhm[profile] for profile in line_table['profile']],
-        name="fwhm"
-    ))
+    line_table['fwhm'] = [profile_fwhm[profile]
+                          for profile in line_table['profile']]
 
     # Convert segmap to sky map (1 where sky)
     skymap = segmap.copy()
-    skymap.data[skymap.data != 0] = -1
-    skymap.data += 1
+    skymap._data = (skymap._data == 0).astype(int)
 
     by_id = line_table.group_by('ID')
 
@@ -3263,7 +3254,7 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=skymap, out_dir=out_dir, radec_is_xy=True
+            cont_sky=skymap, out_dir=out_dir
         )
 
         if gen_mask_return is not None:
@@ -3274,5 +3265,5 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
                     source_id, source_x, source_y,
                     lines=group, detection_cube=detection_cube,
                     threshold=threshold, cont_sky=skymap, out_dir=out_dir,
-                    radec_is_xy=True, verbose=True
+                    verbose=True
                 )
