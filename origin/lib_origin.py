@@ -36,7 +36,7 @@ import logging
 import numpy as np
 import os.path
 
-from astropy.table import Table, Column
+from astropy.table import Table, Column, MaskedColumn
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
@@ -55,6 +55,8 @@ from time import time
 
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Source
+
+from .source_masks import gen_source_mask
 
 __version__ = '3.0 beta'
 
@@ -2494,6 +2496,12 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
 
+    # TODO: When computing the optimal position of the lines, we may end up
+    # with duplicated lines at the very same (x, y, z) position because we
+    # manage to correct for double, very near, detections.  We should then keep
+    # only one line.  It's better to keep the “purest” line, but the purity
+    # information is not available at this stage.
+
     # Initialization
     NL, NY, NX = RAW.shape
     Cat2_x_grid = []
@@ -2921,3 +2929,347 @@ def Construct_Object_Catalogue(Cat, Cat_est_line, correl, wave, fwhm_profiles,
         os.remove('%s/tmp_cube_correl.fits' % path2)
 
     return len(np.unique(Cat['ID']))
+
+
+def unique_sources(table):
+    """Return unique source positions in table.
+
+    ORIGIN produces a list of lines associated to various sources identified by
+    the ID column.  Some objects contain several lines found at slightly
+    different positions.
+
+    This function computes the list of unique sources averaging the RA and Dec
+    of each line using the flux as weight.  The resulting table contains:
+
+    - ID: the identifier of the source (unique);
+    - ra, dec: the position
+    - n_lines: the number of lines associated to the source;
+    - seg_label: the label of the segment associated to the source in the
+      segmentation map;
+    - comp: boolean flag true for complementary sources detected only in the
+      cube before the PCA.
+    - line_merged_flag: boolean flag indicating if any of the lines associated
+      to the source was merged with another nearby line.
+
+    Note: The n_lines contains the number of unique lines associated to the
+    source, but for computing the position of the source, we are using all the
+    duplicated lines as shredded sources may have identical lines found at
+    different positions.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns: ID,
+        ra, dec, flux, seg_label, comp, merged_in, and line_merged_flag.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with unique sources.
+
+    """
+    table_by_id = table.group_by('ID')
+
+    result_rows = []
+    for key, group in zip(table_by_id.groups.keys, table_by_id.groups):
+        group_id = key['ID']
+
+        ra_waverage = np.average(group['ra'], weights=group['flux'])
+        dec_waverage = np.average(group['dec'], weights=group['flux'])
+
+        n_lines = len(group[group['merged_in'].mask])
+
+        seg_label = group['seg_label'][0]
+        comp = group['comp'][0]
+        # TODO: seg_label and comp should be the same for all the lines
+        # associated to the source, shall we nevertheless check this is the
+        # case?
+
+        line_merged_flag = np.any(group["line_merged_flag"])
+
+        result_rows.append([group_id, ra_waverage, dec_waverage, n_lines,
+                            seg_label, comp, line_merged_flag])
+
+    return Table(rows=result_rows, names=["ID", "ra", "dec", "n_lines",
+                                          "seg_label", "comp",
+                                          "line_merged_flag"])
+
+
+def remove_identical_duplicates(table):
+    """Remove strictly identical duplicated lines.
+
+    ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
+    set to the very same (x, y, z) position when computing the optimal
+    position.
+
+    For such duplicates, this function only keep the line with the highest
+    purity.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns ID, x,
+        y, z, and purity.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with only unique (x, y, z) rows.
+
+    """
+    table = table.copy()
+
+    # Sort by decreasing purity
+    table.sort('purity')
+    table.reverse()
+
+    # Find position of first unique (x, y, z)
+    _, idx = np.unique(table['x', 'y', 'z'], axis=0, return_index=True)
+
+    result = table[idx].copy()
+    result.sort(['ID', 'z'])
+
+    return result
+
+
+def merge_similar_lines(table, *, z_pix_threshold=5):
+    """Merge and flag possibily duplicated lines.
+
+    Some ORIGIN tables associate several identical lines at different positions
+    to the same object (same ID).  Lines are considered as duplicated if they
+    are withing the given threshold in the spectral (z) axis.
+
+    We mark the duplicated lines as merged into the line of highest flux and
+    we flag the object as having duplicated lines in the table, as the
+    information may not be reliable.
+
+    Parameters
+    ----------
+    table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns: ID,
+        z, num_line, and purity.
+    z_pix_threshold: int
+        Pixel threshold on the spectral axis.  When two lines are nearer than
+        this threshold, they are considered as the same line. Note that the
+        association percolates and may associated lines further than the
+        threshold.
+
+    Returns
+    -------
+    astropy.table.Table
+        Table with the same rows and with the supplementary merged_in and
+        line_merged_flag columns.
+
+    """
+    table = table.copy()
+
+    # We use the table grouping functionality of astropy to browse by object
+    # and group of identical lines.  Table grouping does not allow to modify
+    # the underlying table, so we first browse the groups and get the indexes
+    # of rows to modify and then we perform the modifications on the full
+    # table.
+    # List of row indexes to flag has having been merged.
+    idx_to_flag = []
+    # Dictionary associating line identifiers (from num_line column) to the
+    # index of the row that have been merged with this line.
+    merge_dict = {}
+    # Column containing the row indexes to access them while in groups.
+    table.add_column(Column(data=np.arange(len(table), dtype=int),
+                            name="_idx"))
+
+    for group in table.group_by('ID').groups:
+        # TODO: If astropy guaranties that grouping retains the row order, it
+        # is faster to sort by z before grouping (and before adding _idx).
+        group.sort('z')
+
+        # Boolean array of the same length of the group indicating for each
+        # line if it's different from the previous (with True for the first
+        # line).
+        different_from_previous = np.concatenate(
+            ([True], (group['z'][1:] - group['z'][:-1]) >= z_pix_threshold)
+        )
+        # By computing the cumulative sum on this array, we get an array of
+        # increasing integers where a succession of same number identify
+        # identical lines.
+        line_groups = np.cumsum(different_from_previous)
+
+        for subgroup in group.group_by(line_groups).groups:
+            if len(subgroup) > 1:
+                subgroup.sort('flux')
+                idx_to_flag += list(subgroup['_idx'])
+                merge_dict[subgroup['num_line'][-1]] = subgroup['_idx'][:-1]
+
+    table['line_merged_flag'] = False
+    table['line_merged_flag'][idx_to_flag] = True
+
+    table.add_column(MaskedColumn(data=np.full(len(table), -9999, dtype=int),
+                                  name="merged_in",
+                                  mask=np.full(len(table), True),
+                                  fill_value=-9999))
+    for line_id, row_indexes in merge_dict.items():
+        table['merged_in'][row_indexes] = line_id
+
+    table.remove_columns('_idx')
+    table.sort(['ID', 'z'])
+
+    return table
+
+
+def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
+    """Keep only relevant spectra and limit their extent around the line.
+
+    The “compute spectra” step creates a FITS file with the spectra (data and
+    variance) associated to each line.  These spectra are based on the full
+    MUSE wavelength grid.  This function:
+
+    - limits the spectra list to the list of lines present in the line_table
+      (e.g. if the table was processed by remove_identical_duplicates the
+      duplicated spectra will be removed);
+    - limit the wavelength grid of the spectra around the associated line.
+
+    TODO: Include the limiting of the spectra in the spectrum computation code.
+
+    Parameters
+    ----------
+    line_table: astropy.table.Table
+        An ORIGIN table of lines, this table must contain the columns:
+        num_line, profile, and z.
+    spectra: astropy.io.fits.hdu.hdulist.HDUList
+        An HDUList containing the spectra associated to each line.  It must
+        contain for each line identifier a “DATA<ID>” and a “STAT<ID>”
+        extension.
+    profile_fwhm: list
+        List of the profile FWHMs. The index in the list is the profile number.
+    size_fwhm: float
+        The length of the spectrum to extract around the line in FWHM factor.
+
+    Returns
+    -------
+    astropy.io.fits.hdu.hdulist.HDUList
+        An HDUList with only the relevant, wavelength limited spectra, with the
+        same extension names as in the input.
+
+    """
+    radius = np.ceil(np.array(profile_fwhm) * size_fwhm / 2)
+
+    result = []
+
+    for row in line_table:
+        num_line, line_profile, line_z = row[['num_line', 'profile', 'z']]
+        sp = spectra[num_line]
+        result.append(sp.subspec(line_z - radius[line_profile],
+                                 line_z + radius[line_profile], unit=None))
+
+    return result
+
+
+def create_masks(line_table, source_table, profile_fwhm, correl_cube,
+                 correl_threshold, std_cube, std_threshold, segmap, out_dir, *,
+                 mask_size=50, seg_thres_factor=.5, plot_problems=True):
+    """Create the mask of each source.
+
+    This function creates the masks and sky masks of the sources in the line
+    table using the ``origin.source_masks.gen_source_mask`` function on each
+    source. The primary source masks are created using the correl_cube while
+    the complementary source masks are created using the std_cube.
+
+    The correl_cube and std_cube are expected to have the same WCS.
+
+    TODO: Implement parallel processing.
+
+    Parameters
+    ----------
+    line_table: astropy.table.Table
+        ORIGIN table of lines, this table must contain the columns: ID, x0, y0,
+        z0, comp, and profile.
+    source_table: astropy.table.Table
+        ORIGIN table containing the source list.  This table is used to get the
+        position of the source.
+    profile_fwhm: list
+        List of the profile FWHMs. The index in the list is the profile number.
+    correl_cube: mpdaf.obj.Cube
+        Correlation cube where primary sources where detected.
+    correl_threshold: float
+        Threshold used for detection of sources in the correl_cube.
+    std_cube: mpdaf.obj.Cube
+        STD cube where complementary sources where detected.
+    std_threshold: float
+        Threshold used for detection of sources in the STD cube.
+    segmap: mpdaf.obj.Image
+        Segmentation map. Must have the same spatial WCS as the cube. The sky
+        must be in segment 0.
+    out_dir: str
+        Directory into which the masks will be created.
+    mask_size: int
+        Width in pixel for the square masks.
+    seg_thres_factor: float
+        Factor applied to the detection thresholds to get the threshold used
+        for segmentation. The default is to take half of it.
+    plot_problems: bool
+        If true, the problematic sources will be reprocessed by gen_source_mask
+        in verbose mode to produce various plots of the mask creation process.
+
+    """
+    source_table = source_table.copy()
+    source_table.add_index('ID')
+
+    # Spacial WCS of the cube
+    spatial_wcs = correl_cube[0, :, :].wcs.wcs
+
+    # Add pixel positions of the sources in the main WCS.
+    source_table['ra'].unit, source_table['dec'].unit = u.deg, u.deg
+    sources_x, sources_y = spatial_wcs.all_world2pix(
+        source_table['ra'], source_table['dec'], 0)
+    source_table.add_column(Column(data=sources_x, name="x"))
+    source_table.add_column(Column(data=sources_y, name="y"))
+
+    # The segmentation must be done at the exact position of the lines found by
+    # ORIGIN (x0, y0, z0) and not the computed “optimal” position (x, y, z, ra,
+    # and dec).  Using this last postion may cause problem when it falls just
+    # outside the segment.  We replace ra, dec, and z by the initial values.
+    line_table = line_table.copy()
+    ra0, dec0 = spatial_wcs.all_pix2world(
+        line_table['x0'], line_table['y0'], 0)
+    line_table['ra'], line_table['dec'] = ra0, dec0
+    line_table['z'] = line_table['z0']
+    # We also add a fwhm column containing the FWHM of the line profile as
+    # it is used for mask creation.
+    line_table.add_column(Column(
+        data=[profile_fwhm[profile] for profile in line_table['profile']],
+        name="fwhm"
+    ))
+
+    # Convert segmap to sky map (1 where sky)
+    skymap = segmap.copy()
+    skymap.data[skymap.data != 0] = -1
+    skymap.data += 1
+
+    by_id = line_table.group_by('ID')
+
+    for key, group in zip(by_id.groups.keys, by_id.groups):
+        source_id = key['ID']
+        source_x, source_y = source_table.loc[source_id]['x', 'y']
+
+        if source_table.loc[source_id]['comp'] == 0:
+            detection_cube = correl_cube
+            threshold = correl_threshold * seg_thres_factor
+        else:
+            detection_cube = std_cube
+            threshold = std_threshold * seg_thres_factor
+
+        gen_mask_return = gen_source_mask(
+            source_id, source_x, source_y,
+            lines=group, detection_cube=detection_cube, threshold=threshold,
+            cont_sky=skymap, out_dir=out_dir, radec_is_xy=True
+        )
+
+        if gen_mask_return is not None:
+            with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
+                out.write(f"{gen_mask_return}\n")
+            if plot_problems:
+                gen_mask_return = gen_source_mask(
+                    source_id, source_x, source_y,
+                    lines=group, detection_cube=detection_cube,
+                    threshold=threshold, cont_sky=skymap, out_dir=out_dir,
+                    radec_is_xy=True, verbose=True
+                )
