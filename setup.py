@@ -40,6 +40,6 @@ setup(
     package_data={'origin': ['Dico_FWHM_2_12.fits']},
     zip_safe=False,
     install_requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'mpdaf',
-                      'six', 'tqdm', 'joblib', 'PyYAML', 'photutils'],
+                      'tqdm', 'joblib', 'PyYAML', 'photutils'],
     tests_require=['pytest'],
 )

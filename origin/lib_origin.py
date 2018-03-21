@@ -48,7 +48,6 @@ from scipy.ndimage import measurements, filters
 from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import ConvexHull
 from scipy.sparse.linalg import svds
-from six.moves import range, zip
 from scipy.interpolate import interp1d
 from time import time
 

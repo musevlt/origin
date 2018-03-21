@@ -15,8 +15,8 @@ origin.py contains an oriented-object interface to run the ORIGIN software.
 Installation
 ============
 
-Required Python packages: Numpy, Scipy, Matplotlib, Astropy, Mpdaf, six,
-pyfftw, Joblib, PyYAML.
+Required Python packages: Numpy, Scipy, Matplotlib, Astropy, Mpdaf,
+tqdm, Joblib, PyYAML.
 
 Usage
 =====
