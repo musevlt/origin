@@ -389,7 +389,7 @@ class ORIGIN(object):
                    segmap=segmap, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
-    def load(cls, folder, newname=None):
+    def load(cls, folder, newname=None, loglevel='DEBUG', logcolor=False):
         """Load a previous session of ORIGIN.
 
         ORIGIN.write() method saves a session in a folder that has the name of
@@ -634,6 +634,7 @@ class ORIGIN(object):
             name = newname
 
         return cls(path=path, name=name, param=param,
+                   loglevel=loglevel, logcolor=logcolor,
                    filename=param['cubename'], fieldmap=wfields,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    imawhite=ima_white, cube_std=cube_std, cont_dct=cont_dct,
