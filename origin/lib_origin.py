@@ -29,7 +29,6 @@ Please contact Antony for more info at antonyschutz@gmail.com
 
 lib_origin.py contains the methods that compose the ORIGIN software
 """
-from __future__ import absolute_import, division
 
 import astropy.units as u
 import logging

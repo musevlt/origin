@@ -14,8 +14,6 @@ Please contact Antony for more info at antonyschutz@gmail.com
 origin.py contains an oriented-object interface to run the ORIGIN software
 """
 
-from __future__ import absolute_import, division
-
 import astropy.units as u
 import glob
 import logging

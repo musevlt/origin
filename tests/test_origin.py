@@ -1,7 +1,5 @@
 """Test interface on ORIGIN software."""
 
-from __future__ import absolute_import, division
-
 import os
 import shutil
 
