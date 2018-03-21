@@ -1396,6 +1396,7 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout, dtype=int)
     aout = np.array(aout, dtype=int)
 
+    # ID of Spatiale Merging
     xout2 = []
     yout2 = []
     zout2 = []
@@ -1418,6 +1419,7 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout2, dtype=int)
     aout = np.array(aout2, dtype=int)
 
+    # Group Spectrale Merging
     for n, area_cu in enumerate(np.unique(aout)):
         if area_cu > 0:
             ind = np.where(aout == area_cu)[0]
@@ -1694,7 +1696,6 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
 
-    nz, ny, nx = MaxLoc.shape
     locM = (MaxLoc > thresh)
     locm = (MinLoc > thresh)
 
@@ -1859,6 +1860,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     det_M = []
     Pval_r = []
     Tval_r = []
+
     if threshlist is None:
         npts1, npts2, dp = auto
         thresh_max = np.minimum(cube_local_min.max(), cube_local_max.max())
@@ -1870,19 +1872,17 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         # make sure that last point is thresh_max (and not an
         # approximate value due to linspace)
         index_pval1[-1] = thresh_max
+        n_pval1 = len(index_pval1)
 
         logger.debug('Iter 1 Threshold min %f max %f npts %d',
-                     thresh_min, thresh_max, len(index_pval1))
-        for k, thresh in enumerate(ProgressBar(list(index_pval1[::-1]))):
+                     thresh_min, thresh_max, n_pval1)
+        for k, thresh in enumerate(ProgressBar(index_pval1[::-1])):
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
                                                        cube_local_min,
                                                        thresh, spat_size,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f',
-                         k + 1, len(index_pval1), thresh, det_mit, det_Mit,
-                         est_purity)
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1893,6 +1893,11 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                 break
         thresh_min = thresh
 
+        for k, (thresh, det_mit, det_Mit, est_purity) in enumerate(
+                zip(Tval_r, det_m, det_M, Pval_r)):
+            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f',
+                         k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity)
+
         # 2nd iter
         index_pval3 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts2))
@@ -1902,7 +1907,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
         logger.debug('Iter 2 Threshold min %f max %f npts %d',
                      index_pval3[0], index_pval3[-1], len(index_pval3))
-        for k, thresh in enumerate(ProgressBar(list(index_pval3))):
+        for k, thresh in enumerate(ProgressBar(index_pval3)):
             if np.any(np.isclose(thresh, Tval_r)):
                 continue
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
@@ -2015,18 +2020,18 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
     profile_max = profile[zpixRef, ypixRef, xpixRef]
 
     # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(ypixRef, xpixRef)]
-    skycrd = wcs.pix2sky(pixcrd)
-    ra = skycrd[:, 1]
-    dec = skycrd[:, 0]
+    dec, ra = wcs.pix2sky(np.stack((ypixRef, xpixRef)).T).T
     lbda = wave.coord(zpixRef)
-    # Catalogue of referent pixels
+
+    # Relabel IDs sequentially
     idout = np.asarray(idout)
     oldIDs = np.unique(idout)
-    for oldID, newID in zip(oldIDs, np.arange(len(oldIDs))):
-        idout[idout == oldID] = newID
-    Cat_ref = Table([idout, ra, dec, lbda, xpixRef, ypixRef, zpixRef,
-                     profile_max, seg_label, correl_max, ],
+    idmap = np.zeros(oldIDs.max() + 1, dtype=int)
+    idmap[oldIDs] = np.arange(len(oldIDs))
+
+    # Catalogue of referent pixels
+    Cat_ref = Table([idmap[idout], ra, dec, lbda, xpixRef, ypixRef, zpixRef,
+                     profile_max, seg_label, correl_max],
                     names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
                            'profile', 'seg_label', 'T_GLR'))
     Cat_ref.sort('ID')
@@ -2330,11 +2335,12 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
 
-    zest = np.zeros((1 + 2 * size_grid, 1 + 2 * size_grid))
-    fest_00 = np.zeros((1 + 2 * size_grid, 1 + 2 * size_grid))
-    fest_05 = np.zeros((1 + 2 * size_grid, 1 + 2 * size_grid))
-    mse = np.ones((1 + 2 * size_grid, 1 + 2 * size_grid)) * np.inf
-    mse_5 = np.ones((1 + 2 * size_grid, 1 + 2 * size_grid)) * np.inf
+    shape = (1 + 2 * size_grid, 1 + 2 * size_grid)
+    zest = np.zeros(shape)
+    fest_00 = np.zeros(shape)
+    fest_05 = np.zeros(shape)
+    mse = np.full(shape, np.inf)
+    mse_5 = np.full(shape, np.inf)
 
     nl = data_in.shape[0]
     ind_max = slice(np.maximum(0, z0 - 5), np.minimum(nl, z0 + 5))
@@ -2343,8 +2349,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     else:
         nl, sizpsf, tmp = psf[0].shape
 
-    lin_est = np.zeros((nl, 1 + 2 * size_grid, 1 + 2 * size_grid))
-    var_est = np.zeros((nl, 1 + 2 * size_grid, 1 + 2 * size_grid))
+    lin_est = np.zeros((nl, ) + shape)
+    var_est = np.zeros((nl, ) + shape)
     # half size psf
     longxy = int(sizpsf // 2)
     inds = slice(longxy - horiz_psf, longxy + 1 + horiz_psf)
@@ -2510,12 +2516,11 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Cat2_flux5 = []
     Cat_est_line_raw = []
     Cat_est_line_var = []
-    for k in ProgressBar(range(len(Cat1_T))):
-        src = Cat1_T[k]
+
+    for src in ProgressBar(Cat1_T):
         y0 = src['y0']
         x0 = src['x0']
         z0 = src['z0']
-
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
 
@@ -2535,15 +2540,11 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Cat2 = Cat1_T.copy()
 
     # add real coordinates
-    pixcrd = [[p, q] for p, q in zip(Cat2_y_grid, Cat2_x_grid)]
-    skycrd = wcs.pix2sky(pixcrd)
-    ra = skycrd[:, 1]
-    dec = skycrd[:, 0]
-    lbda = wave.coord(Cat2_z_grid)
+    dec, ra = wcs.pix2sky(np.stack((Cat2_y_grid, Cat2_x_grid)).T).T
     Cat2['ra'] = ra
     Cat2['dec'] = dec
-    Cat2['lbda'] = lbda
-    #
+    Cat2['lbda'] = wave.coord(Cat2_z_grid)
+
     col_flux = Column(name='flux', data=Cat2_flux5)
     col_res = Column(name='residual', data=Cat2_res_min5)
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
@@ -2584,11 +2585,12 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
     """
 
     Cat1_2 = Cat_in.copy()
-    purity = np.empty(len(Cat1_2))
+    # set to 0 if only 1 purity meaurement
+    purity = np.zeros(len(Cat1_2))
 
     # Comp=0
     ksel = Cat1_2['comp'] == 0
-    if len(Cat1_2[ksel]) > 1:
+    if np.count_nonzero(ksel) > 1:
         tglr = Cat1_2['T_GLR'][ksel]
         f = interp1d(purity_index[0], purity_curves[0], bounds_error=False,
                      fill_value="extrapolate")
@@ -2596,20 +2598,16 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
 
     # comp=1
     ksel = Cat1_2['comp'] == 1
-    if len(Cat1_2[ksel]) > 1:
+    if np.count_nonzero(ksel) > 1:
         tglr = Cat1_2['STD'][ksel]
         f = interp1d(purity_index[1], purity_curves[1], bounds_error=False,
                      fill_value="extrapolate")
         purity[ksel] = f(tglr.data.data)
-    else:
-        purity[ksel] = 0  # set to 0 if only 1 purity meaurement
+
     # The purity by definition cannot be > 1 and < 0, if the interpolation
     # gives a value outside these limits, replace by 1 or 0
-    purity[purity < 0] = 0
-    purity[purity > 1] = 1
+    Cat1_2['purity'] = np.clip(purity, 0, 1)
 
-    col_fid = Column(name='purity', data=purity)
-    Cat1_2.add_columns([col_fid])
     return Cat1_2
 
 

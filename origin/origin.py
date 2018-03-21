@@ -1355,7 +1355,7 @@ class ORIGIN(object):
         self.cube_correl = Cube(data=correl, wave=self.wave, wcs=self.wcs,
                                 mask=np.ma.nomask, copy=False)
 
-        self._loginfo('Save the number of profile associated to the TGLR' +
+        self._loginfo('Save the number of profile associated to the TGLR'
                       ' in self.cube_profile')
         profile[self.mask] = 0
         self.cube_profile = Cube(data=profile, wave=self.wave, wcs=self.wcs,
@@ -1478,7 +1478,7 @@ class ORIGIN(object):
     def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1),
                               threshlist=None):
         """Detections on local maxima of std cube + spatia-spectral
-        merging in order to create an complematary catalog. This catalog is
+        merging in order to create an complementary catalog. This catalog is
         merged with the catalog Cat0 in order to create the catalog Cat1
 
         Parameters
@@ -1559,17 +1559,17 @@ class ORIGIN(object):
             self.Cat1['comp'] = 0
             self.Cat1['STD'] = 0
         else:
-            Catcomp, inut = Create_local_max_cat(threshold2,
-                                                 cube_local_max_faint_dct,
-                                                 cube_local_min_faint_dct,
-                                                 self.segmap._data,
-                                                 self.param['spat_size'],
-                                                 self.param['spect_size'],
-                                                 self.param['tol_spat'],
-                                                 self.param['tol_spec'],
-                                                 True,
-                                                 self.cube_profile._data,
-                                                 self.wcs, self.wave)
+            Catcomp, _ = Create_local_max_cat(threshold2,
+                                              cube_local_max_faint_dct,
+                                              cube_local_min_faint_dct,
+                                              self.segmap._data,
+                                              self.param['spat_size'],
+                                              self.param['spect_size'],
+                                              self.param['tol_spat'],
+                                              self.param['tol_spec'],
+                                              True,
+                                              self.cube_profile._data,
+                                              self.wcs, self.wave)
             Catcomp.rename_column('T_GLR', 'STD')
             # merging
             Cat0 = self.Cat0.copy()
