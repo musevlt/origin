@@ -1098,7 +1098,7 @@ class ORIGIN(object):
         self.areamap : `~mpdaf.obj.Image`
                        The map of areas
         """
-        self._loginfo('02 - Areas creation')
+        self._loginfo('Step 02 - Areas creation')
         self._loginfo('   - pfa of the test = %0.2f' % pfa)
         self._loginfo('   - side size = %d pixels' % minsize)
         if minsize is None:
@@ -1608,7 +1608,7 @@ class ORIGIN(object):
         self.spectra : list of `~mpdaf.obj.Spectrum`
                        Estimated lines
         """
-        self._loginfo('step09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
+        self._loginfo('Step 09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
         self.param['grid_dxy'] = grid_dxy
 
         if self.Cat1 is None:
