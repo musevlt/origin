@@ -2,16 +2,13 @@
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 ---------------------------------------------------------
 
-This software has been developped by Carole Clastres under the supervision of
-David Mary (Lagrange institute, University of Nice) and ported to Python by
-Laure Piqueras (CRAL). From November 2016 the software is updated by
-Antony Schutz.
+This software was initially developped by Carole Clastres, under the
+supervision of David Mary (Lagrange institute, University of Nice), and it was
+ported to Python by Laure Piqueras (CRAL). From November 2016 the software is
+updated by Antony Schutz.
 
 The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
-Please contact Carole for more info at carole.clastres@univ-lyon1.fr
-Please contact Antony for more info at antonyschutz@gmail.com
 
-origin.py contains an oriented-object interface to run the ORIGIN software
 """
 
 import astropy.units as u
@@ -90,144 +87,129 @@ def _format_cat(Cat, i):
 class ORIGIN(object):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
-       This software has been developped by Carole Clastres under the
-       supervision of David Mary (Lagrange institute, University of Nice).
-       From November 2016 the software is updated by Antony Schutz.
+    Oriented-object interface to run the ORIGIN software.
 
-       The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
-       Please contact Carole for more info at carole.clastres@univ-lyon1.fr
-       Please contact Antony for more info at antonyschutz@gmail.com
+    An Origin object is mainly composed by:
+    - cube data (raw data and covariance)
+    - 1D dictionary of spectral profiles
+    - MUSE PSF
 
-       An Origin object is mainly composed by:
-        - cube data (raw data and covariance)
-        - 1D dictionary of spectral profiles
-        - MUSE PSF
+    Attributes
+    ----------
+    path : str
+        Path where the ORIGIN data will be stored.
+    name : str
+        Name of the session and basename for the sources.
+    param : dict
+        Parameters values.
+    cube_raw : array (Nz, Ny, Nx)
+        Raw data.
+    var : array (Nz, Ny, Nx)
+        Variance.
+    Nx : int
+        Number of columns
+    Ny : int
+        Number of rows
+    Nz : int
+        Number of spectral channels
+    wcs : `mpdaf.obj.WCS`
+        RA-DEC coordinates.
+    wave : `mpdaf.obj.WaveCoord`
+        Spectral coordinates.
+    profiles : list of array
+        List of spectral profiles to test
+    FWHM_profiles : list
+        FWHM of the profiles in pixels.
+    wfields : None or list of arrays
+        List of weight maps (one per fields in the case of MUSE mosaic)
+        None: just one field
+    PSF : array (Nz, Nfsf, Nfsf) or list of arrays
+        MUSE PSF (one per field)
+    FWHM_PSF : float or list of float
+        Mean of the fwhm of the PSF in pixel (one per field).
+    imawhite : `~mpdaf.obj.Image`
+        White image
+    segmap : `~mpdaf.obj.Image`
+        Segmentation map
+    self.cube_std : `~mpdaf.obj.Cube`
+        standardized data for PCA. Result of step01.
+    self.cont_dct : `~mpdaf.obj.Cube`
+        DCT continuum. Result of step01.
+    self.ima_std : `~mpdaf.obj.Image`
+        Mean of standardized data for PCA along the wavelength axis.
+        Result of step01.
+    self.ima_dct : `~mpdaf.obj.Image`
+        Mean of DCT continuum cube along the wavelength axis.
+        Result of step01.
+    nbAreas : int
+        Number of area (segmentation) for the PCA computation.
+        Result of step02.
+    areamap : `~mpdaf.obj.Image`
+        PCA area. Result of step02.
+    testO2 : list of arrays (one per PCA area)
+        Result of the O2 test (step03).
+    histO2 : list of arrays (one per PCA area)
+        PCA histogram (step03).
+    binO2 : list of arrays (one per PCA area)
+        Bins for the PCA histogram (step03).
+    thresO2 : list of float
+        For each area, threshold value (step03).
+    meaO2 : list of float
+        Location parameter of the Gaussian fit used to
+        estimate the threshold (step03).
+    stdO2 : list of float
+        Scale parameter of the Gaussian fit used to
+        estimate the threshold (step03).
+    cube_faint : `~mpdaf.obj.Cube`
+        Projection on the eigenvectors associated to
+        the lower eigenvalues of the data cube
+        (representing the faint signal). Result of step04.
+    mapO2 : `~mpdaf.obj.Image`
+        The numbers of iterations used by testO2 for
+            each spaxel. Result of step04.
+    cube_correl : `~mpdaf.obj.Cube`
+        Cube of T_GLR values (step05).
+    cube_profile : `~mpdaf.obj.Cube` (type int)
+        PSF profile associated to the T_GLR (step05).
+    maxmap : `~mpdaf.obj.Image`
+        Map of maxima along the wavelength axis (step05).
+    cube_local_max : `~mpdaf.obj.Cube`
+        Local maxima from max correlation (step05).
+    cube_local_min : `~mpdaf.obj.Cube`
+        Local maxima from min correlation (step05).
+    threshold : float
+        Estimated threshold (step06).
+    Pval_r : array
+        Purity curves (step06).
+    index_pval : array
+        Indexes of the purity curves (step06).
+    Det_M : list
+        Number of detections in +DATA (step06).
+    Det_m : list
+        Number of detections in -DATA  (step06).
+    Cat0 : astropy.Table
+        Catalog returned by step07
+    zm : array
+        z-position of the detections from min correlation (step07)
+    ym : array
+        y-position of the detections from min correlation (step07)
+    xm : array
+        x-position of the detections from min correlation (step07)
+    Pval_r_comp : array
+        Purity curves (step08).
+    index_pval_comp : array
+        Indexes of the purity curves (step08).
+    Det_M_comp : list
+        Number of detections in +DATA (step08).
+    Det_m_comp : list
+        Number of detections in -DATA  (step08).
+    Cat1 : astropy.Table
+        Catalog returned by step08
+    spectra : list of `~mpdaf.obj.Spectrum`
+        Estimated lines. Result of step09.
+    Cat2 : astropy.Table
+        Catalog returned by step09.
 
-       The class contains the methods that compose the ORIGIN software.
-
-        Attributes
-        ----------
-        path                   : str
-                                 Path where the ORIGIN data will be stored.
-        name                   : str
-                                 Name of the session and basename for the
-                                 sources.
-        param                  : dict
-                                 Parameters values.
-        cube_raw               : array (Nz, Ny, Nx)
-                                 Raw data.
-        var                    : array (Nz, Ny, Nx)
-                                 Variance.
-        Nx                     : int
-                                 Number of columns
-        Ny                     : int
-                                 Number of rows
-        Nz                     : int
-                                 Number of spectral channels
-        wcs                    : `mpdaf.obj.WCS`
-                                 RA-DEC coordinates.
-        wave                   : `mpdaf.obj.WaveCoord`
-                                 Spectral coordinates.
-        profiles               : list of array
-                                 List of spectral profiles to test
-        FWHM_profiles          : list
-                                 FWHM of the profiles in pixels.
-        wfields                : None or list of arrays
-                                 List of weight maps (one per fields in the
-                                 case of MUSE mosaic)
-                                 None: just one field
-        PSF                    : array (Nz, Nfsf, Nfsf) or list of arrays
-                                 MUSE PSF (one per field)
-        FWHM_PSF               : float or list of float
-                                 Mean of the fwhm of the PSF in pixel (one per
-                                 field).
-        imawhite               : `~mpdaf.obj.Image`
-                                 White image
-        segmap                 : `~mpdaf.obj.Image`
-                                 Segmentation map
-        self.cube_std          : `~mpdaf.obj.Cube`
-                                 standardized data for PCA. Result of step01.
-        self.cont_dct          : `~mpdaf.obj.Cube`
-                                 DCT continuum. Result of step01.
-        self.ima_std           : `~mpdaf.obj.Image`
-                                 Mean of standardized data for PCA along the
-                                 wavelength axis. Result of step01.
-        self.ima_dct           : `~mpdaf.obj.Image`
-                                 Mean of DCT continuum cube along the
-                                 wavelength axis. Result of step01.
-        nbAreas                : int
-                                 Number of area (segmentation) for the PCA
-                                 computation. Result of step02.
-        areamap                : `~mpdaf.obj.Image`
-                                 PCA area. Result of step02.
-        testO2                 : list of arrays (one per PCA area)
-                                 Result of the O2 test (step03).
-        histO2                 : list of arrays (one per PCA area)
-                                 PCA histogram (step03).
-        binO2                  : list of arrays (one per PCA area)
-                                 Bins for the PCA histogram (step03).
-        thresO2                : list of float
-                                 For each area, threshold value (step03).
-        meaO2                  : list of float
-                                 Location parameter of the Gaussian fit used to
-                                 estimate the threshold (step03).
-        stdO2                  : list of float
-                                 Scale parameter of the Gaussian fit used to
-                                 estimate the threshold (step03).
-        cube_faint             : `~mpdaf.obj.Cube`
-                                 Projection on the eigenvectors associated to
-                                 the lower eigenvalues of the data cube
-                                 (representing the faint signal). Result of
-                                 step04.
-        mapO2                  : `~mpdaf.obj.Image`
-                                 The numbers of iterations used by testO2 for
-                                 each spaxel. Result of step04.
-        cube_correl            : `~mpdaf.obj.Cube`
-                                  Cube of T_GLR values (step05).
-        cube_profile           : `~mpdaf.obj.Cube` (type int)
-                                 PSF profile associated to the T_GLR (step05).
-        maxmap                 : `~mpdaf.obj.Image`
-                                 Map of maxima along the wavelength axis
-                                 (step05).
-        cube_local_max         : `~mpdaf.obj.Cube`
-                                 Local maxima from max correlation (step05).
-        cube_local_min         : `~mpdaf.obj.Cube`
-                                 Local maxima from min correlation (step05).
-        threshold              : float
-                                 Estimated threshold (step06).
-        Pval_r                 : array
-                                 Purity curves (step06).
-        index_pval             : array
-                                 Indexes of the purity curves (step06).
-        Det_M                  : List
-                                 Number of detections in +DATA (step06).
-        Det_m                  : List
-                                 Number of detections in -DATA  (step06).
-        Cat0                   : astropy.Table
-                                 Catalog returned by step07
-        zm                     : array
-                                 z-position of the detections from min
-                                 correlation (step07)
-        ym                     : array
-                                 y-position of the detections from min
-                                 correlation (step07)
-        xm                     : array
-                                 x-position of the detections from min
-                                 correlation (step07)
-        Pval_r_comp            : array
-                                 Purity curves (step08).
-        index_pval_comp        : array
-                                 Indexes of the purity curves (step08).
-        Det_M_comp             : List
-                                 Number of detections in +DATA (step08).
-        Det_m_comp             : List
-                                 Number of detections in -DATA  (step08).
-        Cat1                   : astropy.Table
-                                 Catalog returned by step08
-        spectra                : list of `~mpdaf.obj.Spectrum`
-                                 Estimated lines. Result of step09.
-        Cat2                   : astropy.Table
-                                 Catalog returned by step09.
     """
 
     def __init__(self, filename, segmap, name='origin', path='.',
@@ -243,7 +225,6 @@ class ORIGIN(object):
                  index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
                  Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
                  Cat3_sources=None, Cat3_spectra=None):
-
         # stdout logger
         setup_logging(name='origin', level=loglevel, color=logcolor,
                       fmt='%(levelname)-05s: %(message)s', stream=sys.stdout)
@@ -362,27 +343,28 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        cube        : str
-                      Cube FITS file name
-        segmap      : str
-                      Segmentation map FITS filename
-        fieldmap    : str
-                      FITS file containing the field map (mosaic)
-        profiles    : str
-                      FITS of spectral profiles
-                      If None, a default dictionary of 20 profiles is used.
-        PSF         : str
-                      Cube FITS filename containing a MUSE PSF per wavelength.
-                      If None, PSF are computed with a Moffat function
-                      (13x13 pixels, beta=2.6, fwhm1=0.76, fwhm2=0.66,
-                      lambda1=4750, lambda2=7000)
-        FWHM_PSF    : array (Nz)
-                      FWHM of the PSFs in pixels.
-        name        : str
-                      Name of this session and basename for the sources.
-                      ORIGIN.write() method saves the session in a folder that
-                      has this name. The ORIGIN.load() method will be used to
-                      load a session, continue it or create a new from it.
+        cube : str
+            Cube FITS file name
+        segmap : str
+            Segmentation map FITS filename
+        fieldmap : str
+            FITS file containing the field map (mosaic)
+        profiles : str
+            FITS of spectral profiles
+            If None, a default dictionary of 20 profiles is used.
+        PSF : str
+            Cube FITS filename containing a MUSE PSF per wavelength.
+            If None, PSF are computed with a Moffat function
+            (13x13 pixels, beta=2.6, fwhm1=0.76, fwhm2=0.66,
+            lambda1=4750, lambda2=7000)
+        FWHM_PSF : array (Nz)
+            FWHM of the PSFs in pixels.
+        name : str
+            Name of this session and basename for the sources.
+            ORIGIN.write() method saves the session in a folder that
+            has this name. The ORIGIN.load() method will be used to
+            load a session, continue it or create a new from it.
+
         """
         return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
@@ -397,14 +379,15 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        folder  : str
-                  Folder name (with the relative path) where the ORIGIN data
-                  have been stored.
+        folder : str
+            Folder name (with the relative path) where the ORIGIN data
+            have been stored.
         newname : str
-                  New name for this session.
-                  This parameter lets the user to load a previous session but
-                  continue in a new one.
-                  If None, the user will continue the loaded session.
+            New name for this session.
+            This parameter lets the user to load a previous session but
+            continue in a new one.
+            If None, the user will continue the loaded session.
+
         """
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
@@ -853,7 +836,7 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        path  : str
+        path : str
             Path where the folder (self.name) will be stored.
         erase : bool
             Remove the folder if it exists.
@@ -971,7 +954,7 @@ class ORIGIN(object):
                                  header=self.cube_local_min.data_header)
             hdul = fits.HDUList([hdu, hdui])
             hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
- #           self.cube_local_min.write('%s/cube_local_min.fits' % path2)
+            # self.cube_local_min.write('%s/cube_local_min.fits' % path2)
 
         # step6
         if self.Pval_r is not None:
@@ -1054,23 +1037,22 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        dct_order   : int
-                      The number of atom to keep for the dct decomposition
+        dct_order : int
+            The number of atom to keep for the dct decomposition
         dct_approx : bool
-                     if True, the DCT computation is approximated
+            if True, the DCT computation is approximated
 
         Returns
         -------
-        self.cube_std          : `~mpdaf.obj.Cube`
-                                 standardized data for PCA
-        self.cont_dct          : `~mpdaf.obj.Cube`
-                                 DCT continuum
-        self.ima_std          : `~mpdaf.obj.Image`
-                                 Mean of standardized data for PCA along the
-                                 wavelength axis
-        self.ima_dct          : `~mpdaf.obj.Image`
-                                 Mean of DCT continuum cube along the
-                                 wavelength axis
+        self.cube_std : `~mpdaf.obj.Cube`
+            standardized data for PCA
+        self.cont_dct : `~mpdaf.obj.Cube`
+            DCT continuum
+        self.ima_std : `~mpdaf.obj.Image`
+            Mean of standardized data for PCA along the wavelength axis
+        self.ima_dct : `~mpdaf.obj.Image`
+            Mean of DCT continuum cube along the wavelength axis
+
         """
         self._loginfo('Step 01 - Preprocessing, dct order=%d', dct_order)
 
@@ -1098,22 +1080,22 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        pfa      :  float
-                    PFA of the segmentation test to estimates sources with
-                    strong continuum
-        minsize  :  int
-                    Lenght in pixel of the side of typical surface wanted
-                    enough big area to satisfy the PCA
-        maxsize :   int
-                    Lenght in pixel of the side of maximum surface wanted
+        pfa : float
+            PFA of the segmentation test to estimates sources with
+            strong continuum
+        minsize : int
+            Lenght in pixel of the side of typical surface wanted
+            enough big area to satisfy the PCA
+        maxsize : int
+            Lenght in pixel of the side of maximum surface wanted
 
         Returns
         -------
-
-        self.nbAreas    :   int
-                            number of areas
+        self.nbAreas : int
+            number of areas
         self.areamap : `~mpdaf.obj.Image`
-                       The map of areas
+            The map of areas
+
         """
         self._loginfo('Step 02 - Areas creation')
         self._loginfo('   - pfa of the test = %0.2f' % pfa)
@@ -1173,25 +1155,25 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        pfa_test            :   float
-                                Threshold of the test (default=0.01)
+        pfa_test : float
+            Threshold of the test (default=0.01)
 
         Returns
         -------
-        self.testO2  : list of arrays (one per PCA area)
-                       Result of the O2 test.
-        self.histO2  : lists of arrays (one per PCA area)
-                       PCA histogram
-        self.binO2   : lists of arrays (one per PCA area)
-                       bin for the PCA histogram
+        self.testO2 : list of arrays (one per PCA area)
+            Result of the O2 test.
+        self.histO2 : lists of arrays (one per PCA area)
+            PCA histogram
+        self.binO2 : lists of arrays (one per PCA area)
+            bin for the PCA histogram
         self.thresO2 : list of float
-                       For each area, threshold value
-        self.meaO2   : list of float
-                       Location parameter of the Gaussian fit used to estimate
-                       the threshold
-        self.stdO2   : list of float
-                       Scale parameter of the Gaussian fit used to estimate
-                       the threshold
+            For each area, threshold value
+        self.meaO2 : list of float
+            Location parameter of the Gaussian fit used to estimate
+            the threshold
+        self.stdO2 : list of float
+            Scale parameter of the Gaussian fit used to estimate the threshold
+
         """
         self._loginfo('Step 03 - PCA threshold computation')
         self._loginfo('   - pfa of the test = %0.2f' % pfa_test)
@@ -1224,10 +1206,12 @@ class ORIGIN(object):
     def step04_compute_greedy_PCA(self, Noise_population=50,
                                   itermax=100, threshold_list=None):
         """ Loop on each zone of the data cube and compute the greedy PCA.
+
         The test (test_fun) and the threshold (threshold_test) define the part
         of the each zone of the cube to segment in nuisance and background.
         A part of the background part (1/Noise_population %) is used to compute
         a mean background, a signature.
+
         The Nuisance part is orthogonalized to this signature in order to not
         loose this part during the greedy process. SVD is performed on nuisance
         in order to modelized the nuisance part and the principal eigen vector,
@@ -1239,27 +1223,26 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        Noise_population    :   float
-                                Fraction of spectra used to estimate
-                                the background signature
-        itermax             :   int
-                                Maximum number of iterations
-        threshold_list      :   list
-                                User given list of threshold (not pfa) to apply
-                                on each area, the list is of lenght nbAreas
-                                or of lenght 1. Before using this option
-                                make sure to have good correspondance between
-                                the Areas and the threshold in list.
-                                Use: self.plot_areas() to be sure.
+        Noise_population : float
+            Fraction of spectra used to estimate the background signature
+        itermax : int
+            Maximum number of iterations
+        threshold_list : list
+            User given list of threshold (not pfa) to apply
+            on each area, the list is of lenght nbAreas
+            or of lenght 1. Before using this option
+            make sure to have good correspondance between
+            the Areas and the threshold in list.
+            Use: self.plot_areas() to be sure.
 
         Returns
         -------
         self.cube_faint : `~mpdaf.obj.Cube`
-                     Projection on the eigenvectors associated to the lower
-                     eigenvalues of the data cube
-                     (representing the faint signal)
+            Projection on the eigenvectors associated to the lower
+            eigenvalues of the data cube (representing the faint signal)
         self.mapO2 : `~mpdaf.obj.Image`
-                     The numbers of iterations used by testO2 for each spaxel
+            The numbers of iterations used by testO2 for each spaxel
+
         """
         self._loginfo('Step 04 - Greedy PCA computation')
 
@@ -1322,29 +1305,29 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        NbSubcube   :   int
-                        Number of sub-cubes for the spatial segmentation
-                        If NbSubcube>1 the correlation and local maximas and
-                        minimas are performed on smaller subcube and combined
-                        after. Useful to avoid swapp
-        neighbors   :   int
-                        Connectivity of contiguous voxels
-        ncpu        :   int
-                        Number of CPUs used
+        NbSubcube : int
+            Number of sub-cubes for the spatial segmentation
+            If NbSubcube>1 the correlation and local maximas and
+            minimas are performed on smaller subcube and combined
+            after. Useful to avoid swapp
+        neighbors : int
+            Connectivity of contiguous voxels
+        ncpu : int
+            Number of CPUs used
 
         Returns
         -------
-        self.cube_correl  : `~mpdaf.obj.Cube`
-                            Cube of T_GLR values
+        self.cube_correl : `~mpdaf.obj.Cube`
+            Cube of T_GLR values
         self.cube_profile : `~mpdaf.obj.Cube` (type int)
-                             Number of the profile associated to the T_GLR
-        self.maxmap       : `~mpdaf.obj.Image`
-                             Map of maxima along the wavelength axis
+            Number of the profile associated to the T_GLR
+        self.maxmap : `~mpdaf.obj.Image`
+            Map of maxima along the wavelength axis
+        self.cube_local_max : `~mpdaf.obj.Cube`
+            Local maxima from max correlation
+        self.cube_local_min : `~mpdaf.obj.Cube`
+            Local maxima from minus min correlation
 
-        self.cube_local_max    : `~mpdaf.obj.Cube`
-                                 Local maxima from max correlation
-        self.cube_local_min    : `~mpdaf.obj.Cube`
-                                 Local maxima from minus min correlation
         """
         self._loginfo('Step 05 - GLR test(NbSubcube=%d' % NbSubcube +
                       ', neighbors=%d)' % neighbors)
@@ -1398,39 +1381,40 @@ class ORIGIN(object):
                                         tol_spec=5, spat_size=19,
                                         spect_size=10,
                                         auto=(5, 15, 0.1), threshlist=None):
-        """find the threshold  for a given purity
+        """Find the threshold  for a given purity
 
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold
+            purity to automatically compute the threshold
         tol_spat : int
-                   spatial tolerance for the spatial merging (distance in pixels)
-                   TODO en fonction du FWHM
+            spatial tolerance for the spatial merging (distance in pixels)
+            TODO en fonction du FWHM
         tol_spec : int
-                   spectral tolerance for the spatial merging (distance in pixels)
+            spectral tolerance for the spatial merging (distance in pixels)
         spat_size : int
-                spatiale size of the spatiale filter
+            spatiale size of the spatiale filter
         spect_size : int
-                 spectral lenght of the spectral filter
-        auto    : tuple (npts1,npts2,pmargin)
-                 nb of threshold sample for iteration 1 and 2, margin in purity
-                 default (5,15,0.1
+            spectral lenght of the spectral filter
+        auto : tuple (npts1,npts2,pmargin)
+            nb of threshold sample for iteration 1 and 2, margin in purity
+            default (5,15,0.1
         threshlist : list
-                 list of thresholds to compute the purity
+            list of thresholds to compute the purity
 
         Returns
         -------
         self.threshold_correl : float
-                                Estimated threshold
+            Estimated threshold
         self.Pval_r : array
-                      Purity curves
+            Purity curves
         self.index_pval : array
-                          Indexes of the purity curves
-        self.Det_M  : List
-                      Number of detections in +DATA
-        self.Det_m  : List
-                      Number of detections in -DATA
+            Indexes of the purity curves
+        self.Det_M : list
+            Number of detections in +DATA
+        self.Det_m : list
+            Number of detections in -DATA
+
         """
         self._loginfo('Step 06 - Compute Purity threshold')
 
@@ -1462,17 +1446,17 @@ class ORIGIN(object):
         Parameters
         ----------
         threshold : float
-                    User threshod if the estimated threshold is not good
+            User threshod if the estimated threshold is not good
 
         Returns
         -------
         self.Cat0 : astropy.Table
-                    First catalog
-                    Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+            First catalog
+            Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
         self.det_correl_min : (array, array, array)
-                              3D positions of detections in correl_min
-        """
+            3D positions of detections in correl_min
 
+        """
         self._loginfo('Step 07 - Thresholding and spatio-spectral merging')
 
         if threshold is not None:
@@ -1500,33 +1484,32 @@ class ORIGIN(object):
         Parameters
         ----------
         purity : float
-                 purity to automatically compute the threshold
-                 If None, previous purity is used
-        auto     : tuple (npts1,npts2,pmargin)
-                 nb of threshold sample for iteration 1 and 2, margin in purity
-                 default (5,15,0.1)
+            purity to automatically compute the threshold
+            If None, previous purity is used
+        auto : tuple (npts1,npts2,pmargin)
+            nb of threshold sample for iteration 1 and 2, margin in purity
+            default (5,15,0.1)
         threshlist : list
-                 list of thresholds to compute the purity
-                 default None
+            list of thresholds to compute the purity default None
+
         Returns
         -------
         self.threshold_correl : float
-                              Estimated threshold used to detect complementary
-                              lines on local maxima of std cube
+            Estimated threshold used to detect complementary
+            lines on local maxima of std cube
         self.Pval_r_comp : array
-                      Purity curves
+            Purity curves
         self.index_pval_comp : array
-                          Indexes of the purity curves
-        self.Det_M_comp  : List
-                      Number of detections in +DATA
-        self.Det_m_comp  : List
-                      Number of detections in -DATA
+            Indexes of the purity curves
+        self.Det_M_comp : list
+            Number of detections in +DATA
+        self.Det_m_comp : list
+            Number of detections in -DATA
         self.Cat1 : astropy.Table
-                    New catalog
-                    Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
-                             STD comp
-        """
+            New catalog
+            Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR STD comp
 
+        """
         self._loginfo('Step 08 - Thresholding and spatio-spectral merging')
 
         if self.Cat0 is None:
@@ -1604,25 +1587,29 @@ class ORIGIN(object):
         self._loginfo('08 Done')
 
     def step09_compute_spectra(self, grid_dxy=0):
-        """compute the estimated emission line and the optimal coordinates
+        """Compute the estimated emission line and the optimal coordinates
+
         for each detected lines in a spatio-spectral grid (each emission line
-        is estimated with the deconvolution model :
-        subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
+        is estimated with the deconvolution model ::
+
+            subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
+
         Via PCA LS or denoised PCA LS Method
 
         Parameters
         ----------
-        grid_dxy   : int
-                     Maximum spatial shift for the grid
+        grid_dxy : int
+            Maximum spatial shift for the grid
 
         Returns
         -------
-        self.Cat2    : astropy.Table
-                       Catalogue of parameters of detected emission lines.
-                       Columns: ra dec lbda x0 x y0 y z0 z T_GLR profile
-                                residual flux num_line purity
+        self.Cat2 : astropy.Table
+            Catalogue of parameters of detected emission lines.
+            Columns: ra dec lbda x0 x y0 y z0 z T_GLR profile
+            residual flux num_line purity
         self.spectra : list of `~mpdaf.obj.Spectrum`
-                       Estimated lines
+            Estimated lines
+
         """
         self._loginfo('Step 09 - Lines estimation (grid_dxy=%d)' % (grid_dxy))
         self.param['grid_dxy'] = grid_dxy
@@ -1726,6 +1713,7 @@ class ORIGIN(object):
         seg_thres_factor: float
             Factor applied to the detection threshold to get the threshold used
             for mask creation.
+
         """
         if self.Cat3_lines is None:
             raise IOError('Run the step 10.')
@@ -1786,7 +1774,7 @@ class ORIGIN(object):
         Returns
         -------
         CatF : mpdaf.sdetect.Catalog
-               Final catalog
+            Final catalog
 
         Each Source object O consists of:
             - O.header: pyfits header instance that contains all parameters
@@ -1802,6 +1790,7 @@ class ORIGIN(object):
                         narrow band images (NB_LINE_** and NB_CORR_**)
             - O.cubes: Dictionary that contains the small data cube around the
                        source (MUSE-CUBE)
+
         """
         # Add RA-DEC to the catalogue
         self._loginfo('Step 12 - Sources creation')
@@ -1858,11 +1847,12 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        ax  : matplotlib.Axes
-              The Axes instance in which the image is drawn
+        ax : matplotlib.Axes
+            The Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
-                 Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function.
+            Optional extra keyword/value arguments to be passed to
+            the ``ax.imshow()`` function.
+
         """
         if ax is None:
             ax = plt.gca()
@@ -1901,19 +1891,18 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        log10     : bool
-                    Draw histogram in logarithmic scale or not
-        ncol      : int
-                    Number of colomns in the subplots
-        legend    : bool
-                    If true, write pfa and threshold values as legend
-        xlim      : (float, float)
-                    Set the data limits for the x-axes
-        fig       : matplotlib.Figure
-                    Figure instance in which the image is drawn
-        **fig_kw  : matplotlib.artist.Artist
-                    All additional keyword arguments are passed to the figure()
-                    call.
+        log10 : bool
+            Draw histogram in logarithmic scale or not
+        ncol : int
+            Number of colomns in the subplots
+        legend : bool
+            If true, write pfa and threshold values as legend
+        xlim : (float, float)
+            Set the data limits for the x-axes
+        fig : matplotlib.Figure
+            Figure instance in which the image is drawn
+        **fig_kw : matplotlib.artist.Artist
+            All additional keyword arguments are passed to the figure() call.
 
         """
         if self.nbAreas is None:
@@ -1961,10 +1950,11 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        cutoff    : float
-                    Median Absolute Deviation cutoff
-        ax        : matplotlib.Axes
-                    The Axes instance in which the image is drawn
+        cutoff : float
+            Median Absolute Deviation cutoff
+        ax : matplotlib.Axes
+            The Axes instance in which the image is drawn
+
         """
         if self.nbAreas is None:
             raise IOError('Run the step 02 to initialize self.nbAreas')
@@ -1992,19 +1982,20 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        area      : int in [1, nbAreas]
-                    Area ID
-        pfa_test  : float or str
-                    PFA of the test (if 'step03', the value set during step03
-                    is used)
-        log10     : bool
-                    Draw histogram in logarithmic scale or not
-        legend    : bool
-                    If true, write pfa and threshold values as legend
-        xlim      : (float, float)
-                    Set the data limits for the x-axis
-        ax        : matplotlib.Axes
-                    Axes instance in which the image is drawn
+        area : int in [1, nbAreas]
+            Area ID
+        pfa_test : float or str
+            PFA of the test (if 'step03', the value set during step03
+            is used)
+        log10 : bool
+            Draw histogram in logarithmic scale or not
+        legend : bool
+            If true, write pfa and threshold values as legend
+        xlim : (float, float)
+            Set the data limits for the x-axis
+        ax : matplotlib.Axes
+            Axes instance in which the image is drawn
+
         """
         if self.nbAreas is None:
             raise IOError('Run the step 02 to initialize self.nbAreas')
@@ -2070,16 +2061,16 @@ class ORIGIN(object):
         Parameters
         ----------
         area: int in [1, nbAreas]
-                if None draw the full map for all areas
+            if None draw the full map for all areas
         iteration : int
-                    Display the nuisance/bacground pixels at iteration k
-        ax        : matplotlib.Axes
-                    The Axes instance in which the image is drawn
+            Display the nuisance/bacground pixels at iteration k
+        ax : matplotlib.Axes
+            The Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
-                 Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function
-        """
+            Optional extra keyword/value arguments to be passed to
+            the ``ax.imshow()`` function
 
+        """
         if self.mapO2 is None:
             raise IOError('Run the step 04 to initialize self.mapO2')
 
@@ -2116,13 +2107,13 @@ class ORIGIN(object):
 #
 #        Parameters
 #        ----------
-#        pfa  : float
+#        pfa : float
 #               Pvalue for the test which performs segmentation
 #        step : int
 #               The Segmentation map as used in this step: (2/6)
 #        maxmap : bool
 #                 If true, segmentation map is plotted as contours on the maxmap
-#        ax   : matplotlib.Axes
+#        ax : matplotlib.Axes
 #               The Axes instance in which the image is drawn
 #        kwargs : matplotlib.artist.Artist
 #                 Optional extra keyword/value arguments to be passed to
@@ -2169,12 +2160,13 @@ class ORIGIN(object):
         Parameters
         ----------
         comp : bool
-               If True, plot purity curves for the complementary lines (step08)
+            If True, plot purity curves for the complementary lines (step08)
         ax : matplotlib.Axes
-             The Axes instance in which the image is drawn
-        log10 : To draw histogram in logarithmic scale or not
-        """
+            The Axes instance in which the image is drawn
+        log10 : bool
+            To draw histogram in logarithmic scale or not
 
+        """
         if self.Det_M is None:
             raise IOError('Run the step 06')
 
@@ -2227,16 +2219,17 @@ class ORIGIN(object):
     def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
 
+        Parameters
+        ----------
         src_ind : int
-                  Index of the object in self.Cat0
-        ax1     : matplotlib.Axes
-                  The Axes instance in which the NB image around the source is
-                  drawn
-        ax2     : matplotlib.Axes
-                  The Axes instance in which a other NB image for check is
-                  drawn
-        ax3     : matplotlib.Axes
-                  The Axes instance in which the difference is drawn
+            Index of the object in self.Cat0
+        ax1 : matplotlib.Axes
+            The Axes instance in which the NB image around the source is drawn
+        ax2 : matplotlib.Axes
+            The Axes instance in which a other NB image for check is drawn
+        ax3 : matplotlib.Axes
+            The Axes instance in which the difference is drawn
+
         """
         if self.Cat0 is None:
             raise IOError('Run the step 05 to initialize self.Cat0')
@@ -2319,26 +2312,27 @@ class ORIGIN(object):
 
         Parameters
         ----------
-        x      : array
-                 Coordinates along the x-axis of the estimated lines
-                 in pixels (column).
-        y      : array
-                 Coordinates along the y-axis of the estimated lines
-                 in pixels (column).
-        circle  : bool
-                  If true, plot circles with a diameter equal to the
-                  mean of the fwhm of the PSF.
+        x : array
+            Coordinates along the x-axis of the estimated lines
+            in pixels (column).
+        y : array
+            Coordinates along the y-axis of the estimated lines
+            in pixels (column).
+        circle : bool
+            If true, plot circles with a diameter equal to the
+            mean of the fwhm of the PSF.
         vmin : float
-                Minimum pixel value to use for the scaling.
+            Minimum pixel value to use for the scaling.
         vmax : float
-                Maximum pixel value to use for the scaling.
+            Maximum pixel value to use for the scaling.
         title : str
-                An optional title for the figure (None by default).
+            An optional title for the figure (None by default).
         ax : matplotlib.Axes
-                the Axes instance in which the image is drawn
+            the Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
-                 Optional extra keyword/value arguments to be passed to
-                 the ``ax.imshow()`` function.
+            Optional extra keyword/value arguments to be passed to
+            the ``ax.imshow()`` function.
+
         """
         if self.wfields is None:
             fwhm = self.FWHM_PSF
@@ -2357,8 +2351,7 @@ class ORIGIN(object):
         self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax, **kwargs)
 
     def info(self):
-        """ plot information
-        """
+        """plot information"""
         currentlog = self._log_file.handlers[0].baseFilename
         with open(currentlog) as f:
             for line in f:
