@@ -809,7 +809,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             mapO2[pypx] += 1
             if nbiter > itermax:
                 nstop += 1
-                logger.info('Warning iterations stopped at %d', nbiter)
+                logger.warning('Warning iterations stopped at %d', nbiter)
                 break
 
             # vector data
