@@ -3114,12 +3114,12 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     return table
 
 
-def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
+def trim_spectrum_list(line_table, spectra, profile_fwhm, *, size_fwhm=3):
     """Keep only relevant spectra and limit their extent around the line.
 
-    The “compute spectra” step creates a FITS file with the spectra (data and
-    variance) associated to each line.  These spectra are based on the full
-    MUSE wavelength grid.  This function:
+    The “compute spectra” step creates a list of spectra (data and variance)
+    associated to each line.  These spectra are based on the full MUSE
+    wavelength grid.  This function:
 
     - limits the spectra list to the list of lines present in the line_table
       (e.g. if the table was processed by remove_identical_duplicates the
@@ -3133,20 +3133,20 @@ def trim_spectra_hdulist(line_table, spectra, profile_fwhm, *, size_fwhm=3):
     line_table: astropy.table.Table
         An ORIGIN table of lines, this table must contain the columns:
         num_line, profile, and z.
-    spectra: astropy.io.fits.hdu.hdulist.HDUList
-        An HDUList containing the spectra associated to each line.  It must
-        contain for each line identifier a “DATA<ID>” and a “STAT<ID>”
-        extension.
+    spectra: List[mpdaf.obj.spectrum.Spectrum]
+        List of spectrum object associated to each line. The index in the list
+        must be the num_line of the associated line in the line table.
     profile_fwhm: list
-        List of the profile FWHMs. The index in the list is the profile number.
+        List of the profile FWHMs in pixels. The index in the list is the
+        profile number.
     size_fwhm: float
         The length of the spectrum to extract around the line in FWHM factor.
 
     Returns
     -------
-    astropy.io.fits.hdu.hdulist.HDUList
-        An HDUList with only the relevant, wavelength limited spectra, with the
-        same extension names as in the input.
+    List[mpdaf.obj.spectrum.Spectrum]
+        List of spectrum objects.  The index in the list correspond to the
+        index of the line in the line_table.
 
     """
     radius = np.ceil(np.array(profile_fwhm) * size_fwhm / 2)
