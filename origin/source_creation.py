@@ -137,10 +137,12 @@ def create_source(source_id, source_table, line_table, origin_params,
         threshold_keyword, purity_keyword = "threshold2", "purity2"
     else:
         threshold_keyword, purity_keyword = "threshold", "purity"
-    source.header["OR_TH"] = ("%0.2f" % origin_params[threshold_keyword],
-                              "OR input, threshold")
-    source.header["OR_PURI"] = ("%0.2f" % origin_params[purity_keyword],
-                                "OR input, purity")
+    source.header["OR_TH"] = (
+        float("%0.2f") % origin_params[threshold_keyword],
+        "OR input, threshold")
+    source.header["OR_PURI"] = (
+        float("%0.2f") % origin_params[purity_keyword],
+        "OR input, purity")
 
     # Mini-cubes
     source.cubes["MUSE_CUBE"] = data_cube
