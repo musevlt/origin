@@ -24,6 +24,7 @@ import yaml
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.utils import lazyproperty
+from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
@@ -58,6 +59,7 @@ from .lib_origin import (
 )
 from .source_creation import create_all_sources
 from .version import __version__
+from . import steps
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -79,7 +81,7 @@ def _format_cat(Cat, i):
         logger.info('Invalid format for the Catalog')
 
 
-class ORIGIN(object):
+class ORIGIN(steps.LogMixin):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
     Oriented-object interface to run the ORIGIN software.
@@ -237,6 +239,16 @@ class ORIGIN(object):
         self.param['logcolor'] = logcolor
 
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
+
+        # -----------------------------
+
+        self.methods = OrderedDict()
+        for i, cls in enumerate(steps.pipeline, start=1):
+            method = cls(self, i, self.param)
+            self.methods[method.method_name] = method
+            self.__dict__[method.method_name] = method
+
+        # -----------------------------
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -649,12 +661,6 @@ class ORIGIN(object):
         self.file_handler.setFormatter(formatter)
         logger.addHandler(self.file_handler)
 
-    def _loginfo(self, *args):
-        self.logger.info(*args)
-
-    def _logwarning(self, *args):
-        self.logger.warning(*args)
-
     @lazyproperty
     def ima_dct(self):
         """DCT image"""
@@ -977,259 +983,6 @@ class ORIGIN(object):
                          idlist=self.Cat3_lines['num_line'])
 
         self._loginfo("Current session saved in %s" % self.outpath)
-
-    def step01_preprocessing(self, dct_order=10, dct_approx=True):
-        """ Preprocessing of data, dct, standardization and noise compensation
-
-        Parameters
-        ----------
-        dct_order : int
-            The number of atom to keep for the dct decomposition
-        dct_approx : bool
-            if True, the DCT computation is approximated
-
-        Returns
-        -------
-        self.cube_std : `~mpdaf.obj.Cube`
-            standardized data for PCA
-        self.cont_dct : `~mpdaf.obj.Cube`
-            DCT continuum
-        self.ima_std : `~mpdaf.obj.Image`
-            Mean of standardized data for PCA along the wavelength axis
-        self.ima_dct : `~mpdaf.obj.Image`
-            Mean of DCT continuum cube along the wavelength axis
-
-        """
-        self._loginfo('Step 01 - Preprocessing, dct order=%d', dct_order)
-
-        self._loginfo('DCT computation')
-        self.param['dct_order'] = dct_order
-        faint_dct, cont_dct = dct_residual(self.cube_raw, dct_order, self.var,
-                                           dct_approx)
-
-        # compute standardized data
-        self._loginfo('Data standardizing')
-        cube_std = Compute_Standardized_data(faint_dct, self.mask, self.var)
-        cont_dct /= np.sqrt(self.var)
-
-        self._loginfo('Std signal saved in self.cube_std and self.ima_std')
-        self.cube_std = Cube(data=cube_std, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask, copy=False)
-        self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
-        self.cont_dct = Cube(data=cont_dct, wave=self.wave, wcs=self.wcs,
-                             mask=np.ma.nomask, copy=False)
-
-        self._loginfo('01 Done')
-
-    def step02_areas(self, pfa=.2, minsize=100, maxsize=None):
-        """ Creation of automatic area
-
-        Parameters
-        ----------
-        pfa : float
-            PFA of the segmentation test to estimates sources with
-            strong continuum
-        minsize : int
-            Lenght in pixel of the side of typical surface wanted
-            enough big area to satisfy the PCA
-        maxsize : int
-            Lenght in pixel of the side of maximum surface wanted
-
-        Returns
-        -------
-        self.nbAreas : int
-            number of areas
-        self.areamap : `~mpdaf.obj.Image`
-            The map of areas
-
-        """
-        self._loginfo('Step 02 - Areas creation')
-        self._loginfo('   - pfa of the test = %0.2f' % pfa)
-        self._loginfo('   - side size = %d pixels' % minsize)
-        if minsize is None:
-            self._loginfo('   - minimum size = None')
-        else:
-            self._loginfo('   - minimum size = %d pixels**2' % minsize)
-
-        self.param['pfa_areas'] = pfa
-        self.param['minsize_areas'] = minsize
-        self.param['maxsize_areas'] = maxsize
-
-        nexpmap = (np.sum(~self.mask, axis=0) > 0).astype(np.int)
-
-        NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize**2))))
-        if NbSubcube > 1:
-            if maxsize is None:
-                maxsize = minsize * 2
-
-            MinSize = minsize**2
-            MaxSize = maxsize**2
-
-            self._loginfo('First segmentation of %d^2 square' % NbSubcube)
-            self._loginfo('Squares segmentation and fusion')
-            square_cut_fus = area_segmentation_square_fusion(
-                nexpmap, MinSize, MaxSize, NbSubcube, self.Ny, self.Nx)
-
-            self._loginfo('Sources fusion')
-            square_src_fus, src = area_segmentation_sources_fusion(
-                self.segmap.data, square_cut_fus, pfa, self.Ny, self.Nx)
-
-            self._loginfo('Convex envelope')
-            convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
-
-            self._loginfo('Areas dilation')
-            Grown_label = area_growing(convex_lab, nexpmap)
-
-            self._loginfo('Fusion of small area')
-            self._loginfo('Minimum Size: %d px' % MinSize)
-            self._loginfo('Maximum Size: %d px' % MaxSize)
-            areamap = area_segmentation_final(Grown_label, MinSize, MaxSize)
-
-        elif NbSubcube == 1:
-            areamap = nexpmap
-
-        self._loginfo('Save the map of areas in self.areamap')
-
-        self.areamap = Image(data=areamap, wcs=self.wcs, dtype=np.int)
-        self._loginfo('%d areas generated' % self.nbAreas)
-        self.param['nbareas'] = self.nbAreas
-
-        self._loginfo('02 Done')
-
-    def step03_compute_PCA_threshold(self, pfa_test=.01):
-        """ Loop on each zone of the data cube and estimate the threshold
-
-        Parameters
-        ----------
-        pfa_test : float
-            Threshold of the test (default=0.01)
-
-        Returns
-        -------
-        self.testO2 : list of arrays (one per PCA area)
-            Result of the O2 test.
-        self.histO2 : lists of arrays (one per PCA area)
-            PCA histogram
-        self.binO2 : lists of arrays (one per PCA area)
-            bin for the PCA histogram
-        self.thresO2 : list of float
-            For each area, threshold value
-        self.meaO2 : list of float
-            Location parameter of the Gaussian fit used to estimate
-            the threshold
-        self.stdO2 : list of float
-            Scale parameter of the Gaussian fit used to estimate the threshold
-
-        """
-        self._loginfo('Step 03 - PCA threshold computation')
-        self._loginfo('   - pfa of the test = %0.2f' % pfa_test)
-        self.param['pfa_test'] = pfa_test
-
-        if self.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-        if self.areamap is None:
-            raise IOError('Run the step 02 to initialize self.areamap ')
-
-        results = []
-
-        for area_ind in range(1, self.nbAreas + 1):
-            # limits of each spatial zone
-            ksel = (self.areamap._data == area_ind)
-
-            # Data in this spatio-spectral zone
-            cube_temp = self.cube_std._data[:, ksel]
-
-            res = Compute_PCA_threshold(cube_temp, pfa_test)
-            results.append(res)
-            self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f'
-                          % (area_ind, res[4], res[5], res[3]))
-
-        (self.testO2, self.histO2, self.binO2, self.thresO2, self.meaO2,
-         self.stdO2) = zip(*results)
-
-        self._loginfo('03 Done')
-
-    def step04_compute_greedy_PCA(self, Noise_population=50,
-                                  itermax=100, threshold_list=None):
-        """ Loop on each zone of the data cube and compute the greedy PCA.
-
-        The test (test_fun) and the threshold (threshold_test) define the part
-        of the each zone of the cube to segment in nuisance and background.
-        A part of the background part (1/Noise_population %) is used to compute
-        a mean background, a signature.
-
-        The Nuisance part is orthogonalized to this signature in order to not
-        loose this part during the greedy process. SVD is performed on nuisance
-        in order to modelized the nuisance part and the principal eigen vector,
-        only one, is used to perform the projection of the whole set of data:
-        Nuisance and background. The Nuisance spectra which satisfied the test
-        are updated in the background computation and the background is so
-        cleaned from sources signature. The iteration stop when all the spectra
-        satisfy the criteria
-
-        Parameters
-        ----------
-        Noise_population : float
-            Fraction of spectra used to estimate the background signature
-        itermax : int
-            Maximum number of iterations
-        threshold_list : list
-            User given list of threshold (not pfa) to apply
-            on each area, the list is of lenght nbAreas
-            or of lenght 1. Before using this option
-            make sure to have good correspondance between
-            the Areas and the threshold in list.
-            Use: self.plot_areas() to be sure.
-
-        Returns
-        -------
-        self.cube_faint : `~mpdaf.obj.Cube`
-            Projection on the eigenvectors associated to the lower
-            eigenvalues of the data cube (representing the faint signal)
-        self.mapO2 : `~mpdaf.obj.Image`
-            The numbers of iterations used by testO2 for each spaxel
-
-        """
-        self._loginfo('Step 04 - Greedy PCA computation')
-
-        if self.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-        if self.areamap is None:
-            raise IOError('Run the step 02 to initialize self.areamap')
-        if threshold_list is None:
-            if self.thresO2 is None:
-                raise IOError('Run the step 03 to initialize self.thresO2')
-            thr = self.thresO2
-        else:
-            thr = threshold_list
-
-        self._loginfo('   - Noise_population = %0.2f' % Noise_population)
-        self._loginfo('   - List of threshold = ' +
-                      " ".join("%.2f" % x for x in thr))
-        self._loginfo('   - Max number of iterations = %d' % itermax)
-
-        self.param['threshold_list'] = thr
-        self.param['Noise_population'] = Noise_population
-        self.param['itermax'] = itermax
-
-        self._loginfo('Compute greedy PCA on each zone')
-
-        faint, mapO2, nstop = Compute_GreedyPCA_area(
-            self.nbAreas, self.cube_std._data, self.areamap._data,
-            Noise_population, thr, itermax, self.testO2)
-        if nstop > 0:
-            self._logwarning('The iterations have been reached the limit '
-                             'of %d in %d cases', itermax, nstop)
-
-        self._loginfo('Save the faint signal in self.cube_faint')
-        self.cube_faint = Cube(data=faint, wave=self.wave, wcs=self.wcs,
-                               mask=np.ma.nomask, copy=False)
-        self._loginfo('Save the numbers of iterations used by the'
-                      ' testO2 for each spaxel in self.mapO2')
-
-        self.mapO2 = Image(data=mapO2, wcs=self.wcs, copy=False)
-
-        self._loginfo('04 Done')
 
     def step05_compute_TGLR(self, NbSubcube=1, neighbors=26, ncpu=4):
         """Compute the cube of GLR test values.
