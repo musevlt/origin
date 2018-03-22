@@ -108,7 +108,7 @@ def create_source(source_info, source_lines, origin_params, cube_cor_filename,
     for keyword, (param_key, description) in parameters_to_add.items():
         if param_key == "threshold_list" and param_key in origin_params:
             for idx, threshold in enumerate(origin_params['threshold_list']):
-                source.header[keyword % idx] = ("%0.2f" % threshold,
+                source.header[keyword % idx] = (float("%0.2f" % threshold),
                                                 description)
         elif param_key in origin_params:
             source.header[keyword] = origin_params[param_key], description
