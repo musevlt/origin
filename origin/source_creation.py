@@ -177,11 +177,11 @@ def create_source(source_id, source_table, line_table, origin_params,
     # map from the data and from the correlation cube.
     # Content of the line table in the source
     line_columns = ["NUM_LINE",
-                    "RA_ORI",
-                    "DEC_ORI",
-                    "LBDA_ORI",
-                    "FWHM_ORI",
-                    "FLUX_ORI",
+                    "RA",
+                    "DEC",
+                    "LBDA_OBS",
+                    "FWHM",
+                    "FLUX",
                     "GLR",
                     "PROF",
                     "PURITY"]
