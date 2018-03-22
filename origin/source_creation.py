@@ -3,6 +3,7 @@ import logging
 import os
 
 from astropy import units as u
+from astropy.table import Table
 from numpy.ma import is_masked
 
 from mpdaf.obj import Cube, Image, Spectrum
@@ -14,7 +15,7 @@ from .lib_origin import __version__ as origin_version
 def create_source(source_id, source_table, line_table, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, version, profile_fwhm, *,
-                  author="", size=5, save_to=None):
+                  author="", nb_fwhm=2, size=5, save_to=None):
     """Create a MPDAF source.
 
     This function create a MPDAF source object for the ORIGIN source.
@@ -44,6 +45,9 @@ def create_source(source_id, source_table, line_table, origin_params,
         profile number.
     author: str
         Name of the author.
+    nb_fwhm: float
+        Factor multiplicating the FWHM of the line to compute the width of
+        the narrow band image.
     size: float
         Side of the square used for cut-outs around the source position (for
         images and sub-cubes) in arc-seconds.
@@ -203,8 +207,11 @@ def create_source(source_id, source_table, line_table, origin_params,
     # unique lines in the LINES tables.
     source.add_table(source_lines, "ORI_LINES")
 
-    # TODO: Should we add the narrow band images and spectra for all the bands
-    # or only for those that are not merged?
+    # Table containing the information on the narrow band images.
+    nb_par = Table(
+        names=["LINE", "LBDA", "WIDTH", "MARGIN", "FBAND"],
+        dtype=['U20', float, float, float, float]
+    )
 
     for line in [_ for _ in source_lines if is_masked(_['merged_in'])]:
         num_line = line['num_line']
@@ -235,12 +242,17 @@ def create_source(source_id, source_table, line_table, origin_params,
 
         source.add_narrow_band_image_lbdaobs(
             data_cube, f"NB_LINE_{num_line}", lbda=lbda_ori,
-            width=2*fwhm_ori, is_sum=True, subtract_off=True)
+            width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=True,
+            margin=10., fband=3.)
+        nb_par.add_row([f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori,
+                        10., 3.])
 
         # TODO: Do we want the sum or the max?
         source.add_narrow_band_image_lbdaobs(
             correl_cube, f"OR_CORR_{num_line}", lbda=lbda_ori,
-            width=2*fwhm_ori, is_sum=True, subtract_off=False)
+            width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=False)
+
+    source.add_table(nb_par, "NB_PAR")
 
     if save_to is not None:
         source.write(save_to)
