@@ -26,8 +26,8 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.utils import lazyproperty
-
-from mpdaf.log import setup_logging, setup_logfile, clear_loggers
+from logging.handlers import RotatingFileHandler
+from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.sdetect import Catalog
@@ -222,19 +222,21 @@ class ORIGIN(object):
                  index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
                  Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
                  Cat3_sources=None, Cat3_spectra=None):
+
         self.path = path
         self.name = name
         self.outpath = os.path.join(path, name)
         self.param = param or {}
+        self.file_handler = None
         os.makedirs(self.outpath, exist_ok=True)
 
-        # stdout logger
+        # stdout & file logger
         setup_logging(name='origin', level=loglevel, color=logcolor,
                       fmt='%(levelname)-05s: %(message)s', stream=sys.stdout)
-        self._log_stdout = logging.getLogger('origin')
-
-        # file logger
-        self._setup_logfile()
+        self.logger = logging.getLogger('origin')
+        self._setup_logfile(self.logger)
+        self.param['loglevel'] = loglevel
+        self.param['logcolor'] = logcolor
 
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
@@ -364,7 +366,7 @@ class ORIGIN(object):
                    segmap=segmap, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
-    def load(cls, folder, newname=None, loglevel='DEBUG', logcolor=False):
+    def load(cls, folder, newname=None):
         """Load a previous session of ORIGIN.
 
         ORIGIN.write() method saves a session in a folder that has the name of
@@ -620,7 +622,7 @@ class ORIGIN(object):
             name = newname
 
         return cls(path=path, name=name, param=param,
-                   loglevel=loglevel, logcolor=logcolor,
+                   loglevel=param['loglevel'], logcolor=param['logcolor'],
                    filename=param['cubename'], fieldmap=wfields,
                    profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                    imawhite=ima_white, cube_std=cube_std, cont_dct=cont_dct,
@@ -637,21 +639,24 @@ class ORIGIN(object):
                    spectra=spectra, Cat2=Cat2, Cat3_lines=Cat3_lines,
                    Cat3_sources=Cat3_sources, Cat3_spectra=Cat3_spectra)
 
-    def _setup_logfile(self):
-        clear_loggers('origfile')
+    def _setup_logfile(self, logger):
+        if self.file_handler is not None:
+            # Remove the handlers before adding a new one
+            self.file_handler.close()
+            logger.handlers.remove(self.file_handler)
+
         self.logfile = os.path.join(self.outpath, self.name + '.log')
-        setup_logfile(name='origfile', level=logging.DEBUG,
-                      logfile=self.logfile, fmt='%(asctime)s %(message)s')
-        self._log_file = logging.getLogger('origfile')
-        self._log_file.setLevel(logging.INFO)
+        self.file_handler = RotatingFileHandler(self.logfile, 'a', 1000000, 1)
+        self.file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s %(message)s')
+        self.file_handler.setFormatter(formatter)
+        logger.addHandler(self.file_handler)
 
     def _loginfo(self, *args):
-        self._log_file.info(*args)
-        self._log_stdout.info(*args)
+        self.logger.info(*args)
 
     def _logwarning(self, *args):
-        self._log_file.warning(*args)
-        self._log_stdout.warning(*args)
+        self.logger.warning(*args)
 
     @lazyproperty
     def ima_dct(self):
@@ -853,7 +858,7 @@ class ORIGIN(object):
             self.outpath = os.path.join(path, self.name)
             # copy logfile to the new path
             shutil.copy(self.logfile, self.outpath)
-            self._setup_logfile()
+            self._setup_logfile(self.logger)
 
         if erase:
             shutil.rmtree(self.outpath)

@@ -62,7 +62,7 @@ def timeit(f):
     """Decorator which prints the execution time of a function."""
     @wraps(f)
     def timed(*args, **kw):
-        logger = logging.getLogger('origin')
+        logger = logging.getLogger(__name__)
         t0 = time()
         result = f(*args, **kw)
         logger.debug('%s executed in %0.1fs', f.__name__, time() - t0)
