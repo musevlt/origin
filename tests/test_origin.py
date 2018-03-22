@@ -76,6 +76,8 @@ def test_origin():
         cat = my_origin.step12_write_sources(ncpu=2, overwrite=True)
         assert len(cat) == 8
 
+        my_origin.info()
+
         cat = Catalog.read('tmp2/tmp2.fits')
         assert len(cat) == 8
 
@@ -86,7 +88,7 @@ def test_origin():
         assert src.cubes['MUSE_CUBE'].shape == (3681, 25, 25)
     finally:
         # Cleanup (try to close opened files)
-        for h in my_origin._log_file.handlers:
+        for h in my_origin.logger.handlers:
             h.close()
 
         try:

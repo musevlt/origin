@@ -2353,8 +2353,7 @@ class ORIGIN(object):
 
     def info(self):
         """plot information"""
-        currentlog = self._log_file.handlers[0].baseFilename
-        with open(currentlog) as f:
+        with open(self.logfile) as f:
             for line in f:
                 if line.find('Done') == -1:
-                    self._log_stdout.info(line)
+                    print(line, end='')
