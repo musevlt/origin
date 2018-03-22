@@ -4,10 +4,11 @@ import os
 
 from astropy import units as u
 from astropy.table import Table
-from numpy.ma import is_masked
-
+from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
+from numpy.ma import is_masked
+from tqdm import tqdm as progressbar
 
 from .lib_origin import __version__ as origin_version
 
@@ -47,17 +48,16 @@ def create_source(source_id, source_table, line_table, origin_params,
     author: str
         Name of the author.
     nb_fwhm: float
-        Factor multiplicating the FWHM of the line to compute the width of
-        the narrow band image.
+        Factor multiplying the FWHM of the line to compute the width of the
+        narrow band image.
     size: float
         Side of the square used for cut-outs around the source position (for
         images and sub-cubes) in arc-seconds.
-    expmap: str
-        Name of the file containing the exposure map.  If not None, a cutout
+    expmap_filename: str
+        Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
     save_to: str
         If not None, the source will be saved to the given file.
-
 
     Returns
     -------
@@ -268,3 +268,78 @@ def create_source(source_id, source_table, line_table, origin_params,
         source.write(save_to)
 
     return source
+
+
+def create_all_sources(cat3_sources, cat3_lines, origin_params,
+                       cube_cor_filename, mask_filename_tpl,
+                       skymask_filename_tpl, spectra_fits_filename,
+                       version, profile_fwhm, out_tpl, *,
+                       n_jobs=1, author="", nb_fwhm=2, size=5,
+                       expmap_filename=None):
+    """Create and save a MPDAF source file for each source.
+
+    Parameters
+    ----------
+    cat3_sources: astropy.table.Table
+        Table of unique sources (ORIGIN “Cat3_sources”).
+    cat3_lines: astropy.table.Table
+        Table of all the lines (ORIGIN “Cat3_lines”).
+    origin_params: dict
+        Dictionary of the parameters for the ORIGIN run.
+    cube_cor_filename: str
+        Name of the file containing the correlation cube of the ORIGIN run.
+    mask_filename_tpl: str
+        Template for the filename of the FITS file containing the mask of
+        a source. The template is formatted with the id of the source.
+        Eg: masks/source-mask-%0.5d.fits.
+    skymask_filename_tpl: str:
+        Template for the filename of the FITS file containing the mask of
+        a sky for each source. The template is formatted with the id of the
+        source. Eg: masks/sky-mask-%0.5d.fits.
+    spectra_fits_filename: str
+        Name of the FITS file containing the spectra of the lines.
+    version: str
+        Version number stored in the source.
+    profile_fwhm: list of int
+        List of line profile FWHM in pixel. The index in the list is the
+        profile number.
+    out_tpl: str
+        Template for the source file names. Eg. sources/source-%0.5d.fits
+    author: str
+        Name of the author.
+    n_jobs: int
+        Number of parallel processes used to create the source files.
+    nb_fwhm: float
+        Factor multiplying the FWHM of the line to compute the width of the
+        narrow band image.
+    size: float
+        Side of the square used for cut-outs around the source position (for
+        images and sub-cubes) in arc-seconds.
+    expmap_filename: str
+        Name of the file containing the exposure map.  If not None, a cut-out
+        of the exposure map will be added to the source file.
+
+    """
+    job_list = []
+
+    for source_id in cat3_sources['ID']:
+        job_list.append(delayed(create_source)(
+            source_id=source_id,
+            source_table=cat3_sources,
+            line_table=cat3_lines,
+            origin_params=origin_params,
+            cube_cor_filename=cube_cor_filename,
+            mask_filename=mask_filename_tpl % source_id,
+            skymask_filename=skymask_filename_tpl % source_id,
+            spectra_fits_filename=spectra_fits_filename,
+            version=version,
+            profile_fwhm=profile_fwhm,
+            author=author,
+            nb_fwhm=nb_fwhm,
+            size=size,
+            expmap_filename=expmap_filename,
+            save_to=out_tpl % source_id
+        ))
+
+    if job_list:
+        Parallel(n_jobs=n_jobs)(progressbar(job_list))
