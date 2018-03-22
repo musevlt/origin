@@ -140,7 +140,7 @@ def create_source(source_id, source_table, line_table, origin_params,
 
     # Mini-cubes
     source.cubes["MUSE_CUBE"] = data_cube
-    source.cubes["OR_CORREL"] = correl_cube
+    source.cubes["ORI_CORREL"] = correl_cube
 
     # Table of sources around the exported sources.
     y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
@@ -157,17 +157,17 @@ def create_source(source_id, source_table, line_table, origin_params,
     # sub-cubes.
     source.images["MUSE_WHITE"] = data_cube.mean(axis=0)
     # The MAXMAP is the max of the correlation cube
-    source.images["OR_MAXMAP"] = correl_cube.max(axis=0)
+    source.images["ORI_MAXMAP"] = correl_cube.max(axis=0)
     # Using add_image, the image size is taken from the white map.
-    source.add_image(Image(mask_filename), "OR_MASK")
-    source.add_image(Image(skymask_filename), "OR_MASK_SKY")
-    source.add_image(Image(origin_params['segmap']), "OR_SEGMAP")
+    source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
+    source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
+    source.add_image(Image(origin_params['segmap']), "ORI_SEGMAP")
 
     # Full source spectra
-    source.extract_spectra(data_cube, obj_mask="OR_MASK",
-                           sky_mask="OR_MASK_SKY")
-    source.spectra['OR_CORR'] = (correl_cube * source.images['OR_MASK']).mean(
-        axis=(1, 2))
+    source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                           sky_mask="ORI_MASK_SKY")
+    source.spectra['ORI_CORR'] = (
+        correl_cube * source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
 
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
@@ -249,7 +249,7 @@ def create_source(source_id, source_table, line_table, origin_params,
 
         # TODO: Do we want the sum or the max?
         source.add_narrow_band_image_lbdaobs(
-            correl_cube, f"OR_CORR_{num_line}", lbda=lbda_ori,
+            correl_cube, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=False)
 
     source.add_table(nb_par, "NB_PAR")
