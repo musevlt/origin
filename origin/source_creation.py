@@ -3,26 +3,30 @@ import logging
 import os
 
 from astropy import units as u
+from numpy.ma import is_masked
+
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
-from numpy.ma import is_masked
 
 from .lib_origin import __version__ as origin_version
 
 
-def create_source(source_info, source_lines, origin_params, cube_cor_filename,
-                  mask_filename, skymask_filename, spectra_fits_filename,
-                  version, profile_fwhm, *, author="", size=5, save_to=None):
-    """Create a MPDAF source for the source.
+def create_source(source_id, source_table, line_table, origin_params,
+                  cube_cor_filename, mask_filename, skymask_filename,
+                  spectra_fits_filename, version, profile_fwhm, *,
+                  author="", size=5, save_to=None):
+    """Create a MPDAF source.
 
-    This function create a MPDAF source object for the origin source.
+    This function create a MPDAF source object for the ORIGIN source.
 
     Parameters
     ----------
-    source_info: astropy.table.Row
-        Row corresponding to the source from the Cat3_sources catalogue.
-    source_lines: astropy.table.Table
-        Line table (Cat3_lines) limited to the lines of the source.
+    source_id: int
+        Identifier for the source in the source and line tables.
+    source_table: astropy.table.Table
+        Catalogue of sources like the Cat3_sources one.
+    line_table: astropy.table.Table
+        Catalogue of lines like the Cat3_lines one.
     origin_params: dict
         Dictionary of the parameters for the ORIGIN run.
     cube_cor_filename: str
@@ -53,6 +57,10 @@ def create_source(source_info, source_lines, origin_params, cube_cor_filename,
 
     """
     logger = logging.getLogger(__name__)
+
+    # [0] is to get a Row not a table.
+    source_info = source_table[source_table['ID'] == source_id][0]
+    source_lines = line_table[line_table['ID'] == source_id]
 
     data_cube = Cube(origin_params['cubename']).subcube(
         (source_info['dec'], source_info['ra']), size=size, unit_size=u.arcsec
@@ -129,6 +137,16 @@ def create_source(source_info, source_lines, origin_params, cube_cor_filename,
     # Mini-cubes
     source.cubes["MUSE_CUBE"] = data_cube
     source.cubes["OR_CORREL"] = correl_cube
+
+    # Table of sources around the exported sources.
+    y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
+    x_min, x_max = source_info['x'] - x_radius, source_info['x'] + x_radius
+    y_min, y_max = source_info['y'] - y_radius, source_info['y'] + y_radius
+    nearby_sources = (source_table['x'] >= x_min) & \
+        (source_table['x'] <= x_max) & \
+        (source_table['y'] >= y_min) & \
+        (source_table['y'] <= y_max)
+    source.tables['ORI_CAT'] = source_table['ID', 'ra', 'dec'][nearby_sources]
 
     # Maps
     # No need to use add_white_image or add_cube as we already have the
