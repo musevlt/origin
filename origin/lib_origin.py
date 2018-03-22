@@ -1880,13 +1880,16 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
         logger.debug('Iter 1 Threshold min %f max %f npts %d',
                      thresh_min, thresh_max, n_pval1)
-        for k, thresh in enumerate(ProgressBar(index_pval1[::-1])):
+        bar = ProgressBar(index_pval1[::-1])
+        for k, thresh in enumerate(bar):
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
                                                        cube_local_min,
                                                        thresh, spat_size,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
+            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                      (k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity))
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1897,11 +1900,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                 break
         thresh_min = thresh
 
-        for k, (thresh, det_mit, det_Mit, est_purity) in enumerate(
-                zip(Tval_r, det_m, det_M, Pval_r)):
-            logger.debug('   %d/%d Threshold %f -data %d +data %d purity %f',
-                         k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity)
-
         # 2nd iter
         index_pval3 = np.exp(np.linspace(np.log(thresh_min),
                                          np.log(thresh_max), npts2))
@@ -1911,7 +1909,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
         logger.debug('Iter 2 Threshold min %f max %f npts %d',
                      index_pval3[0], index_pval3[-1], len(index_pval3))
-        for k, thresh in enumerate(ProgressBar(index_pval3)):
+        bar = ProgressBar(index_pval3)
+        for k, thresh in enumerate(bar):
             if np.any(np.isclose(thresh, Tval_r)):
                 continue
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
@@ -1920,9 +1919,9 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('    %d/%d Threshold %f -data %d +data %d purity %f',
-                         k + 1, len(index_pval3), thresh, det_mit, det_Mit,
-                         est_purity)
+            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                      (k + 1, len(index_pval3), thresh, det_mit, det_Mit,
+                       est_purity))
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1936,16 +1935,17 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         det_M = np.asarray(det_M)[ksort]
         Tval_r = Tval_r[ksort]
     else:
-        for k, thresh in enumerate(ProgressBar(threshlist)):
+        bar = ProgressBar(threshlist)
+        for k, thresh in enumerate(bar):
             est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
                                                        cube_local_min,
                                                        thresh, spat_size,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            logger.debug('%d/%d Threshold %f -data %d +data %d purity %f',
-                         k + 1, len(threshlist), thresh, det_mit, det_Mit,
-                         est_purity)
+            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                      (k + 1, len(threshlist), thresh, det_mit, det_Mit,
+                       est_purity))
             Pval_r.append(est_purity)
             det_m.append(det_mit)
             det_M.append(det_Mit)
