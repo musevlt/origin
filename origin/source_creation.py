@@ -15,7 +15,8 @@ from .lib_origin import __version__ as origin_version
 def create_source(source_id, source_table, line_table, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, version, profile_fwhm, *,
-                  author="", nb_fwhm=2, size=5, save_to=None):
+                  author="", nb_fwhm=2, size=5, expmap_filename=None,
+                  save_to=None):
     """Create a MPDAF source.
 
     This function create a MPDAF source object for the ORIGIN source.
@@ -51,6 +52,9 @@ def create_source(source_id, source_table, line_table, origin_params,
     size: float
         Side of the square used for cut-outs around the source position (for
         images and sub-cubes) in arc-seconds.
+    expmap: str
+        Name of the file containing the exposure map.  If not None, a cutout
+        of the exposure map will be added to the source file.
     save_to: str
         If not None, the source will be saved to the given file.
 
@@ -162,6 +166,8 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
     source.add_image(Image(origin_params['segmap']), "ORI_SEGMAP")
+    if expmap_filename is not None:
+        source.add_image(Image(expmap_filename), "EXPMAP")
 
     # Full source spectra
     # TODO: Compute PSF spectrum
