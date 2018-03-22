@@ -164,8 +164,12 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.add_image(Image(origin_params['segmap']), "ORI_SEGMAP")
 
     # Full source spectra
+    # TODO: Compute PSF spectrum
+    source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                           sky_mask="ORI_MASK_SKY")
+                           sky_mask="ORI_MASK_SKY", skysub=True)
+    source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                           sky_mask="ORI_MASK_SKY", skysub=False)
     source.spectra['ORI_CORR'] = (
         correl_cube * source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
 
