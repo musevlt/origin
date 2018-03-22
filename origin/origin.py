@@ -16,7 +16,7 @@ import glob
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
-import os.path
+import os
 import shutil
 import sys
 import warnings
@@ -26,9 +26,6 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.utils import lazyproperty
-from matplotlib.colors import BoundaryNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy import stats
 
 from mpdaf.log import setup_logging, setup_logfile, clear_loggers
 from mpdaf.obj import Cube, Image, Spectrum
@@ -225,25 +222,21 @@ class ORIGIN(object):
                  index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
                  Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
                  Cat3_sources=None, Cat3_spectra=None):
+        self.path = path
+        self.name = name
+        self.outpath = os.path.join(path, name)
+        self.param = param or {}
+        os.makedirs(self.outpath, exist_ok=True)
+
         # stdout logger
         setup_logging(name='origin', level=loglevel, color=logcolor,
                       fmt='%(levelname)-05s: %(message)s', stream=sys.stdout)
         self._log_stdout = logging.getLogger('origin')
 
         # file logger
-        logfile = '%s/%s/%s.log' % (path, name, name)
-        if not os.path.exists(logfile):
-            logfile = '%s/%s.log' % (path, name)
-        setup_logfile(name='origfile', level=logging.DEBUG,
-                      logfile=logfile, fmt='%(asctime)s %(message)s')
-        self._log_file = logging.getLogger('origfile')
-        self._log_file.setLevel(logging.INFO)
+        self._setup_logfile()
 
-        self._loginfo('Step 00 - Initialization (ORIGIN v%s)' % __version__)
-
-        self.path = path
-        self.name = name
-        self.param = param or {}
+        self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -644,6 +637,14 @@ class ORIGIN(object):
                    spectra=spectra, Cat2=Cat2, Cat3_lines=Cat3_lines,
                    Cat3_sources=Cat3_sources, Cat3_spectra=Cat3_spectra)
 
+    def _setup_logfile(self):
+        clear_loggers('origfile')
+        self.logfile = os.path.join(self.outpath, self.name + '.log')
+        setup_logfile(name='origfile', level=logging.DEBUG,
+                      logfile=self.logfile, fmt='%(asctime)s %(message)s')
+        self._log_file = logging.getLogger('origfile')
+        self._log_file.setLevel(logging.INFO)
+
     def _loginfo(self, *args):
         self._log_file.info(*args)
         self._log_stdout.info(*args)
@@ -843,154 +844,144 @@ class ORIGIN(object):
 
         """
         self._loginfo('Writing...')
-        # path
-        if path is not None:
+
+        # adapt session if path changes
+        if path is not None and path != self.path:
+            if not os.path.exists(path):
+                raise ValueError("path does not exist: {}".format(path))
             self.path = path
-        if not os.path.exists(self.path):
-            raise IOError("Invalid path: {0}".format(self.path))
+            self.outpath = os.path.join(path, self.name)
+            # copy logfile to the new path
+            shutil.copy(self.logfile, self.outpath)
+            self._setup_logfile()
 
-        path = os.path.abspath(self.path)
-
-        path2 = path + '/' + self.name
-        if not os.path.exists(path2):
-            os.makedirs(path2)
-        else:
-            if erase:
-                shutil.rmtree(path2)
-                os.makedirs(path2)
+        if erase:
+            shutil.rmtree(self.outpath)
+        os.makedirs(self.outpath, exist_ok=True)
 
         # parameters in .yaml
-        with open('%s/%s.yaml' % (path2, self.name), 'w') as stream:
+        with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
             yaml.dump(self.param, stream)
 
-        # log file
-        currentlog = self._log_file.handlers[0].baseFilename
-        newlog = os.path.abspath('%s/%s.log' % (path2, self.name))
-        if (currentlog != newlog):
-            clear_loggers('origfile')
-            shutil.move(currentlog, newlog)
-            setup_logfile(name='origfile', level=logging.DEBUG,
-                          logfile=newlog,
-                          fmt='%(asctime)s %(message)s')
-            self._log_file = logging.getLogger('origfile')
-            self._log_file.setLevel(logging.INFO)
-
         # PSF
-        if type(self.PSF) is list:
+        if isinstance(self.PSF, list):
             for i, psf in enumerate(self.PSF):
                 Cube(data=psf, mask=np.ma.nomask).write(
-                    '%s' % path2 + '/cube_psf_%02d.fits' % i)
+                    '%s' % self.outpath + '/cube_psf_%02d.fits' % i)
         else:
             Cube(data=self.PSF, mask=np.ma.nomask).write(
-                '%s' % path2 + '/cube_psf.fits')
+                '%s' % self.outpath + '/cube_psf.fits')
         if self.wfields is not None:
             for i, wfield in enumerate(self.wfields):
                 Image(data=wfield, mask=np.ma.nomask).write(
-                    '%s' % path2 + '/wfield_%02d.fits' % i)
+                    '%s' % self.outpath + '/wfield_%02d.fits' % i)
 
         if self.ima_white is not None:
-            self.ima_white.write('%s/ima_white.fits' % path2)
+            self.ima_white.write('%s/ima_white.fits' % self.outpath)
 
         # step1
         if self.cube_std is not None:
-            self.cube_std.write('%s/cube_std.fits' % path2)
+            self.cube_std.write('%s/cube_std.fits' % self.outpath)
         if self.cont_dct is not None:
-            self.cont_dct.write('%s/cont_dct.fits' % path2)
+            self.cont_dct.write('%s/cont_dct.fits' % self.outpath)
         if self.ima_std is not None:
-            self.ima_std.write('%s/ima_std.fits' % path2)
+            self.ima_std.write('%s/ima_std.fits' % self.outpath)
         if self.ima_dct is not None:
-            self.ima_dct.write('%s/ima_dct.fits' % path2)
+            self.ima_dct.write('%s/ima_dct.fits' % self.outpath)
 
         # step2
         if self.areamap is not None:
-            self.areamap.write('%s/areamap.fits' % path2)
+            self.areamap.write('%s/areamap.fits' % self.outpath)
 
         # step3
         if self.thresO2 is not None:
-            np.savetxt('%s/thresO2.txt' % path2, self.thresO2)
+            np.savetxt('%s/thresO2.txt' % self.outpath, self.thresO2)
         if self.nbAreas is not None:
             if self.testO2 is not None:
                 for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/testO2_%d.txt' % (path2, area),
+                    np.savetxt('%s/testO2_%d.txt' % (self.outpath, area),
                                self.testO2[area - 1])
             if self.histO2 is not None:
                 for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/histO2_%d.txt' % (path2, area),
+                    np.savetxt('%s/histO2_%d.txt' % (self.outpath, area),
                                self.histO2[area - 1])
             if self.binO2 is not None:
                 for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/binO2_%d.txt' % (path2, area),
+                    np.savetxt('%s/binO2_%d.txt' % (self.outpath, area),
                                self.binO2[area - 1])
         if self.meaO2 is not None:
-            np.savetxt('%s/meaO2.txt' % path2, self.meaO2)
+            np.savetxt('%s/meaO2.txt' % self.outpath, self.meaO2)
         if self.stdO2 is not None:
-            np.savetxt('%s/stdO2.txt' % path2, self.stdO2)
+            np.savetxt('%s/stdO2.txt' % self.outpath, self.stdO2)
 
         # step4
         if self.cube_faint is not None:
-            self.cube_faint.write('%s/cube_faint.fits' % path2)
+            self.cube_faint.write('%s/cube_faint.fits' % self.outpath)
         if self.mapO2 is not None:
-            self.mapO2.write('%s/mapO2.fits' % path2)
+            self.mapO2.write('%s/mapO2.fits' % self.outpath)
 
         # step5
         if self.cube_correl is not None:
-            self.cube_correl.write('%s/cube_correl.fits' % path2)
+            self.cube_correl.write('%s/cube_correl.fits' % self.outpath)
         if self.cube_profile is not None:
-            self.cube_profile.write('%s/cube_profile.fits' % path2)
+            self.cube_profile.write('%s/cube_profile.fits' % self.outpath)
         if self.maxmap is not None:
-            self.maxmap.write('%s/maxmap.fits' % path2)
+            self.maxmap.write('%s/maxmap.fits' % self.outpath)
         if self.cube_local_max is not None:
             hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_max.data.filled(fill_value=np.nan),
                                  header=self.cube_local_max.data_header)
             hdul = fits.HDUList([hdu, hdui])
-            hdul.writeto('%s/cube_local_max.fits' % path2, overwrite=True)
-#            self.cube_local_max.write('%s/cube_local_max.fits' % path2)
+            hdul.writeto('%s/cube_local_max.fits' % self.outpath,
+                         overwrite=True)
+#            self.cube_local_max.write('%s/cube_local_max.fits' % self.outpath)
         if self.cube_local_min is not None:
             hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
             hdui = fits.ImageHDU(name='DATA',
                                  data=self.cube_local_min.data.filled(fill_value=np.nan),
                                  header=self.cube_local_min.data_header)
             hdul = fits.HDUList([hdu, hdui])
-            hdul.writeto('%s/cube_local_min.fits' % path2, overwrite=True)
-            # self.cube_local_min.write('%s/cube_local_min.fits' % path2)
+            hdul.writeto('%s/cube_local_min.fits' % self.outpath,
+                         overwrite=True)
+            # self.cube_local_min.write('%s/cube_local_min.fits' % self.outpath)
 
         # step6
         if self.Pval_r is not None:
-            np.savetxt('%s/Pval_r.txt' % (path2), self.Pval_r)
+            np.savetxt('%s/Pval_r.txt' % (self.outpath), self.Pval_r)
         if self.index_pval is not None:
-            np.savetxt('%s/index_pval.txt' % (path2), self.index_pval)
+            np.savetxt('%s/index_pval.txt' % (self.outpath), self.index_pval)
         if self.Det_M is not None:
-            np.savetxt('%s/Det_M.txt' % (path2), self.Det_M)
+            np.savetxt('%s/Det_M.txt' % (self.outpath), self.Det_M)
         if self.Det_m is not None:
-            np.savetxt('%s/Det_min.txt' % (path2), self.Det_m)
+            np.savetxt('%s/Det_min.txt' % (self.outpath), self.Det_m)
 
         # step7
         if self.Cat0 is not None:
-            self.Cat0.write('%s/Cat0.fits' % path2, overwrite=True)
+            self.Cat0.write('%s/Cat0.fits' % self.outpath, overwrite=True)
         if self.det_correl_min is not None:
-            np.savetxt('%s/zm.txt' % (path2), self.det_correl_min[0])
-            np.savetxt('%s/ym.txt' % (path2), self.det_correl_min[1])
-            np.savetxt('%s/xm.txt' % (path2), self.det_correl_min[2])
+            np.savetxt('%s/zm.txt' % (self.outpath), self.det_correl_min[0])
+            np.savetxt('%s/ym.txt' % (self.outpath), self.det_correl_min[1])
+            np.savetxt('%s/xm.txt' % (self.outpath), self.det_correl_min[2])
         if self.Pval_r_comp is not None:
-            np.savetxt('%s/Pval_r_comp.txt' % (path2), self.Pval_r_comp)
+            np.savetxt('%s/Pval_r_comp.txt' % (self.outpath), self.Pval_r_comp)
         if self.index_pval_comp is not None:
-            np.savetxt('%s/index_pval_comp.txt' % (path2), self.index_pval_comp)
+            np.savetxt('%s/index_pval_comp.txt' % (self.outpath),
+                       self.index_pval_comp)
         if self.Det_M_comp is not None:
-            np.savetxt('%s/Det_M_comp.txt' % (path2), self.Det_M_comp)
+            np.savetxt('%s/Det_M_comp.txt' % (self.outpath), self.Det_M_comp)
         if self.Det_m_comp is not None:
-            np.savetxt('%s/Det_min_comp.txt' % (path2), self.Det_m_comp)
+            np.savetxt('%s/Det_min_comp.txt' % (self.outpath), self.Det_m_comp)
 
         # step8
         if self.Cat1 is not None:
-            self.Cat1.write('%s/Cat1.fits' % path2, overwrite=True)
+            self.Cat1.write('%s/Cat1.fits' % self.outpath, overwrite=True)
 
         # step9
         if self.Cat2 is not None:
-            self.Cat2.write('%s/Cat2.fits' % path2, overwrite=True)
+            self.Cat2.write('%s/Cat2.fits' % self.outpath, overwrite=True)
         if self.Cat2b is not None:
-            self.Cat2b.write('%s/Cat2b.fits' % path2, overwrite=True)
+            self.Cat2b.write('%s/Cat2b.fits' % self.outpath, overwrite=True)
 
         def save_spectra(spectra, outname, *, idlist=None):
             """
@@ -1018,19 +1009,21 @@ class ORIGIN(object):
             write_hdulist_to(hdulist, outname, overwrite=True)
 
         if self.spectra is not None:
-            save_spectra(self.spectra, '%s/spectra.fits' % path2)
+            save_spectra(self.spectra, '%s/spectra.fits' % self.outpath)
 
         # step 10
         if self.Cat3_lines is not None:
-            self.Cat3_lines.write('%s/Cat3_lines.fits' % path2, overwrite=True)
+            self.Cat3_lines.write('%s/Cat3_lines.fits' % self.outpath,
+                                  overwrite=True)
         if self.Cat3_sources is not None:
-            self.Cat3_sources.write('%s/Cat3_sources.fits' % path2,
+            self.Cat3_sources.write('%s/Cat3_sources.fits' % self.outpath,
                                     overwrite=True)
         if self.Cat3_spectra is not None:
-            save_spectra(self.Cat3_spectra, '%s/Cat3_spectra.fits' % path2,
+            save_spectra(self.Cat3_spectra,
+                         '%s/Cat3_spectra.fits' % self.outpath,
                          idlist=self.Cat3_lines['num_line'])
 
-        self._loginfo("Current session saved in %s" % path2)
+        self._loginfo("Current session saved in %s" % self.outpath)
 
     def step01_preprocessing(self, dct_order=10, dct_approx=True):
         """ Preprocessing of data, dct, standardization and noise compensation
@@ -1872,6 +1865,8 @@ class ORIGIN(object):
         i0 = np.min(self.areamap._data)
         i1 = np.max(self.areamap._data)
         if i0 != i1:
+            from matplotlib.colors import BoundaryNorm
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
             n = i1 - i0 + 1
             bounds = np.linspace(i0, i1 + 1, n + 1) - 0.5
             norm = BoundaryNorm(bounds, n + 1)
@@ -2025,6 +2020,7 @@ class ORIGIN(object):
         if ax is None:
             ax = plt.gca()
 
+        from scipy import stats
         center = (bins[:-1] + bins[1:]) / 2
         gauss = stats.norm.pdf(center, loc=mea, scale=std)
         gauss *= hist.max() / gauss.max()
