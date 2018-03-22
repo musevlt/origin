@@ -111,7 +111,7 @@ def create_source(source_info, source_lines, origin_params, cube_cor_filename,
                 source.header[keyword % idx] = ("%0.2f" % threshold,
                                                 description)
         elif param_key in origin_params:
-            source.header[keyword] = param_key, description
+            source.header[keyword] = origin_params[param_key], description
         else:
             logger.debug("Parameter %s absent of the parameter list.",
                          param_key)
