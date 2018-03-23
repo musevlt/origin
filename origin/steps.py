@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import time
 # from astropy.utils import lazyproperty
+from enum import Enum
 from mpdaf.obj import Cube, Image
 
 # TODO:
@@ -23,6 +24,14 @@ class LogMixin:
         self.logger.warning(*args)
 
 
+class Status(Enum):
+    NOTRUN = 1
+    RUN = 2
+    DUMPED = 3
+    LOADED = 4
+    FAILED = 5
+
+
 class Step(LogMixin):
     """Define a processing step."""
 
@@ -41,6 +50,12 @@ class Step(LogMixin):
         self.idx = idx
         self.method_name = 'step%02d_%s' % (idx, self.name)
         self.param = param[self.method_name] = {}
+        self.outputs = {}
+        self.status = Status.NOTRUN
+
+    def __repr__(self):
+        return '<{}(status: {})>'.format(self.__class__.__name__,
+                                         self.status.name)
 
     def __call__(self, *args, **kwargs):
         t0 = time.time()
@@ -58,7 +73,14 @@ class Step(LogMixin):
                  kwargs.get(name, ''), default, annotation)
             self.param[name] = kwargs.get(name, p.default)
 
-        self.run(self.orig, *args, **kwargs)
+        try:
+            self.run(self.orig, *args, **kwargs)
+        except Exception:
+            self.status = Status.FAILED
+            raise
+        else:
+            self.status = Status.RUN
+
         tot = time.time() - t0
         info('%02d Done - %.2f sec.', self.idx, tot)
 
@@ -66,10 +88,23 @@ class Step(LogMixin):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
         setattr(self.orig, name, cube)
+        self.outputs[name] = {'type': 'cube', 'obj': cube}
 
     def store_image(self, name, data, **kwargs):
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
         setattr(self.orig, name, im)
+        self.outputs[name] = {'type': 'image', 'obj': im}
+
+    def dump(self, outpath):
+        if self.status is not Status.RUN:
+            self.logger.debug('%s - nothing to dump', self.method_name)
+            return
+        for name, out in self.outputs.items():
+            if out['type'] in ('cube', 'image'):
+                obj = getattr(self.orig, name)
+                if obj is not None:
+                    obj.write('{}/{}.fits'.format(outpath, name))
+        self.status = Status.DUMPED
 
 
 class Preprocessing(Step):
@@ -116,7 +151,7 @@ class Preprocessing(Step):
         self.store_cube('cont_dct', cont_dct)
 
 
-class Areas(Step):
+class CreateAreas(Step):
     """ Creation of automatic area
 
     Parameters
@@ -150,9 +185,9 @@ class Areas(Step):
                                  area_segmentation_final, area_growing)
 
         # TODO: remove this and change in source creation
-        self.param['pfa_areas'] = pfa
-        self.param['minsize_areas'] = minsize
-        self.param['maxsize_areas'] = maxsize
+        orig.param['pfa_areas'] = pfa
+        orig.param['minsize_areas'] = minsize
+        orig.param['maxsize_areas'] = maxsize
 
         nexpmap = (np.sum(~orig.mask, axis=0) > 0).astype(np.int)
 
@@ -188,13 +223,12 @@ class Areas(Step):
             areamap = nexpmap
 
         self._loginfo('Save the map of areas in self.areamap')
-
         self.store_image('areamap', areamap.astype(int))
         self._loginfo('%d areas generated', orig.nbAreas)
-        self.param['nbareas'] = orig.nbAreas
+        orig.param['nbareas'] = orig.nbAreas
 
 
-class PCAThreshold(Step):
+class ComputePCAThreshold(Step):
     """ Loop on each zone of the data cube and estimate the threshold
 
     Parameters
@@ -248,7 +282,7 @@ class PCAThreshold(Step):
          orig.stdO2) = zip(*results)
 
 
-class GreedyPCA(Step):
+class ComputeGreedyPCA(Step):
     """ Loop on each zone of the data cube and compute the greedy PCA.
 
     The test (test_fun) and the threshold (threshold_test) define the part
@@ -309,9 +343,9 @@ class GreedyPCA(Step):
         self._loginfo('   - List of threshold = ' +
                       " ".join("%.2f" % x for x in thr))
 
-        # self.param['threshold_list'] = thr
-        # self.param['Noise_population'] = Noise_population
-        # self.param['itermax'] = itermax
+        # orig.param['threshold_list'] = thr
+        # orig.param['Noise_population'] = Noise_population
+        # orig.param['itermax'] = itermax
 
         self._loginfo('Compute greedy PCA on each zone')
         from .lib_origin import Compute_GreedyPCA_area
@@ -330,7 +364,7 @@ class GreedyPCA(Step):
         self.store_image('mapO2', mapO2)
 
 
-class TGLR(Step):
+class ComputeTGLR(Step):
     """Compute the cube of GLR test values.
 
     The test is done on the cube containing the faint signal
@@ -381,8 +415,8 @@ class TGLR(Step):
         if orig.cube_faint is None:
             raise IOError('Run the step 04 to initialize self.cube_faint')
 
-        # self.param['neighbors'] = neighbors
-        # self.param['NbSubcube'] = NbSubcube
+        # orig.param['neighbors'] = neighbors
+        # orig.param['NbSubcube'] = NbSubcube
         from .lib_origin import (Spatial_Segmentation, Correlation_GLR_test,
                                  Correlation_GLR_test_zone,
                                  Compute_local_max_zone)
@@ -424,8 +458,8 @@ class TGLR(Step):
 
 pipeline = [
     Preprocessing,
-    Areas,
-    PCAThreshold,
-    GreedyPCA,
-    TGLR
+    CreateAreas,
+    ComputePCAThreshold,
+    ComputeGreedyPCA,
+    ComputeTGLR
 ]

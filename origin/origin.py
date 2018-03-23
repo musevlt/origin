@@ -242,10 +242,10 @@ class ORIGIN(steps.LogMixin):
 
         # -----------------------------
 
-        self.methods = OrderedDict()
+        self.steps = OrderedDict()
         for i, cls in enumerate(steps.pipeline, start=1):
             method = cls(self, i, self.param)
-            self.methods[method.method_name] = method
+            self.steps[method.method_name] = method
             self.__dict__[method.method_name] = method
 
         # -----------------------------
@@ -840,21 +840,17 @@ class ORIGIN(steps.LogMixin):
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits' % self.outpath)
 
+        for name, step in self.steps.items():
+            step.dump(self.outpath)
+
         # step1
-        if self.cube_std is not None:
-            self.cube_std.write('%s/cube_std.fits' % self.outpath)
-        if self.cont_dct is not None:
-            self.cont_dct.write('%s/cont_dct.fits' % self.outpath)
         if self.ima_std is not None:
             self.ima_std.write('%s/ima_std.fits' % self.outpath)
         if self.ima_dct is not None:
             self.ima_dct.write('%s/ima_dct.fits' % self.outpath)
 
-        # step2
-        if self.areamap is not None:
-            self.areamap.write('%s/areamap.fits' % self.outpath)
-
         # step3
+        # FIXME: why not saving the 2D arrays?
         if self.thresO2 is not None:
             np.savetxt('%s/thresO2.txt' % self.outpath, self.thresO2)
         if self.nbAreas is not None:
@@ -875,19 +871,8 @@ class ORIGIN(steps.LogMixin):
         if self.stdO2 is not None:
             np.savetxt('%s/stdO2.txt' % self.outpath, self.stdO2)
 
-        # step4
-        if self.cube_faint is not None:
-            self.cube_faint.write('%s/cube_faint.fits' % self.outpath)
-        if self.mapO2 is not None:
-            self.mapO2.write('%s/mapO2.fits' % self.outpath)
-
         # step5
-        if self.cube_correl is not None:
-            self.cube_correl.write('%s/cube_correl.fits' % self.outpath)
-        if self.cube_profile is not None:
-            self.cube_profile.write('%s/cube_profile.fits' % self.outpath)
-        if self.maxmap is not None:
-            self.maxmap.write('%s/maxmap.fits' % self.outpath)
+        # FIXME: why not cube.write, for NaNs ?
         if self.cube_local_max is not None:
             hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
             hdui = fits.ImageHDU(name='DATA',
