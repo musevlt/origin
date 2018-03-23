@@ -45,7 +45,6 @@ from .lib_origin import (
     Compute_PCA_threshold,
     Compute_Standardized_data,
     Compute_threshold_purity,
-    Construct_Object_Catalogue,
     Correlation_GLR_test,
     Correlation_GLR_test_zone,
     Create_local_max_cat,
@@ -1834,92 +1833,6 @@ class ORIGIN(object):
         catF.write(catname, overwrite=overwrite)
 
         self._loginfo('Step12 - Sources done')
-
-    def step12_write_sources(self, path=None, overwrite=True, fmt='default',
-                             src_vers='0.1', author='undef', ncpu=1):
-        """add corresponding RA/DEC to each referent pixel of each group and
-        write the final sources.
-
-        Parameters
-        ----------
-        name : str
-            Basename for the sources.
-        path : str
-            path where the sources will be saved.
-        overwrite : bool
-            Overwrite the folder if it already exists
-        fmt : str, 'working' or 'default'
-            Format of the catalog. The format differs for the LINES table.
-
-        Returns
-        -------
-        CatF : mpdaf.sdetect.Catalog
-            Final catalog
-
-        Each Source object O consists of:
-            - O.header: pyfits header instance that contains all parameters
-                        used during the ORIGIN detection process
-            - O.lines: astropy table that contains the parameters of spectral
-                       lines.
-            - O.spectra: Dictionary that contains spectra. It contains for each
-                         line, the estimated spectrum (LINE_**), the estimated
-                         continuum (CONT_**) and the correlation (CORR_**).
-            - O.images: Dictionary that contains images: the white image
-                        (MUSE_WHITE), the map of maxima along the wavelength
-                        axis (MAXMAP), the segmentation map (SEG_ORIG) and
-                        narrow band images (NB_LINE_** and NB_CORR_**)
-            - O.cubes: Dictionary that contains the small data cube around the
-                       source (MUSE-CUBE)
-
-        """
-        # Add RA-DEC to the catalogue
-        self._loginfo('Step 12 - Sources creation')
-        self._loginfo('Add RA-DEC to the catalogue')
-        if self.Cat1 is None:
-            raise IOError('Run the step 09 to initialize self.Cat2')
-
-        # path
-        if path is not None and not os.path.exists(path):
-            raise IOError("Invalid path: {0}".format(path))
-
-        if path is None:
-            path_src = '%s/%s/sources' % (self.path, self.name)
-            catname = '%s/%s/%s.fits' % (self.path, self.name, self.name)
-        else:
-            path = os.path.normpath(path)
-            path_src = '%s/%s/sources' % (path, self.name)
-            catname = '%s/%s/%s.fits' % (path, self.name, self.name)
-
-        if not os.path.exists(path_src):
-            os.makedirs(path_src)
-        else:
-            if overwrite:
-                shutil.rmtree(path_src)
-                os.makedirs(path_src)
-
-        # list of source objects
-        self._loginfo('Create the list of sources')
-        if self.cube_correl is None:
-            raise IOError('Run the step 05 to initialize self.cube_correl')
-        if self.spectra is None:
-            raise IOError('Run the step 09 to initialize self.spectra')
-        nsources = Construct_Object_Catalogue(self.Cat2, self.spectra,
-                                              self.cube_correl,
-                                              self.wave, self.FWHM_profiles,
-                                              path_src, self.name, self.param,
-                                              src_vers, author,
-                                              self.path, self.maxmap,
-                                              self.segmap,
-                                              ncpu)
-
-        # create the final catalog
-        self._loginfo('Create the final catalog- %d sources' % nsources)
-        catF = Catalog.from_path(path_src, fmt='working')
-        catF.write(catname, overwrite=overwrite)
-
-        self._loginfo('12 Done')
-
-        return catF
 
     def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()
