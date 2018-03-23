@@ -110,15 +110,14 @@ def create_source(source_id, source_table, line_table, origin_params,
         "OR_ITMAX": ("itermax", "OR input, maximum number of iterations"),
         "OR_THL%02d": ("threshold_list", "OR input threshold per area"),
         "OR_NG": ("neighbors", "OR input, neighbors"),
-        "OR_NS": ("NbSubCube", "OR input, number of sub-cubes for the spatial "
-                  "segmentation"),
-        "OR_DXY": ("tol_spat", "OR input, spatial tolerance for the spatial "
-                   "merging (distance in pixels)"),
-        "OR_DZ": ("tol_spec", "OR input, spectral tolerance for the spatial "
-                  "merging (distance in pixels)"),
+        "OR_NS": ("NbSubCube", "OR input, nb of subcubes for spatial seg"),
+        "OR_DXY": ("tol_spat", "OR input, spatial tolerance for merging "
+                   "(pix)"),
+        "OR_DZ": ("tol_spec", "OR input, spectral tolerance for merging "
+                  "(pix)"),
         "OR_SXY": ("spat_size", "OR input, spatial size of the spatial "
                    "filter"),
-        "OR_SZ": ("spect_size", "OR input, spectral length of the spectral "
+        "OR_SZ": ("spect_size", "OR input, spectral length of the spect. "
                   "filter"),
         "OR_NXZ": ("grid_dxy", "OR input, grid Nxy"),
     }
