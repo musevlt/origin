@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import time
 # from astropy.utils import lazyproperty
+from collections import defaultdict
 from enum import Enum
 from mpdaf.obj import Cube, Image
 
@@ -50,7 +51,7 @@ class Step(LogMixin):
         self.idx = idx
         self.method_name = 'step%02d_%s' % (idx, self.name)
         self.param = param[self.method_name] = {}
-        self.outputs = {}
+        self.outputs = defaultdict(list)
         self.status = Status.NOTRUN
 
     def __repr__(self):
@@ -88,22 +89,31 @@ class Step(LogMixin):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
         setattr(self.orig, name, cube)
-        self.outputs[name] = {'type': 'cube', 'obj': cube}
+        self.outputs['cube'].append(name)
 
     def store_image(self, name, data, **kwargs):
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
         setattr(self.orig, name, im)
-        self.outputs[name] = {'type': 'image', 'obj': im}
+        self.outputs['image'].append(name)
 
     def dump(self, outpath):
         if self.status is not Status.RUN:
             self.logger.debug('%s - nothing to dump', self.method_name)
             return
-        for name, out in self.outputs.items():
-            if out['type'] in ('cube', 'image'):
+        else:
+            self.logger.debug('%s - dump', self.method_name)
+
+        for kind, names in self.outputs.items():
+            for name in names:
                 obj = getattr(self.orig, name)
                 if obj is not None:
-                    obj.write('{}/{}.fits'.format(outpath, name))
+                    outf = '{}/{}'.format(outpath, name)
+                    if kind in ('cube', 'image'):
+                        obj.write(outf + '.fits')
+                    elif kind in ('table', ):
+                        obj.write(outf + '.fits', overwrite=True)
+                    elif kind in ('array', ):
+                        np.savetxt(outf + '.txt', obj)
         self.status = Status.DUMPED
 
 
@@ -280,6 +290,8 @@ class ComputePCAThreshold(Step):
 
         (orig.testO2, orig.histO2, orig.binO2, orig.thresO2, orig.meaO2,
          orig.stdO2) = zip(*results)
+        self.outputs['array'].extend(['testO2', 'histO2', 'binO2',
+                                      'thresO2', 'meaO2', 'stdO2'])
 
 
 class ComputeGreedyPCA(Step):
@@ -415,8 +427,9 @@ class ComputeTGLR(Step):
         if orig.cube_faint is None:
             raise IOError('Run the step 04 to initialize self.cube_faint')
 
-        # orig.param['neighbors'] = neighbors
-        # orig.param['NbSubcube'] = NbSubcube
+        orig.param['neighbors'] = neighbors
+        orig.param['NbSubcube'] = NbSubcube
+
         from .lib_origin import (Spatial_Segmentation, Correlation_GLR_test,
                                  Correlation_GLR_test_zone,
                                  Compute_local_max_zone)
@@ -456,10 +469,119 @@ class ComputeTGLR(Step):
         self.store_cube('cube_local_min', cube_local_min)
 
 
+class ComputePurityThreshold(Step):
+    """Find the threshold  for a given purity
+
+    Parameters
+    ----------
+    purity : float
+        purity to automatically compute the threshold
+    tol_spat : int
+        spatial tolerance for the spatial merging (distance in pixels)
+        TODO en fonction du FWHM
+    tol_spec : int
+        spectral tolerance for the spatial merging (distance in pixels)
+    spat_size : int
+        spatiale size of the spatiale filter
+    spect_size : int
+        spectral lenght of the spectral filter
+    auto : tuple (npts1,npts2,pmargin)
+        nb of threshold sample for iteration 1 and 2, margin in purity
+        default (5,15,0.1
+    threshlist : list
+        list of thresholds to compute the purity
+
+    Returns
+    -------
+    self.threshold_correl : float
+        Estimated threshold
+    self.Pval_r : array
+        Purity curves
+    self.index_pval : array
+        Indexes of the purity curves
+    self.Det_M : list
+        Number of detections in +DATA
+    self.Det_m : list
+        Number of detections in -DATA
+
+    """
+
+    name = 'compute_purity_threshold'
+    desc = 'Compute Purity threshold'
+
+    def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
+            spect_size=10, auto=(5, 15, 0.1), threshlist=None):
+        if orig.cube_local_max is None:
+            raise IOError('Run the step 05 to initialize '
+                          'self.cube_local_max and self.cube_local_min')
+
+        orig.param['purity'] = purity
+        orig.param['tol_spat'] = tol_spat
+        orig.param['tol_spec'] = tol_spec
+        orig.param['spat_size'] = spat_size
+        orig.param['spect_size'] = spect_size
+
+        from .lib_origin import Compute_threshold_purity
+        self._loginfo('Estimation of threshold with purity = %.2f', purity)
+        threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
+            Compute_threshold_purity(purity, orig.cube_local_max.data,
+                                     orig.cube_local_min.data, orig.segmap.data,
+                                     spat_size, spect_size, tol_spat, tol_spec,
+                                     True, True, auto, threshlist)
+        orig.param['threshold'] = threshold
+        self._loginfo('Threshold: %.2f ' % threshold)
+        self.outputs['array'].extend(['Pval_r', 'index_pval', 'Det_M',
+                                      'Det_m'])
+
+
+class Detection(Step):
+    """Detections on local maxima from max correlation + spatia-spectral
+    merging in order to create the first catalog.
+
+    Parameters
+    ----------
+    threshold : float
+        User threshod if the estimated threshold is not good
+
+    Returns
+    -------
+    self.Cat0 : astropy.Table
+        First catalog. Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+    self.det_correl_min : (array, array, array)
+        3D positions of detections in correl_min
+
+    """
+
+    name = 'detection'
+    desc = 'Thresholding and spatio-spectral merging'
+
+    def run(self, orig, threshold=None):
+        if threshold is not None:
+            orig.param['threshold'] = threshold
+
+        from .lib_origin import Create_local_max_cat
+        orig.Cat0, orig.det_correl_min = Create_local_max_cat(
+            orig.param['threshold'], orig.cube_local_max.data,
+            orig.cube_local_min.data, orig.segmap.data,
+            orig.param['spat_size'], orig.param['spect_size'],
+            orig.param['tol_spat'], orig.param['tol_spec'],
+            True, orig.cube_profile._data, orig.wcs, orig.wave
+        )
+        # FIXME: remove this import
+        from .origin import _format_cat
+        _format_cat(orig.Cat0, 0)
+        self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
+                      len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
+        self.outputs['table'].append('Cat0')
+        self.outputs['array'].append('det_correl_min')
+
+
 pipeline = [
     Preprocessing,
     CreateAreas,
     ComputePCAThreshold,
     ComputeGreedyPCA,
-    ComputeTGLR
+    ComputeTGLR,
+    ComputePurityThreshold,
+    Detection
 ]

@@ -851,8 +851,6 @@ class ORIGIN(steps.LogMixin):
 
         # step3
         # FIXME: why not saving the 2D arrays?
-        if self.thresO2 is not None:
-            np.savetxt('%s/thresO2.txt' % self.outpath, self.thresO2)
         if self.nbAreas is not None:
             if self.testO2 is not None:
                 for area in range(1, self.nbAreas + 1):
@@ -866,10 +864,6 @@ class ORIGIN(steps.LogMixin):
                 for area in range(1, self.nbAreas + 1):
                     np.savetxt('%s/binO2_%d.txt' % (self.outpath, area),
                                self.binO2[area - 1])
-        if self.meaO2 is not None:
-            np.savetxt('%s/meaO2.txt' % self.outpath, self.meaO2)
-        if self.stdO2 is not None:
-            np.savetxt('%s/stdO2.txt' % self.outpath, self.stdO2)
 
         # step5
         # FIXME: why not cube.write, for NaNs ?
@@ -892,23 +886,13 @@ class ORIGIN(steps.LogMixin):
                          overwrite=True)
             # self.cube_local_min.write('%s/cube_local_min.fits' % self.outpath)
 
-        # step6
-        if self.Pval_r is not None:
-            np.savetxt('%s/Pval_r.txt' % (self.outpath), self.Pval_r)
-        if self.index_pval is not None:
-            np.savetxt('%s/index_pval.txt' % (self.outpath), self.index_pval)
-        if self.Det_M is not None:
-            np.savetxt('%s/Det_M.txt' % (self.outpath), self.Det_M)
-        if self.Det_m is not None:
-            np.savetxt('%s/Det_min.txt' % (self.outpath), self.Det_m)
-
         # step7
-        if self.Cat0 is not None:
-            self.Cat0.write('%s/Cat0.fits' % self.outpath, overwrite=True)
         if self.det_correl_min is not None:
             np.savetxt('%s/zm.txt' % (self.outpath), self.det_correl_min[0])
             np.savetxt('%s/ym.txt' % (self.outpath), self.det_correl_min[1])
             np.savetxt('%s/xm.txt' % (self.outpath), self.det_correl_min[2])
+
+        # step08
         if self.Pval_r_comp is not None:
             np.savetxt('%s/Pval_r_comp.txt' % (self.outpath), self.Pval_r_comp)
         if self.index_pval_comp is not None:
@@ -968,104 +952,6 @@ class ORIGIN(steps.LogMixin):
                          idlist=self.Cat3_lines['num_line'])
 
         self._loginfo("Current session saved in %s" % self.outpath)
-
-    def step06_compute_purity_threshold(self, purity=.9, tol_spat=3,
-                                        tol_spec=5, spat_size=19,
-                                        spect_size=10,
-                                        auto=(5, 15, 0.1), threshlist=None):
-        """Find the threshold  for a given purity
-
-        Parameters
-        ----------
-        purity : float
-            purity to automatically compute the threshold
-        tol_spat : int
-            spatial tolerance for the spatial merging (distance in pixels)
-            TODO en fonction du FWHM
-        tol_spec : int
-            spectral tolerance for the spatial merging (distance in pixels)
-        spat_size : int
-            spatiale size of the spatiale filter
-        spect_size : int
-            spectral lenght of the spectral filter
-        auto : tuple (npts1,npts2,pmargin)
-            nb of threshold sample for iteration 1 and 2, margin in purity
-            default (5,15,0.1
-        threshlist : list
-            list of thresholds to compute the purity
-
-        Returns
-        -------
-        self.threshold_correl : float
-            Estimated threshold
-        self.Pval_r : array
-            Purity curves
-        self.index_pval : array
-            Indexes of the purity curves
-        self.Det_M : list
-            Number of detections in +DATA
-        self.Det_m : list
-            Number of detections in -DATA
-
-        """
-        self._loginfo('Step 06 - Compute Purity threshold')
-
-        if self.cube_local_max is None:
-            raise IOError('Run the step 05 to initialize ' +
-                          'self.cube_local_max and self.cube_local_min')
-
-        self.param['purity'] = purity
-        self.param['tol_spat'] = tol_spat
-        self.param['tol_spec'] = tol_spec
-        self.param['spat_size'] = spat_size
-        self.param['spect_size'] = spect_size
-
-        self._loginfo('Estimation of threshold with purity = %.2f' % purity)
-        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
-            Compute_threshold_purity(purity, self.cube_local_max.data,
-                                     self.cube_local_min.data, self.segmap.data,
-                                     spat_size, spect_size, tol_spat, tol_spec,
-                                     True, True, auto, threshlist)
-        self.param['threshold'] = threshold
-        self._loginfo('Threshold: %.2f ' % threshold)
-
-        self._loginfo('06 Done')
-
-    def step07_detection(self, threshold=None):
-        """Detections on local maxima from max correlation + spatia-spectral
-        merging in order to create the first catalog.
-
-        Parameters
-        ----------
-        threshold : float
-            User threshod if the estimated threshold is not good
-
-        Returns
-        -------
-        self.Cat0 : astropy.Table
-            First catalog
-            Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
-        self.det_correl_min : (array, array, array)
-            3D positions of detections in correl_min
-
-        """
-        self._loginfo('Step 07 - Thresholding and spatio-spectral merging')
-
-        if threshold is not None:
-            self.param['threshold'] = threshold
-
-        self.Cat0, self.det_correl_min = Create_local_max_cat(
-            self.param['threshold'], self.cube_local_max.data,
-            self.cube_local_min.data, self.segmap.data,
-            self.param['spat_size'], self.param['spect_size'],
-            self.param['tol_spat'], self.param['tol_spec'],
-            True, self.cube_profile._data, self.wcs,
-            self.wave
-        )
-        _format_cat(self.Cat0, 0)
-        self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
-                      len(np.unique(self.Cat0['ID'])), len(self.Cat0))
-        self._loginfo('07 Done')
 
     def step08_detection_lost(self, purity=None, auto=(5, 15, 0.1),
                               threshlist=None):
