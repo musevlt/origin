@@ -56,8 +56,7 @@ def _format_cat(Cat, i):
             Cat['flux'].format = '.1f'
             Cat['purity'].format = '.3f'
     except Exception:
-        logger = logging.getLogger('origin')
-        logger.info('Invalid format for the Catalog')
+        logging.getLogger(__name__).info('Invalid format for the Catalog')
 
 
 class LogMixin:
@@ -74,11 +73,11 @@ class LogMixin:
 
 class Status(Enum):
     """Step processing status."""
-    NOTRUN = 1
-    RUN = 2
-    DUMPED = 3
-    LOADED = 4
-    FAILED = 5
+    NOTRUN = 'not run yet'
+    RUN = 'run'
+    DUMPED = 'dumped outputs'
+    LOADED = 'reloaded outputs'
+    FAILED = 'failed'
 
 
 class Step(LogMixin):
@@ -112,8 +111,7 @@ class Step(LogMixin):
 
     def __call__(self, *args, **kwargs):
         t0 = time.time()
-        info = self._loginfo
-        info('Step %02d - %s', self.idx, self.desc)
+        self._loginfo('Step %02d - %s', self.idx, self.desc)
 
         sig = inspect.signature(self.run)
         for name, p in sig.parameters.items():
@@ -122,8 +120,8 @@ class Step(LogMixin):
             annotation = ((' - ' + p.annotation)
                           if p.annotation is not p.empty else '')
             default = p.default if p.default is not p.empty else ''
-            info('   - %s = %r (default: %r)%s', name,
-                 kwargs.get(name, ''), default, annotation)
+            self._loginfo('   - %s = %r (default: %r)%s', name,
+                          kwargs.get(name, ''), default, annotation)
             self.param[name] = kwargs.get(name, p.default)
 
         try:
@@ -135,7 +133,7 @@ class Step(LogMixin):
             self.status = Status.RUN
 
         tot = time.time() - t0
-        info('%02d Done - %.2f sec.', self.idx, tot)
+        self._loginfo('%02d Done - %.2f sec.', self.idx, tot)
 
     def store_cube(self, name, data, **kwargs):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
@@ -150,11 +148,9 @@ class Step(LogMixin):
 
     def dump(self, outpath):
         if self.status is not Status.RUN:
-            self.logger.debug('%s - nothing to dump', self.method_name)
             return
-        else:
-            self.logger.debug('%s - DUMP', self.method_name)
 
+        self.logger.debug('%s - DUMP', self.method_name)
         for kind, names in self.outputs.items():
             for name in names:
                 obj = getattr(self.orig, name)
@@ -395,8 +391,8 @@ class ComputeGreedyPCA(Step):
             thr = threshold_list
 
         # self._loginfo('   - Noise_population = %0.2f' % Noise_population)
-        self._loginfo('   - List of threshold = ' +
-                      " ".join("%.2f" % x for x in thr))
+        self._loginfo('   - List of threshold = %s',
+                      ' '.join("%.2f" % x for x in thr))
 
         # orig.param['threshold_list'] = thr
         # orig.param['Noise_population'] = Noise_population
@@ -565,7 +561,7 @@ class ComputePurityThreshold(Step):
                                      spat_size, spect_size, tol_spat, tol_spec,
                                      True, True, auto, threshlist)
         orig.param['threshold'] = threshold
-        self._loginfo('Threshold: %.2f ' % threshold)
+        self._loginfo('Threshold: %.2f ', threshold)
         self.outputs['array'].extend(['Pval_r', 'index_pval', 'Det_M',
                                       'Det_m'])
 
@@ -670,7 +666,7 @@ class DetectionLost(Step):
             purity = orig.param['purity']
         orig.param['purity2'] = purity
 
-        self._loginfo('Threshold computed with purity = %.1f' % purity)
+        self._loginfo('Threshold computed with purity = %.1f', purity)
 
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
@@ -688,7 +684,7 @@ class DetectionLost(Step):
                 True, False,
                 auto, threshlist)
         orig.param['threshold2'] = threshold2
-        self._loginfo('Threshold: %.2f ' % threshold2)
+        self._loginfo('Threshold: %.2f ', threshold2)
 
         if threshold2 == np.inf:
             orig.Cat1 = orig.Cat0.copy()
@@ -721,7 +717,7 @@ class DetectionLost(Step):
         self._loginfo('Save the catalogue in self.Cat1'
                       ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
 
-        self.outputs['table'].append('Cat0')
+        self.outputs['table'].append('Cat1')
         self.outputs['array'].extend(['Pval_r_comp', 'index_pval_comp',
                                       'Det_M_comp', 'Det_m_comp'])
 
@@ -876,21 +872,17 @@ class CreateMasks(Step):
         orig.param['mask_size'] = mask_size
         orig.param['seg_thres_factor'] = seg_thres_factor
 
-        if path is not None and not os.path.exists(path):
-            raise IOError("Invalid path: {0}".format(path))
-
         if path is None:
-            out_dir = '%s/%s/masks' % (orig.path, orig.name)
+            out_dir = '%s/masks' % orig.outpath
         else:
+            if os.path.exists(path):
+                raise IOError("Invalid path: {0}".format(path))
             path = os.path.normpath(path)
             out_dir = '%s/%s/masks' % (path, orig.name)
 
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        else:
-            if overwrite:
-                shutil.rmtree(out_dir)
-                os.makedirs(out_dir)
+        if overwrite:
+            shutil.rmtree(out_dir, ignore_errors=True)
+        os.makedirs(out_dir, exist_ok=True)
 
         orig.param['mask_filename_tpl'] = f"{out_dir}/source-mask-%0.5d.fits"
         orig.param['skymask_filename_tpl'] = f"{out_dir}/sky-mask-%0.5d.fits"
@@ -944,24 +936,19 @@ class SaveSources(Step):
     def run(self, orig, version, *, path=None, n_jobs=1, author="",
             nb_fwhm=2, size=5, expmap_filename=None, fieldmap_filename=None,
             overwrite=True):
-        if path is not None and not os.path.exists(path):
-            raise IOError("Invalid path: {0}".format(path))
 
         if path is None:
-            path = orig.path
-            out_dir = '%s/%s/sources' % (orig.path, orig.name)
-            catname = '%s/%s/%s.fits' % (orig.path, orig.name, orig.name)
+            outpath = orig.outpath
         else:
-            path = os.path.normpath(path)
-            out_dir = '%s/%s/sources' % (path, orig.name)
-            catname = '%s/%s/%s.fits' % (path, orig.name, orig.name)
+            if not os.path.exists(path):
+                raise IOError("Invalid path: {0}".format(path))
+            outpath = os.path.join(os.path.normpath(path), orig.name)
+        out_dir = '%s/sources' % outpath
+        catname = '%s/%s.fits' % (outpath, orig.name)
 
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        else:
-            if overwrite:
-                shutil.rmtree(out_dir)
-                os.makedirs(out_dir)
+        if overwrite:
+            shutil.rmtree(out_dir, ignore_errors=True)
+        os.makedirs(out_dir, exist_ok=True)
 
         # FIXME: We need to have the file containing the spectra saved for the
         # create_all_sources function.
@@ -971,11 +958,10 @@ class SaveSources(Step):
             cat3_sources=orig.Cat3_sources,
             cat3_lines=orig.Cat3_lines,
             origin_params=orig.param,
-            cube_cor_filename="%s/%s/cube_correl.fits" % (path, orig.name),
+            cube_cor_filename="%s/%s/cube_correl.fits" % outpath,
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
-            spectra_fits_filename="%s/%s/Cat3_spectra.fits" % (path,
-                                                               orig.name),
+            spectra_fits_filename="%s/%s/Cat3_spectra.fits" % outpath,
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=f"{out_dir}/source-%0.5d.fits",
