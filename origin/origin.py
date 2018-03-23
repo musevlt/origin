@@ -22,44 +22,16 @@ import warnings
 import yaml
 
 from astropy.io import fits
-from astropy.table import Table, vstack
+from astropy.table import Table, MaskedColumn
 from astropy.utils import lazyproperty
 from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
-from mpdaf.sdetect import Catalog
 from mpdaf.tools import write_hdulist_to
 
-from .lib_origin import (
-    area_growing,
-    area_segmentation_convex_fusion,
-    area_segmentation_final,
-    area_segmentation_sources_fusion,
-    area_segmentation_square_fusion,
-    CleanCube,
-    Compute_GreedyPCA_area,
-    Compute_local_max_zone,
-    Compute_PCA_threshold,
-    Compute_Standardized_data,
-    Compute_threshold_purity,
-    Correlation_GLR_test,
-    Correlation_GLR_test_zone,
-    Create_local_max_cat,
-    create_masks,
-    dct_residual,
-    Estimation_Line,
-    merge_similar_lines,
-    Purity_Estimation,
-    remove_identical_duplicates,
-    Spatial_Segmentation,
-    trim_spectrum_list,
-    unique_sources,
-)
-
 from . import steps
-from .source_creation import create_all_sources
 from .steps import _format_cat
 from .version import __version__
 
@@ -881,25 +853,6 @@ class ORIGIN(steps.LogMixin):
             np.savetxt('%s/ym.txt' % (self.outpath), self.det_correl_min[1])
             np.savetxt('%s/xm.txt' % (self.outpath), self.det_correl_min[2])
 
-        # step08
-        if self.Pval_r_comp is not None:
-            np.savetxt('%s/Pval_r_comp.txt' % (self.outpath), self.Pval_r_comp)
-        if self.index_pval_comp is not None:
-            np.savetxt('%s/index_pval_comp.txt' % (self.outpath),
-                       self.index_pval_comp)
-        if self.Det_M_comp is not None:
-            np.savetxt('%s/Det_M_comp.txt' % (self.outpath), self.Det_M_comp)
-        if self.Det_m_comp is not None:
-            np.savetxt('%s/Det_min_comp.txt' % (self.outpath), self.Det_m_comp)
-
-        # step8
-        if self.Cat1 is not None:
-            self.Cat1.write('%s/Cat1.fits' % self.outpath, overwrite=True)
-
-        # step9
-        if self.Cat2 is not None:
-            self.Cat2.write('%s/Cat2.fits' % self.outpath, overwrite=True)
-
         def save_spectra(spectra, outname, *, idlist=None):
             """
             The spectra are saved to a FITS file with two extension per
@@ -929,214 +882,12 @@ class ORIGIN(steps.LogMixin):
             save_spectra(self.spectra, '%s/spectra.fits' % self.outpath)
 
         # step 10
-        if self.Cat3_lines is not None:
-            self.Cat3_lines.write('%s/Cat3_lines.fits' % self.outpath,
-                                  overwrite=True)
-        if self.Cat3_sources is not None:
-            self.Cat3_sources.write('%s/Cat3_sources.fits' % self.outpath,
-                                    overwrite=True)
         if self.Cat3_spectra is not None:
             save_spectra(self.Cat3_spectra,
                          '%s/Cat3_spectra.fits' % self.outpath,
                          idlist=self.Cat3_lines['num_line'])
 
         self._loginfo("Current session saved in %s" % self.outpath)
-
-    def step10_clean_results(self, *, merge_lines_z_threshold=5,
-                             spectrum_size_fwhm=3):
-        """Clean the various results.
-
-        This step does several things to “clean” the results of ORIGIN:
-
-        - The Cat2 line table may contain several lines found at the very same
-          x, y, z position in the cube. Only the line with the highest purity
-          is kept in the table.
-        - Some lines are associated to the same source but are very near
-          considering their z positions.  The lines are all marked as merged in
-          the brightest line of the group (but are kept in the line table).
-        - The FITS file containing the spectra is cleaned to keep only the
-          lines from the cleaned line table. The spectrum around each line
-          is trimmed around the line position.
-        - A table of unique sources is created.
-
-        Attributes added to the ORIGIN object:
-        - `Cat3_lines`: clean table of lines;
-        - `Cat3_sources`: table of unique sources
-        - `Cat3_spectra`: trimmed spectra. For a given <num_line>, the
-            spectrum is in `DATA<num_line>` extension and the variance in
-            the `STAT<num_line>` extension.
-
-        Parameters
-        ----------
-        merge_lines_z_threshold: int
-            z axis pixel threshold used when merging similar lines.
-        spectrum_size_fwhm: float
-            The length of the spectrum to keep around each line as a factor of
-            the fitted line FWHM.
-
-        """
-        self._loginfo('Step10 - Results cleaning')
-
-        if self.Cat2 is None:
-            raise IOError('Run the step 09 to initialize self.Cat2')
-
-        self.param['merge_lines_z_threshold'] = merge_lines_z_threshold
-        self.param['spectrum_size_fwhm'] = spectrum_size_fwhm
-
-        unique_lines = remove_identical_duplicates(self.Cat2)
-        self.Cat3_lines = merge_similar_lines(unique_lines)
-        self.Cat3_sources = unique_sources(self.Cat3_lines)
-
-        self._loginfo('Save the unique source catalogue in self.Cat3_sources'
-                      ' (%d lines)', len(self.Cat3_sources))
-        self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
-                      len(self.Cat3_lines))
-
-        self.Cat3_spectra = trim_spectrum_list(
-            self.Cat3_lines, self.spectra, self.FWHM_profiles,
-            size_fwhm=spectrum_size_fwhm)
-
-        self._loginfo('Step 10 - Done')
-
-    def step11_create_masks(self, path=None, overwrite=True, mask_size=50,
-                            seg_thres_factor=.5):
-        """Create source masks and sky masks.
-
-        This step create the mask and sky mask for each source.
-
-        Parameters
-        ----------
-        path : str
-            Path where the masks will be saved.
-        overwrite : bool
-            Overwrite the folder if it already exists
-        mask_size: int
-            Widht in pixel for the square masks.
-        seg_thres_factor: float
-            Factor applied to the detection threshold to get the threshold used
-            for mask creation.
-
-        """
-        if self.Cat3_lines is None:
-            raise IOError('Run the step 10.')
-
-        self._loginfo('Step11 - Mask creation')
-
-        self.param['mask_size'] = mask_size
-        self.param['seg_thres_factor'] = seg_thres_factor
-
-        if path is not None and not os.path.exists(path):
-            raise IOError("Invalid path: {0}".format(path))
-
-        if path is None:
-            out_dir = '%s/%s/masks' % (self.path, self.name)
-        else:
-            path = os.path.normpath(path)
-            out_dir = '%s/%s/masks' % (path, self.name)
-
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        else:
-            if overwrite:
-                shutil.rmtree(out_dir)
-                os.makedirs(out_dir)
-
-        self.param['mask_filename_tpl'] = f"{out_dir}/source-mask-%0.5d.fits"
-        self.param['skymask_filename_tpl'] = f"{out_dir}/sky-mask-%0.5d.fits"
-
-        create_masks(
-            line_table=self.Cat3_lines,
-            source_table=self.Cat3_sources,
-            profile_fwhm=self.FWHM_profiles,
-            correl_cube=self.cube_correl,
-            correl_threshold=self.threshold_correl,
-            std_cube=self.cube_std,
-            std_threshold=self.threshold_std,
-            segmap=self.segmap,
-            out_dir=out_dir,
-            mask_size=mask_size,
-            seg_thres_factor=seg_thres_factor,
-            plot_problems=True)
-
-        self._loginfo('Step11 - Mask done')
-
-    def step12_save_sources(self, version, *, path=None, n_jobs=1,
-                            author="", nb_fwhm=2, size=5,
-                            expmap_filename=None, fieldmap_filename=None,
-                            overwrite=True):
-        """Create the source file for each source.
-
-        Parameters
-        ----------
-        version: str
-            Version number of the source files.
-        path: str
-            Path where the sources will be saved.
-        n_job: int
-            Number of jobs for parallel processing.
-        author: str
-            Name of the author to add in the sources.
-        nb_fwhm: float
-            Factor multiplying the FWHM of a line to compute the width of the
-            associated narrow band image.
-        size: float
-            Side of the square used for cut-outs around the source position
-            (for images and sub-cubes) in arc-seconds.
-        expmap_filename: str
-            Name of the file containing the exposure map to add to the source.
-        fieldmap_filename: str
-            Name of the file containing the fieldmap.
-        overwrite: bool
-            Overwrite the folder if it already exists.
-        """
-        if path is not None and not os.path.exists(path):
-            raise IOError("Invalid path: {0}".format(path))
-
-        if path is None:
-            path = self.path
-            out_dir = '%s/%s/sources' % (self.path, self.name)
-            catname = '%s/%s/%s.fits' % (self.path, self.name, self.name)
-        else:
-            path = os.path.normpath(path)
-            out_dir = '%s/%s/sources' % (path, self.name)
-            catname = '%s/%s/%s.fits' % (path, self.name, self.name)
-
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
-        else:
-            if overwrite:
-                shutil.rmtree(out_dir)
-                os.makedirs(out_dir)
-
-        # FIXME: We need to have the file containing the spectra saved for the
-        # create_all_sources function.
-
-        create_all_sources(
-            cat3_sources=self.Cat3_sources,
-            cat3_lines=self.Cat3_lines,
-            origin_params=self.param,
-            cube_cor_filename="%s/%s/cube_correl.fits" % (path, self.name),
-            mask_filename_tpl=self.param['mask_filename_tpl'],
-            skymask_filename_tpl=self.param['skymask_filename_tpl'],
-            spectra_fits_filename="%s/%s/Cat3_spectra.fits" % (path,
-                                                               self.name),
-            version=version,
-            profile_fwhm=self.FWHM_profiles,
-            out_tpl=f"{out_dir}/source-%0.5d.fits",
-            n_jobs=n_jobs,
-            author=author,
-            nb_fwhm=nb_fwhm,
-            size=size,
-            expmap_filename=expmap_filename,
-            fieldmap_filename=fieldmap_filename,
-        )
-
-        # create the final catalog
-        self._loginfo('Create the final catalog...')
-        catF = Catalog.from_path(out_dir, fmt='working')
-        catF.write(catname, overwrite=overwrite)
-
-        self._loginfo('Step12 - Sources done')
 
     def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()
@@ -1318,8 +1069,9 @@ class ORIGIN(steps.LogMixin):
             # Data in this spatio-spectral zone
             cube_temp = self.cube_std._data[:, ksel]
             # Compute_PCA_threshold
-            testO2, hist, bins, thre, mea, std = \
-                Compute_PCA_threshold(cube_temp, pfa_test)
+            from .lib_origin import Compute_PCA_threshold
+            testO2, hist, bins, thre, mea, std = Compute_PCA_threshold(
+                cube_temp, pfa_test)
 
         if ax is None:
             ax = plt.gca()
