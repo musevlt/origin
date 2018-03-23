@@ -172,14 +172,24 @@ def create_source(source_id, source_table, line_table, origin_params,
         source.add_image(Image(expmap_filename), "EXPMAP")
 
     # Full source spectra
-    # TODO: Compute PSF spectrum
-    source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=True)
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False)
     source.spectra['ORI_CORR'] = (
         correl_cube * source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+    # Add the FSF information to the source and use this information to compute
+    # the PSF weighted spectra.
+    source.add_FSF(data_cube)
+    a, b, beta, _ = source.get_FSF()
+    fwhm_fsf = b * data_cube.wave.coord() + a
+    source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                           sky_mask="ORI_MASK_SKY", skysub=True, psf=fwhm_fsf,
+                           beta=beta)
+    source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                           sky_mask="ORI_MASK_SKY", skysub=False, psf=fwhm_fsf,
+                           beta=beta)
+    source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
 
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
