@@ -61,7 +61,8 @@ def create_source(source_id, source_table, line_table, origin_params,
 
     Returns
     -------
-    mpdaf.sdetect.source.Source
+    mpdaf.sdetect.source.Source or None
+        If save_to is used, the function returns None.
 
     """
     logger = logging.getLogger(__name__)
@@ -278,8 +279,8 @@ def create_source(source_id, source_table, line_table, origin_params,
 
     if save_to is not None:
         source.write(save_to)
-
-    return source
+    else:
+        return source
 
 
 def create_all_sources(cat3_sources, cat3_lines, origin_params,
