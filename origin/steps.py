@@ -3,14 +3,57 @@ import logging
 import numpy as np
 import time
 # from astropy.utils import lazyproperty
+from astropy.table import vstack
 from collections import defaultdict
 from enum import Enum
-from mpdaf.obj import Cube, Image
+from mpdaf.obj import Cube, Image, Spectrum
 
+from .lib_origin import (
+    area_growing,
+    area_segmentation_convex_fusion,
+    area_segmentation_final,
+    area_segmentation_sources_fusion,
+    area_segmentation_square_fusion,
+    CleanCube,
+    Compute_GreedyPCA_area,
+    Compute_local_max_zone,
+    Compute_PCA_threshold,
+    Compute_Standardized_data,
+    Compute_threshold_purity,
+    Correlation_GLR_test,
+    Correlation_GLR_test_zone,
+    Create_local_max_cat,
+    create_masks,
+    dct_residual,
+    Estimation_Line,
+    merge_similar_lines,
+    Purity_Estimation,
+    remove_identical_duplicates,
+    Spatial_Segmentation,
+    trim_spectrum_list,
+    unique_sources,
+)
 # TODO:
 # - Add execution datetime
 # - manage requirements between steps
 # - save and update params
+
+
+def _format_cat(Cat, i):
+    try:
+        Cat['ra'].format = '.3f'
+        Cat['dec'].format = '.3f'
+        Cat['lbda'].format = '.2f'
+        Cat['T_GLR'].format = '.2f'
+        if i > 0:
+            Cat['STD'].format = '.2f'
+        if i > 1:
+            Cat['residual'].format = '.3f'
+            Cat['flux'].format = '.1f'
+            Cat['purity'].format = '.3f'
+    except Exception:
+        logger = logging.getLogger('origin')
+        logger.info('Invalid format for the Catalog')
 
 
 class LogMixin:
@@ -50,7 +93,10 @@ class Step(LogMixin):
         self.orig = orig
         self.idx = idx
         self.method_name = 'step%02d_%s' % (idx, self.name)
-        self.param = param[self.method_name] = {}
+        if self.method_name in param:
+            self.param = param[self.method_name]
+        else:
+            self.param = param[self.method_name] = {}
         self.outputs = defaultdict(list)
         self.status = Status.NOTRUN
 
@@ -101,7 +147,7 @@ class Step(LogMixin):
             self.logger.debug('%s - nothing to dump', self.method_name)
             return
         else:
-            self.logger.debug('%s - dump', self.method_name)
+            self.logger.debug('%s - DUMP', self.method_name)
 
         for kind, names in self.outputs.items():
             for name in names:
@@ -144,8 +190,6 @@ class Preprocessing(Step):
     desc = 'Preprocessing'
 
     def run(self, orig, dct_order=10, dct_approx=True):
-        from .lib_origin import dct_residual, Compute_Standardized_data
-
         self._loginfo('DCT computation')
         faint_dct, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
                                            dct_approx)
@@ -189,11 +233,6 @@ class CreateAreas(Step):
 
     def run(self, orig, pfa: "pfa of the test"=.2,
             minsize: "minimum size"=100, maxsize=None):
-        from .lib_origin import (area_segmentation_square_fusion,
-                                 area_segmentation_sources_fusion,
-                                 area_segmentation_convex_fusion,
-                                 area_segmentation_final, area_growing)
-
         # TODO: remove this and change in source creation
         orig.param['pfa_areas'] = pfa
         orig.param['minsize_areas'] = minsize
@@ -267,8 +306,6 @@ class ComputePCAThreshold(Step):
     desc = 'PCA threshold computation'
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
-        from .lib_origin import Compute_PCA_threshold
-
         if orig.cube_std is None:
             raise IOError('Run the step 01 to initialize self.cube_std')
         if orig.areamap is None:
@@ -360,8 +397,6 @@ class ComputeGreedyPCA(Step):
         # orig.param['itermax'] = itermax
 
         self._loginfo('Compute greedy PCA on each zone')
-        from .lib_origin import Compute_GreedyPCA_area
-
         faint, mapO2, nstop = Compute_GreedyPCA_area(
             orig.nbAreas, orig.cube_std._data, orig.areamap._data,
             Noise_population, thr, itermax, orig.testO2)
@@ -429,10 +464,6 @@ class ComputeTGLR(Step):
 
         orig.param['neighbors'] = neighbors
         orig.param['NbSubcube'] = NbSubcube
-
-        from .lib_origin import (Spatial_Segmentation, Correlation_GLR_test,
-                                 Correlation_GLR_test_zone,
-                                 Compute_local_max_zone)
 
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
@@ -521,7 +552,6 @@ class ComputePurityThreshold(Step):
         orig.param['spat_size'] = spat_size
         orig.param['spect_size'] = spect_size
 
-        from .lib_origin import Compute_threshold_purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
         threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
             Compute_threshold_purity(purity, orig.cube_local_max.data,
@@ -559,7 +589,6 @@ class Detection(Step):
         if threshold is not None:
             orig.param['threshold'] = threshold
 
-        from .lib_origin import Create_local_max_cat
         orig.Cat0, orig.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max.data,
             orig.cube_local_min.data, orig.segmap.data,
@@ -567,13 +596,182 @@ class Detection(Step):
             orig.param['tol_spat'], orig.param['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
         )
-        # FIXME: remove this import
-        from .origin import _format_cat
         _format_cat(orig.Cat0, 0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
                       len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
         self.outputs['table'].append('Cat0')
         self.outputs['array'].append('det_correl_min')
+
+
+class DetectionLost(Step):
+    """Detections on local maxima of std cube + spatia-spectral
+    merging in order to create an complementary catalog. This catalog is
+    merged with the catalog Cat0 in order to create the catalog Cat1
+
+    Parameters
+    ----------
+    purity : float
+        purity to automatically compute the threshold
+        If None, previous purity is used
+    auto : tuple (npts1,npts2,pmargin)
+        nb of threshold sample for iteration 1 and 2, margin in purity
+        default (5,15,0.1)
+    threshlist : list
+        list of thresholds to compute the purity default None
+
+    Returns
+    -------
+    self.threshold_correl : float
+        Estimated threshold used to detect complementary
+        lines on local maxima of std cube
+    self.Pval_r_comp : array
+        Purity curves
+    self.index_pval_comp : array
+        Indexes of the purity curves
+    self.Det_M_comp : list
+        Number of detections in +DATA
+    self.Det_m_comp : list
+        Number of detections in -DATA
+    self.Cat1 : astropy.Table
+        New catalog.
+        Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR STD comp
+
+    """
+
+    name = 'detection_lost'
+    desc = 'Thresholding and spatio-spectral merging'
+
+    def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
+        if orig.Cat0 is None:
+            raise IOError('Run the step 07 to initialize Cat0')
+
+        self._loginfo('Compute local maximum of std cube values')
+        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny,
+                                          orig.param['NbSubcube'])
+        cube_local_max_faint_dct, cube_local_min_faint_dct = \
+            Compute_local_max_zone(orig.cube_std.data, orig.cube_std.data,
+                                   orig.mask, intx, inty,
+                                   orig.param['NbSubcube'],
+                                   orig.param['neighbors'])
+
+        # complementary catalog
+        cube_local_max_faint_dct, cube_local_min_faint_dct = \
+            CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct,
+                      orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
+                      orig.param['spat_size'], orig.param['spect_size'])
+
+        if purity is None:
+            purity = orig.param['purity']
+        orig.param['purity2'] = purity
+
+        self._loginfo('Threshold computed with purity = %.1f' % purity)
+
+        orig.cube_local_max_faint_dct = cube_local_max_faint_dct
+        orig.cube_local_min_faint_dct = cube_local_min_faint_dct
+
+        threshold2, orig.Pval_r_comp, orig.index_pval_comp, orig.Det_m_comp, \
+            orig.Det_M_comp = Compute_threshold_purity(
+                purity,
+                cube_local_max_faint_dct,
+                cube_local_min_faint_dct,
+                orig.segmap._data,
+                orig.param['spat_size'],
+                orig.param['spect_size'],
+                orig.param['tol_spat'],
+                orig.param['tol_spec'],
+                True, False,
+                auto, threshlist)
+        orig.param['threshold2'] = threshold2
+        self._loginfo('Threshold: %.2f ' % threshold2)
+
+        if threshold2 == np.inf:
+            orig.Cat1 = orig.Cat0.copy()
+            orig.Cat1['comp'] = 0
+            orig.Cat1['STD'] = 0
+        else:
+            Catcomp, _ = Create_local_max_cat(threshold2,
+                                              cube_local_max_faint_dct,
+                                              cube_local_min_faint_dct,
+                                              orig.segmap._data,
+                                              orig.param['spat_size'],
+                                              orig.param['spect_size'],
+                                              orig.param['tol_spat'],
+                                              orig.param['tol_spec'],
+                                              True,
+                                              orig.cube_profile._data,
+                                              orig.wcs, orig.wave)
+            Catcomp.rename_column('T_GLR', 'STD')
+            # merging
+            Cat0 = orig.Cat0.copy()
+            Cat0['comp'] = 0
+            Catcomp['comp'] = 1
+            Catcomp['ID'] += (Cat0['ID'].max() + 1)
+            orig.Cat1 = vstack([Cat0, Catcomp])
+            _format_cat(orig.Cat1, 1)
+        ns = len(np.unique(orig.Cat1['ID']))
+        ds = ns - len(np.unique(orig.Cat0['ID']))
+        nl = len(orig.Cat1)
+        dl = nl - len(orig.Cat0)
+        self._loginfo('Save the catalogue in self.Cat1'
+                      ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
+
+
+class ComputeSpectra(Step):
+    """Compute the estimated emission line and the optimal coordinates
+
+    for each detected lines in a spatio-spectral grid (each emission line
+    is estimated with the deconvolution model ::
+
+        subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
+
+    Via PCA LS or denoised PCA LS Method
+
+    Parameters
+    ----------
+    grid_dxy : int
+        Maximum spatial shift for the grid
+
+    Returns
+    -------
+    self.Cat2 : astropy.Table
+        Catalogue of parameters of detected emission lines.
+        Columns: ra dec lbda x0 x y0 y z0 z T_GLR profile
+        residual flux num_line purity
+    self.spectra : list of `~mpdaf.obj.Spectrum`
+        Estimated lines
+
+    """
+
+    name = 'compute_spectra'
+    desc = 'Lines estimation'
+
+    def run(self, orig, grid_dxy=0):
+        orig.param['grid_dxy'] = grid_dxy
+
+        if orig.Cat1 is None:
+            raise IOError('Run the step 08 to initialize self.Cat1 catalog')
+
+        orig.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
+            orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
+            orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
+            criteria='flux', order_dct=30, horiz_psf=1, horiz=5
+        )
+
+        self._loginfo('Purity estimation')
+        orig.Cat2 = Purity_Estimation(orig.Cat2,
+                                      [orig.Pval_r, orig.Pval_r_comp],
+                                      [orig.index_pval, orig.index_pval_comp])
+        _format_cat(orig.Cat2, 2)
+        self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
+                      len(orig.Cat2))
+
+        orig.spectra = []
+        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T):
+            spe = Spectrum(data=data, var=vari, wave=orig.wave,
+                           mask=np.ma.nomask)
+            orig.spectra.append(spe)
+        self._loginfo('Save the estimated spectrum of each line in '
+                      'self.spectra')
 
 
 pipeline = [
@@ -583,5 +781,7 @@ pipeline = [
     ComputeGreedyPCA,
     ComputeTGLR,
     ComputePurityThreshold,
-    Detection
+    Detection,
+    DetectionLost,
+    ComputeSpectra
 ]
