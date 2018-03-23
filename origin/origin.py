@@ -59,6 +59,7 @@ from .lib_origin import (
     trim_spectrum_list,
     unique_sources,
 )
+from .source_creation import create_all_sources
 from .version import __version__
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
@@ -1732,6 +1733,9 @@ class ORIGIN(object):
                 shutil.rmtree(out_dir)
                 os.makedirs(out_dir)
 
+        self.param['mask_filename_tpl'] = f"{out_dir}/source-mask-%0.5d.fits"
+        self.param['skymask_filename_tpl'] = f"{out_dir}/sky-mask-%0.5d.fits"
+
         create_masks(
             line_table=self.Cat3_lines,
             source_table=self.Cat3_sources,
@@ -1747,6 +1751,84 @@ class ORIGIN(object):
             plot_problems=True)
 
         self._loginfo('Step11 - Mask done')
+
+    def step12_save_sources(self, version, *, path=None, n_jobs=1,
+                            author="", nb_fwhm=2, size=5,
+                            expmap_filename=None, fieldmap_filename=None,
+                            overwrite=True):
+        """Create the source file for each source.
+
+        Parameters
+        ----------
+        version: str
+            Version number of the source files.
+        path: str
+            Path where the sources will be saved.
+        n_job: int
+            Number of jobs for parallel processing.
+        author: str
+            Name of the author to add in the sources.
+        nb_fwhm: float
+            Factor multiplying the FWHM of a line to compute the width of the
+            associated narrow band image.
+        size: float
+            Side of the square used for cut-outs around the source position
+            (for images and sub-cubes) in arc-seconds.
+        expmap_filename: str
+            Name of the file containing the exposure map to add to the source.
+        fieldmap_filename: str
+            Name of the file containing the fieldmap.
+        overwrite: bool
+            Overwrite the folder if it already exists.
+        """
+        if path is not None and not os.path.exists(path):
+            raise IOError("Invalid path: {0}".format(path))
+
+        if path is None:
+            path = self.path
+            out_dir = '%s/%s/sources' % (self.path, self.name)
+            catname = '%s/%s/%s.fits' % (self.path, self.name, self.name)
+        else:
+            path = os.path.normpath(path)
+            out_dir = '%s/%s/sources' % (path, self.name)
+            catname = '%s/%s/%s.fits' % (path, self.name, self.name)
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        else:
+            if overwrite:
+                shutil.rmtree(out_dir)
+                os.makedirs(out_dir)
+
+        # FIXME: We need to have the file containing the spectra saved for the
+        # create_all_sources function.
+
+        create_all_sources(
+            cat3_sources=self.Cat3_sources,
+            cat3_lines=self.Cat3_lines,
+            origin_params=self.param,
+            cube_cor_filename="%s/%s/cube_correl.fits" % (path, self.name),
+            mask_filename_tpl=self.param['mask_filename_tpl'],
+            skymask_filename_tpl=self.param['skymask_filename_tpl'],
+            spectra_fits_filename="%s/%s/Cat3_spectra.fits" % (path,
+                                                               self.name),
+            version=version,
+            profile_fwhm=self.FWHM_profiles,
+            out_tpl=f"{out_dir}/source-%0.5d.fits",
+            n_jobs=n_jobs,
+            author=author,
+            nb_fwhm=nb_fwhm,
+            size=size,
+            expmap_filename=expmap_filename,
+            fieldmap_filename=fieldmap_filename,
+        )
+
+        # create the final catalog
+        self._loginfo('Create the final catalog...')
+        catF = Catalog.from_path(out_dir, fmt='working')
+        catF.write(catname, overwrite=overwrite)
+
+        self._loginfo('Step12 - Sources done')
 
     def step12_write_sources(self, path=None, overwrite=True, fmt='default',
                              src_vers='0.1', author='undef', ncpu=1):

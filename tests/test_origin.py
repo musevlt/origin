@@ -72,16 +72,16 @@ def test_origin():
 
         # list of source objects
         my_origin = ORIGIN.load('tmp2')
-        cat = my_origin.step12_write_sources(ncpu=1)
-        cat = my_origin.step12_write_sources(ncpu=2, overwrite=True)
-        assert len(cat) == 8
+        my_origin.step12_save_sources(version="0.1")
+        my_origin.step12_save_sources(version="0.1", overwrite=True)
 
         cat = Catalog.read('tmp2/tmp2.fits')
         assert len(cat) == 8
 
         # test returned sources are valid
-        src = Source.from_file('./tmp2/sources/tmp2-00001.fits')
-        assert set(sp.shape[0] for sp in src.spectra.values()) == {3681}
+        src = Source.from_file('./tmp2/sources/source-00001.fits')
+        assert set(sp.shape[0] for sp in src.spectra.values()) == {24, 36,
+                                                                   3681}
         assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
         assert src.cubes['MUSE_CUBE'].shape == (3681, 25, 25)
     finally:
