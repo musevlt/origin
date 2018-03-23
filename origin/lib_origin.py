@@ -3121,7 +3121,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     return table
 
 
-def trim_spectrum_list(line_table, spectra, profile_fwhm, *, size_fwhm=3):
+def trim_spectrum_list(line_table, spectra, profile_fwhm, *, size_fwhm=6):
     """Keep only relevant spectra and limit their extent around the line.
 
     The “compute spectra” step creates a list of spectra (data and variance)
