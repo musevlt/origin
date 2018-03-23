@@ -5,6 +5,11 @@ import time
 # from astropy.utils import lazyproperty
 from mpdaf.obj import Cube, Image
 
+# TODO:
+# - Add execution datetime
+# - manage requirements between steps
+# - save and update params
+
 
 class LogMixin:
 
@@ -21,16 +26,21 @@ class LogMixin:
 class Step(LogMixin):
     """Define a processing step."""
 
+    """Name of the function to run the step."""
     name = None
+
+    """Description of the step."""
     desc = None
+
+    """Step requirement (not implemented yet!)."""
     require = None
 
     def __init__(self, orig, idx, param):
+        self.logger = logging.getLogger(__name__)
         self.orig = orig
         self.idx = idx
         self.method_name = 'step%02d_%s' % (idx, self.name)
         self.param = param[self.method_name] = {}
-        self.logger = logging.getLogger(__name__)
 
     def __call__(self, *args, **kwargs):
         t0 = time.time()
@@ -52,12 +62,14 @@ class Step(LogMixin):
         tot = time.time() - t0
         info('%02d Done - %.2f sec.', self.idx, tot)
 
-    def new_cube(self, data, **kwargs):
-        return Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
+    def store_cube(self, name, data, **kwargs):
+        cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
+        setattr(self.orig, name, cube)
 
-    def new_image(self, data, **kwargs):
-        return Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
+    def store_image(self, name, data, **kwargs):
+        im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
+        setattr(self.orig, name, im)
 
 
 class Preprocessing(Step):
@@ -99,9 +111,9 @@ class Preprocessing(Step):
         cont_dct /= np.sqrt(orig.var)
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
-        orig.cube_std = self.new_cube(cube_std)
+        self.store_cube('cube_std', cube_std)
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
-        orig.cont_dct = self.new_cube(cont_dct)
+        self.store_cube('cont_dct', cont_dct)
 
 
 class Areas(Step):
@@ -137,6 +149,7 @@ class Areas(Step):
                                  area_segmentation_convex_fusion,
                                  area_segmentation_final, area_growing)
 
+        # TODO: remove this and change in source creation
         self.param['pfa_areas'] = pfa
         self.param['minsize_areas'] = minsize
         self.param['maxsize_areas'] = maxsize
@@ -167,8 +180,8 @@ class Areas(Step):
             Grown_label = area_growing(convex_lab, nexpmap)
 
             self._logdebug('Fusion of small area')
-            self._logdebug('Minimum Size: %d px' % MinSize)
-            self._logdebug('Maximum Size: %d px' % MaxSize)
+            self._logdebug('Minimum Size: %d px', MinSize)
+            self._logdebug('Maximum Size: %d px', MaxSize)
             areamap = area_segmentation_final(Grown_label, MinSize, MaxSize)
 
         elif NbSubcube == 1:
@@ -176,8 +189,8 @@ class Areas(Step):
 
         self._loginfo('Save the map of areas in self.areamap')
 
-        orig.areamap = self.new_image(areamap.astype(int))
-        self._loginfo('%d areas generated' % orig.nbAreas)
+        self.store_image('areamap', areamap.astype(int))
+        self._loginfo('%d areas generated', orig.nbAreas)
         self.param['nbareas'] = orig.nbAreas
 
 
@@ -311,15 +324,108 @@ class GreedyPCA(Step):
                              'of %d in %d cases', itermax, nstop)
 
         self._loginfo('Save the faint signal in self.cube_faint')
-        orig.cube_faint = self.new_cube(faint)
+        self.store_cube('cube_faint', faint)
         self._loginfo('Save the numbers of iterations used by the'
                       ' testO2 for each spaxel in self.mapO2')
-        orig.mapO2 = self.new_image(mapO2)
+        self.store_image('mapO2', mapO2)
+
+
+class TGLR(Step):
+    """Compute the cube of GLR test values.
+
+    The test is done on the cube containing the faint signal
+    (``self.cube_faint``) and it uses the PSF and the spectral profile.
+    The correlation can be computed per "area"  for low memory system.
+    Then a Loop on each zone of ``self.cube_correl`` is performed to
+    compute for each zone:
+
+    - The local maxima distribution of each zone
+    - the p-values associated to the local maxima,
+    - the p-values associated to the number of thresholded p-values
+      of the correlations per spectral channel,
+    - the final p-values which are the thresholded pvalues associated
+      to the T_GLR values divided by twice the pvalues associated to the
+      number of thresholded p-values of the correlations per spectral channel.
+
+    Parameters
+    ----------
+    NbSubcube : int
+        Number of sub-cubes for the spatial segmentation
+        If NbSubcube>1 the correlation and local maximas and
+        minimas are performed on smaller subcube and combined
+        after. Useful to avoid swapp
+    neighbors : int
+        Connectivity of contiguous voxels
+    ncpu : int
+        Number of CPUs used
+
+    Returns
+    -------
+    self.cube_correl : `~mpdaf.obj.Cube`
+        Cube of T_GLR values
+    self.cube_profile : `~mpdaf.obj.Cube` (type int)
+        Number of the profile associated to the T_GLR
+    self.maxmap : `~mpdaf.obj.Image`
+        Map of maxima along the wavelength axis
+    self.cube_local_max : `~mpdaf.obj.Cube`
+        Local maxima from max correlation
+    self.cube_local_min : `~mpdaf.obj.Cube`
+        Local maxima from minus min correlation
+
+    """
+
+    name = 'compute_TGLR'
+    desc = 'GLR test'
+
+    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=4):
+        if orig.cube_faint is None:
+            raise IOError('Run the step 04 to initialize self.cube_faint')
+
+        # self.param['neighbors'] = neighbors
+        # self.param['NbSubcube'] = NbSubcube
+        from .lib_origin import (Spatial_Segmentation, Correlation_GLR_test,
+                                 Correlation_GLR_test_zone,
+                                 Compute_local_max_zone)
+
+        # TGLR computing (normalized correlations)
+        self._loginfo('Correlation')
+        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
+        if NbSubcube == 1:
+            correl, profile, cm = Correlation_GLR_test(
+                orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
+                orig.profiles, ncpu)
+        else:
+            correl, profile, cm = Correlation_GLR_test_zone(
+                orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
+                orig.profiles, intx, inty, NbSubcube, ncpu)
+
+        self._loginfo('Save the TGLR value in self.cube_correl')
+        correl[orig.mask] = 0
+        self.store_cube('cube_correl', correl)
+
+        self._loginfo('Save the number of profile associated to the TGLR'
+                      ' in self.cube_profile')
+        profile[orig.mask] = 0
+        self.store_cube('cube_profile', profile.astype(int))
+
+        self._loginfo('Save the map of maxima in self.maxmap')
+        carte_2D_correl = np.amax(orig.cube_correl._data, axis=0)
+        self.store_image('maxmap', carte_2D_correl)
+
+        self._loginfo('Compute p-values of local maximum of correlation '
+                      'values')
+        cube_local_max, cube_local_min = Compute_local_max_zone(
+            correl, cm, orig.mask, intx, inty, NbSubcube, neighbors)
+        self._loginfo('Save self.cube_local_max from max correlations')
+        self.store_cube('cube_local_max', cube_local_max)
+        self._loginfo('Save self.cube_local_min from min correlations')
+        self.store_cube('cube_local_min', cube_local_min)
 
 
 pipeline = [
     Preprocessing,
     Areas,
     PCAThreshold,
-    GreedyPCA
+    GreedyPCA,
+    TGLR
 ]
