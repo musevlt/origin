@@ -10,7 +10,7 @@ from mpdaf.sdetect.source import Source
 from numpy.ma import is_masked
 from tqdm import tqdm as progressbar
 
-from .lib_origin import __version__ as origin_version
+from .version import __version__ as origin_version
 
 
 def create_source(source_id, source_table, line_table, origin_params,
