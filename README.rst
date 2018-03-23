@@ -48,7 +48,7 @@ Usage
 
  >  orig.step09_compute.spectra()
 
- >  nsources = orig.step12_write_sources()
+ >  nsources = orig.step12_save_sources()
 
 
 3- Resulted detected sources can be load by using mpdaf
