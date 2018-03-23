@@ -1403,8 +1403,16 @@ class ORIGIN(steps.LogMixin):
         self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax, **kwargs)
 
     def info(self):
-        """plot information"""
+        """Prints the processing log."""
         with open(self.logfile) as f:
             for line in f:
                 if line.find('Done') == -1:
                     print(line, end='')
+
+    def status(self):
+        """Prints the processing status.
+
+        FIXME: status is not saved and reloaded (yet).
+        """
+        for name, step in self.steps.items():
+            print('- {}: {}'.format(name, step.status.name))
