@@ -140,12 +140,8 @@ class ORIGIN(steps.LogMixin):
         Number of detections in -DATA  (step06).
     Cat0 : astropy.Table
         Catalog returned by step07
-    zm : array
-        z-position of the detections from min correlation (step07)
-    ym : array
-        y-position of the detections from min correlation (step07)
-    xm : array
-        x-position of the detections from min correlation (step07)
+    det_correl_min : array
+        Detections from min correlation (step07)
     Pval_r_comp : array
         Purity curves (step08).
     index_pval_comp : array
@@ -384,6 +380,11 @@ class ORIGIN(steps.LogMixin):
                 obj.binO2 = [
                     np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
                     for area in range(1, NbAreas + 1)]
+
+        if obj.det_correl_min is not None:
+            obj.det_correl_min = obj.det_correl_min.astype(int)
+            if obj.det_correl_min.shape == (3,):
+                obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
 
         # step10
         if os.path.isfile('%s/Cat3_spectra.fits' % folder):
