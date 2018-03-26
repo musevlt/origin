@@ -5,8 +5,9 @@ import os
 import shutil
 import time
 
-from astropy.table import vstack
+from astropy.table import vstack, Table
 from collections import defaultdict
+from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
@@ -38,25 +39,18 @@ from .lib_origin import (
 )
 
 # TODO:
-# - Add execution datetime
 # - manage requirements between steps
 # - save and update params
 
 
-def _format_cat(Cat, i):
-    try:
-        Cat['ra'].format = '.3f'
-        Cat['dec'].format = '.3f'
-        Cat['lbda'].format = '.2f'
-        Cat['T_GLR'].format = '.2f'
-        if i > 0:
-            Cat['STD'].format = '.2f'
-        if i > 1:
-            Cat['residual'].format = '.3f'
-            Cat['flux'].format = '.1f'
-            Cat['purity'].format = '.3f'
-    except Exception:
-        logging.getLogger(__name__).info('Invalid format for the Catalog')
+def _format_cat(cat):
+    columns = {'.1f': ('flux', ),
+               '.2f': ('lbda', 'T_GLR', 'STD'),
+               '.3f': ('ra', 'dec', 'residual', 'purity')}
+    for fmt, colnames in columns.items():
+        for name in colnames:
+            if name in cat.colnames:
+                cat[name].format = fmt
 
 
 class LogMixin:
@@ -99,15 +93,25 @@ class Step(LogMixin):
         self.method_name = 'step%02d_%s' % (idx, self.name)
         if self.method_name in param:
             # when a session is reloaded, use its param dict
-            self.param = param[self.method_name]
+            self.meta = param[self.method_name]
         else:
-            self.param = param[self.method_name] = {}
-        self.outputs = defaultdict(list)
-        self.status = Status.NOTRUN
+            self.meta = param[self.method_name] = {
+                'params': {}, 'outputs': defaultdict(list)}
+
+        self.param = self.meta['params']
+        self.outputs = self.meta['outputs']
 
     def __repr__(self):
         return '<{}(status: {})>'.format(self.__class__.__name__,
                                          self.status.name)
+
+    @property
+    def status(self):
+        return self.meta.get('status', Status.NOTRUN)
+
+    @status.setter
+    def status(self, val):
+        self.meta['status'] = val
 
     def __call__(self, *args, **kwargs):
         t0 = time.time()
@@ -134,6 +138,9 @@ class Step(LogMixin):
 
         tot = time.time() - t0
         self._loginfo('%02d Done - %.2f sec.', self.idx, tot)
+
+        self.meta['execution_date'] = datetime.now().isoformat()
+        self.meta['runtime'] = tot
 
     def store_cube(self, name, data, **kwargs):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
@@ -162,6 +169,34 @@ class Step(LogMixin):
                         obj.write(outf + '.fits', overwrite=True)
                     elif kind in ('array', ):
                         np.savetxt(outf + '.txt', obj)
+        self.status = Status.DUMPED
+
+    def load(self, outpath):
+        if self.status is not Status.DUMPED:
+            return
+
+        self.logger.debug('%s - LOAD', self.method_name)
+        for kind, names in self.outputs.items():
+            for name in names:
+                # FIXME: hardcoded list of excluded attrs - remove this!
+                if name in ('Cat2b', ):
+                    continue
+                outf = '{}/{}.{}'.format(outpath, name,
+                                         'txt' if kind == 'array' else 'fits')
+                if os.path.isfile(outf):
+                    if kind == 'cube':
+                        obj = Cube(outf)
+                    if kind == 'image':
+                        obj = Image(outf)
+                    elif kind == 'table':
+                        obj = Table.read(outf)
+                        _format_cat(obj)
+                    elif kind == 'array':
+                        obj = np.loadtxt(outf, ndmin=1)
+                else:
+                    obj = None
+                print('SET', name, obj)
+                setattr(self.orig, name, obj)
         self.status = Status.DUMPED
 
 
@@ -206,6 +241,7 @@ class Preprocessing(Step):
         self.store_cube('cube_std', cube_std)
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.store_cube('cont_dct', cont_dct)
+        self.outputs['image'].extend(['ima_std', 'ima_dct'])
 
 
 class CreateAreas(Step):
@@ -600,7 +636,7 @@ class Detection(Step):
             orig.param['tol_spat'], orig.param['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
         )
-        _format_cat(orig.Cat0, 0)
+        _format_cat(orig.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
                       len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
         self.outputs['table'].append('Cat0')
@@ -711,7 +747,7 @@ class DetectionLost(Step):
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
             orig.Cat1 = vstack([Cat0, Catcomp])
-            _format_cat(orig.Cat1, 1)
+            _format_cat(orig.Cat1)
         ns = len(np.unique(orig.Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))
         nl = len(orig.Cat1)
@@ -769,7 +805,7 @@ class ComputeSpectra(Step):
         orig.Cat2 = Purity_Estimation(orig.Cat2,
                                       [orig.Pval_r, orig.Pval_r_comp],
                                       [orig.index_pval, orig.index_pval_comp])
-        _format_cat(orig.Cat2, 2)
+        _format_cat(orig.Cat2)
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
                       len(orig.Cat2))
 
@@ -982,7 +1018,7 @@ class SaveSources(Step):
 
 
 """This defines the list of all processing steps."""
-pipeline = [
+STEPS = [
     Preprocessing,
     CreateAreas,
     ComputePCAThreshold,

@@ -32,7 +32,6 @@ from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.tools import write_hdulist_to
 
 from . import steps
-from .steps import _format_cat
 from .version import __version__
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
@@ -166,18 +165,9 @@ class ORIGIN(steps.LogMixin):
     """
 
     def __init__(self, filename, segmap, name='origin', path='.',
-                 loglevel='DEBUG', logcolor=False,
-                 fieldmap=None, profiles=None, PSF=None, FWHM_PSF=None,
-                 param=None, imawhite=None, cube_std=None, cont_dct=None,
-                 areamap=None, thresO2=None, testO2=None, histO2=None,
-                 binO2=None, meaO2=None, stdO2=None, cube_faint=None,
-                 mapO2=None, cube_correl=None, maxmap=None, cube_profile=None,
-                 cube_local_max=None, cube_local_min=None, Pval_r=None,
-                 index_pval=None, Det_M=None, Det_m=None,
-                 Cat0=None, zm=None, ym=None, xm=None, Pval_r_comp=None,
-                 index_pval_comp=None, Det_M_comp=None, Det_m_comp=None,
-                 Cat1=None, spectra=None, Cat2=None, Cat3_lines=None,
-                 Cat3_sources=None, Cat3_spectra=None):
+                 loglevel='DEBUG', logcolor=False, fieldmap=None,
+                 profiles=None, PSF=None, FWHM_PSF=None, param=None,
+                 imawhite=None, spectra=None, Cat3_spectra=None):
 
         self.path = path
         self.name = name
@@ -196,15 +186,11 @@ class ORIGIN(steps.LogMixin):
 
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
-        # -----------------------------
-
         self.steps = OrderedDict()
-        for i, cls in enumerate(steps.pipeline, start=1):
+        for i, cls in enumerate(steps.STEPS, start=1):
             method = cls(self, i, self.param)
             self.steps[method.method_name] = method
             self.__dict__[method.method_name] = method
-
-        # -----------------------------
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -245,48 +231,45 @@ class ORIGIN(steps.LogMixin):
 
         # Define attributes with default values for all the processing steps
         # step1
-        self.cube_std = cube_std
-        self.cont_dct = cont_dct
+        self.cube_std = None
+        self.cont_dct = None
         # step 2
-        self.areamap = areamap
+        self.areamap = None
         # step3
-        self.thresO2 = thresO2
-        self.testO2 = testO2
-        self.histO2 = histO2
-        self.binO2 = binO2
-        self.meaO2 = meaO2
-        self.stdO2 = stdO2
+        self.thresO2 = None
+        self.testO2 = None
+        self.histO2 = None
+        self.binO2 = None
+        self.meaO2 = None
+        self.stdO2 = None
         # step4
-        self.cube_faint = cube_faint
-        self.mapO2 = mapO2
+        self.cube_faint = None
+        self.mapO2 = None
         # step5
-        self.cube_correl = cube_correl
-        self.cube_local_max = cube_local_max
-        self.cube_local_min = cube_local_min
-        self.cube_profile = cube_profile
-        self.maxmap = maxmap
+        self.cube_correl = None
+        self.cube_local_max = None
+        self.cube_local_min = None
+        self.cube_profile = None
+        self.maxmap = None
         # step7
-        self.Pval_r = Pval_r
-        self.index_pval = index_pval
-        self.Det_M = Det_M
-        self.Det_m = Det_m
+        self.Pval_r = None
+        self.index_pval = None
+        self.Det_M = None
+        self.Det_m = None
         # step8
-        self.Cat0 = Cat0
-        if zm is not None and ym is not None and xm is not None:
-            self.det_correl_min = (zm, ym, xm)
-        else:
-            self.det_correl_min = None
+        self.Cat0 = None
+        self.det_correl_min = None
         # step9
-        self.Cat1 = Cat1
-        self.Pval_r_comp = Pval_r_comp
-        self.index_pval_comp = index_pval_comp
-        self.Det_M_comp = Det_M_comp
-        self.Det_m_comp = Det_m_comp
+        self.Cat1 = None
+        self.Pval_r_comp = None
+        self.index_pval_comp = None
+        self.Det_M_comp = None
+        self.Det_m_comp = None
         # step09
         self.spectra = spectra
-        self.Cat2 = Cat2
-        self.Cat3_lines = Cat3_lines
-        self.Cat3_sources = Cat3_sources
+        self.Cat2 = None
+        self.Cat3_lines = None
+        self.Cat3_sources = None
         self.Cat3_spectra = Cat3_spectra
         self._loginfo('00 Done')
 
@@ -388,160 +371,6 @@ class ORIGIN(steps.LogMixin):
         else:
             ima_white = None
 
-        # step1
-        if os.path.isfile('%s/cube_std.fits' % folder):
-            cube_std = Cube('%s/cube_std.fits' % folder)
-        else:
-            cube_std = None
-        if os.path.isfile('%s/cont_dct.fits' % folder):
-            cont_dct = Cube('%s/cont_dct.fits' % folder)
-        else:
-            cont_dct = None
-
-        # step2
-        if os.path.isfile('%s/areamap.fits' % folder):
-            areamap = Image('%s/areamap.fits' % folder, dtype=np.int)
-        else:
-            areamap = None
-        if 'nbareas' in param:
-            NbAreas = param['nbareas']
-        else:
-            NbAreas = None
-
-        # step3
-        if os.path.isfile('%s/thresO2.txt' % (folder)):
-            thresO2 = np.loadtxt('%s/thresO2.txt' % (folder), ndmin=1)
-            thresO2 = thresO2.tolist()
-        else:
-            thresO2 = None
-        if NbAreas is not None:
-            if os.path.isfile('%s/testO2_1.txt' % (folder)):
-                testO2 = []
-                for area in range(1, NbAreas + 1):
-                    testO2.append(np.loadtxt('%s/testO2_%d.txt' % (folder, area),
-                                             ndmin=1))
-            else:
-                testO2 = None
-            if os.path.isfile('%s/histO2_1.txt' % (folder)):
-                histO2 = []
-                for area in range(1, NbAreas + 1):
-                    histO2.append(np.loadtxt('%s/histO2_%d.txt' % (folder, area),
-                                             ndmin=1))
-            else:
-                histO2 = None
-            if os.path.isfile('%s/binO2_1.txt' % (folder)):
-                binO2 = []
-                for area in range(1, NbAreas + 1):
-                    binO2.append(np.loadtxt('%s/binO2_%d.txt' % (folder, area),
-                                            ndmin=1))
-            else:
-                binO2 = None
-        else:
-            testO2 = None
-            histO2 = None
-            binO2 = None
-        if os.path.isfile('%s/meaO2.txt' % (folder)):
-            meaO2 = np.loadtxt('%s/meaO2.txt' % (folder), ndmin=1)
-            meaO2 = meaO2.tolist()
-        else:
-            meaO2 = None
-        if os.path.isfile('%s/stdO2.txt' % (folder)):
-            stdO2 = np.loadtxt('%s/stdO2.txt' % (folder), ndmin=1)
-            stdO2 = stdO2.tolist()
-        else:
-            stdO2 = None
-
-        # step4
-        if os.path.isfile('%s/cube_faint.fits' % folder):
-            cube_faint = Cube('%s/cube_faint.fits' % folder)
-        else:
-            cube_faint = None
-        if os.path.isfile('%s/mapO2.fits' % folder):
-            mapO2 = Image('%s/mapO2.fits' % folder)
-        else:
-            mapO2 = None
-
-        # step5
-        if os.path.isfile('%s/cube_correl.fits' % folder):
-            cube_correl = Cube('%s/cube_correl.fits' % folder)
-        else:
-            cube_correl = None
-        if os.path.isfile('%s/cube_local_max.fits' % folder):
-            cube_local_max = Cube('%s/cube_local_max.fits' % folder)
-        else:
-            cube_local_max = None
-        if os.path.isfile('%s/cube_local_min.fits' % folder):
-            cube_local_min = Cube('%s/cube_local_min.fits' % folder)
-        else:
-            cube_local_min = None
-        if os.path.isfile('%s/maxmap.fits' % folder):
-            maxmap = Image('%s/maxmap.fits' % folder)
-        else:
-            maxmap = None
-        if os.path.isfile('%s/cube_profile.fits' % folder):
-            cube_profile = Cube('%s/cube_profile.fits' % folder)
-        else:
-            cube_profile = None
-        # step06
-        if os.path.isfile('%s/Pval_r.txt' % folder):
-            Pval_r = np.loadtxt('%s/Pval_r.txt' % folder).astype(np.float)
-        else:
-            Pval_r = None
-        if os.path.isfile('%s/index_pval.txt' % folder):
-            index_pval = np.loadtxt('%s/index_pval.txt' % folder)\
-                .astype(np.float)
-        else:
-            index_pval = None
-        if os.path.isfile('%s/Det_M.txt' % folder):
-            Det_M = np.loadtxt('%s/Det_M.txt' % folder).astype(np.int)
-        else:
-            Det_M = None
-        if os.path.isfile('%s/Det_min.txt' % folder):
-            Det_m = np.loadtxt('%s/Det_min.txt' % folder).astype(np.int)
-        else:
-            Det_m = None
-        # step07
-        if os.path.isfile('%s/Cat0.fits' % folder):
-            Cat0 = Table.read('%s/Cat0.fits' % folder)
-            _format_cat(Cat0, 0)
-        else:
-            Cat0 = None
-        if os.path.isfile('%s/zm.txt' % folder):
-            zm = np.loadtxt('%s/zm.txt' % folder, ndmin=1).astype(np.int)
-        else:
-            zm = None
-        if os.path.isfile('%s/ym.txt' % folder):
-            ym = np.loadtxt('%s/ym.txt' % folder, ndmin=1).astype(np.int)
-        else:
-            ym = None
-        if os.path.isfile('%s/xm.txt' % folder):
-            xm = np.loadtxt('%s/xm.txt' % folder, ndmin=1).astype(np.int)
-        else:
-            xm = None
-        # step08
-        if os.path.isfile('%s/Pval_r_comp.txt' % folder):
-            Pval_r_comp = np.loadtxt('%s/Pval_r_comp.txt' % folder).astype(np.float)
-        else:
-            Pval_r_comp = None
-        if os.path.isfile('%s/index_pval_comp.txt' % folder):
-            index_pval_comp = np.loadtxt('%s/index_pval_comp.txt' % folder)\
-                .astype(np.float)
-        else:
-            index_pval_comp = None
-        if os.path.isfile('%s/Det_M_comp.txt' % folder):
-            Det_M_comp = np.loadtxt('%s/Det_M_comp.txt' % folder).astype(np.int)
-        else:
-            Det_M_comp = None
-        if os.path.isfile('%s/Det_min_comp.txt' % folder):
-            Det_m_comp = np.loadtxt('%s/Det_min_comp.txt' % folder).astype(np.int)
-        else:
-            Det_m_comp = None
-        if os.path.isfile('%s/Cat1.fits' % folder):
-            Cat1 = Table.read('%s/Cat1.fits' % folder)
-            _format_cat(Cat1, 1)
-        else:
-            Cat1 = None
-
         # step09
         def load_spectra(filename, *, idlist=None):
             """
@@ -565,26 +394,6 @@ class ORIGIN(steps.LogMixin):
             spectra = load_spectra('%s/spectra.fits' % folder)
         else:
             spectra = None
-        if os.path.isfile('%s/Cat2.fits' % folder):
-            Cat2 = Table.read('%s/Cat2.fits' % folder)
-            _format_cat(Cat2, 2)
-        else:
-            Cat2 = None
-
-        # step10
-        if os.path.isfile('%s/Cat3_lines.fits' % folder):
-            Cat3_lines = Table.read('%s/Cat3_lines.fits' % folder)
-        else:
-            Cat3_lines = None
-        if os.path.isfile('%s/Cat3_sources.fits' % folder):
-            Cat3_sources = Table.read('%s/Cat3_sources.fits' % folder)
-        else:
-            Cat3_sources = None
-        if os.path.isfile('%s/Cat3_spectra.fits' % folder):
-            Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder,
-                                        idlist=Cat3_lines['num_line'])
-        else:
-            Cat3_spectra = None
 
         if newname is not None:
             # copy outpath to the new path
@@ -592,23 +401,37 @@ class ORIGIN(steps.LogMixin):
                             os.path.join(path, newname))
             name = newname
 
-        return cls(path=path, name=name, param=param,
-                   loglevel=param['loglevel'], logcolor=param['logcolor'],
-                   filename=param['cubename'], fieldmap=wfields,
-                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   imawhite=ima_white, cube_std=cube_std, cont_dct=cont_dct,
-                   areamap=areamap,
-                   thresO2=thresO2, testO2=testO2, histO2=histO2, binO2=binO2,
-                   meaO2=meaO2, stdO2=stdO2, cube_faint=cube_faint,
-                   mapO2=mapO2, cube_correl=cube_correl, maxmap=maxmap,
-                   cube_profile=cube_profile, cube_local_max=cube_local_max,
-                   cube_local_min=cube_local_min, segmap=param['segmap'],
-                   Pval_r=Pval_r, index_pval=index_pval, Det_M=Det_M,
-                   Det_m=Det_m, Cat0=Cat0, zm=zm, ym=ym, xm=xm,
-                   Pval_r_comp=Pval_r_comp, index_pval_comp=index_pval_comp,
-                   Det_M_comp=Det_M_comp, Det_m_comp=Det_m_comp, Cat1=Cat1,
-                   spectra=spectra, Cat2=Cat2, Cat3_lines=Cat3_lines,
-                   Cat3_sources=Cat3_sources, Cat3_spectra=Cat3_spectra)
+        obj = cls(path=path, name=name, param=param,
+                  loglevel=param['loglevel'], logcolor=param['logcolor'],
+                  filename=param['cubename'], fieldmap=wfields,
+                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
+                  imawhite=ima_white, segmap=param['segmap'], spectra=spectra)
+
+        for name, step in obj.steps.items():
+            step.load(obj.outpath)
+
+        # step3
+        NbAreas = param.get('nbareas')
+        if NbAreas is not None:
+            if os.path.isfile('%s/testO2_1.txt' % folder):
+                obj.testO2 = [
+                    np.loadtxt('%s/testO2_%d.txt' % (folder, area), ndmin=1)
+                    for area in range(1, NbAreas + 1)]
+            if os.path.isfile('%s/histO2_1.txt' % folder):
+                obj.histO2 = [
+                    np.loadtxt('%s/histO2_%d.txt' % (folder, area), ndmin=1)
+                    for area in range(1, NbAreas + 1)]
+            if os.path.isfile('%s/binO2_1.txt' % folder):
+                obj.binO2 = [
+                    np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
+                    for area in range(1, NbAreas + 1)]
+
+        # step10
+        if os.path.isfile('%s/Cat3_spectra.fits' % folder):
+            obj.Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder,
+                                            idlist=obj.Cat3_lines['num_line'])
+
+        return obj
 
     def _setup_logfile(self, logger):
         if self.file_handler is not None:
@@ -629,7 +452,7 @@ class ORIGIN(steps.LogMixin):
         if self.cont_dct is not None:
             return self.cont_dct.mean(axis=0)
 
-    @property
+    @lazyproperty
     def ima_std(self):
         """STD image"""
         if self.cube_std is not None:
@@ -783,10 +606,6 @@ class ORIGIN(steps.LogMixin):
             shutil.rmtree(self.outpath)
         os.makedirs(self.outpath, exist_ok=True)
 
-        # parameters in .yaml
-        with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
-            yaml.dump(self.param, stream)
-
         # PSF
         if isinstance(self.PSF, list):
             for i, psf in enumerate(self.PSF):
@@ -806,14 +625,11 @@ class ORIGIN(steps.LogMixin):
         for name, step in self.steps.items():
             step.dump(self.outpath)
 
-        # step1
-        if self.ima_std is not None:
-            self.ima_std.write('%s/ima_std.fits' % self.outpath)
-        if self.ima_dct is not None:
-            self.ima_dct.write('%s/ima_dct.fits' % self.outpath)
+        # parameters in .yaml
+        with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
+            yaml.dump(self.param, stream)
 
-        # step3
-        # FIXME: why not saving the 2D arrays?
+        # step3 - saving this manually for now
         if self.nbAreas is not None:
             if self.testO2 is not None:
                 for area in range(1, self.nbAreas + 1):
@@ -827,33 +643,6 @@ class ORIGIN(steps.LogMixin):
                 for area in range(1, self.nbAreas + 1):
                     np.savetxt('%s/binO2_%d.txt' % (self.outpath, area),
                                self.binO2[area - 1])
-
-        # step5
-        # FIXME: why not cube.write, for NaNs ?
-        if self.cube_local_max is not None:
-            hdu = fits.PrimaryHDU(header=self.cube_local_max.primary_header)
-            hdui = fits.ImageHDU(name='DATA',
-                                 data=self.cube_local_max.data.filled(fill_value=np.nan),
-                                 header=self.cube_local_max.data_header)
-            hdul = fits.HDUList([hdu, hdui])
-            hdul.writeto('%s/cube_local_max.fits' % self.outpath,
-                         overwrite=True)
-#            self.cube_local_max.write('%s/cube_local_max.fits' % self.outpath)
-        if self.cube_local_min is not None:
-            hdu = fits.PrimaryHDU(header=self.cube_local_min.primary_header)
-            hdui = fits.ImageHDU(name='DATA',
-                                 data=self.cube_local_min.data.filled(fill_value=np.nan),
-                                 header=self.cube_local_min.data_header)
-            hdul = fits.HDUList([hdu, hdui])
-            hdul.writeto('%s/cube_local_min.fits' % self.outpath,
-                         overwrite=True)
-            # self.cube_local_min.write('%s/cube_local_min.fits' % self.outpath)
-
-        # step7
-        if self.det_correl_min is not None:
-            np.savetxt('%s/zm.txt' % (self.outpath), self.det_correl_min[0])
-            np.savetxt('%s/ym.txt' % (self.outpath), self.det_correl_min[1])
-            np.savetxt('%s/xm.txt' % (self.outpath), self.det_correl_min[2])
 
         def save_spectra(spectra, outname, *, idlist=None):
             """
@@ -1100,13 +889,13 @@ class ORIGIN(steps.LogMixin):
             ax.set_xlim(xlim)
         ax.set_xlabel('frequency')
         ax.set_ylabel('value')
+        kwargs = dict(transform=ax.transAxes,
+                      bbox=dict(facecolor='red', alpha=0.5))
         if legend:
-            ax.text(0.1, 0.8, 'zone %d\npfa %.2f\nthreshold %.2f' % (area,
-                                                                     pfa_test, thre),
-                    transform=ax.transAxes, bbox=dict(facecolor='red', alpha=0.5))
+            ax.text(0.1, 0.8, 'zone %d\npfa %.2f\nthreshold %.2f' %
+                    (area, pfa_test, thre), **kwargs)
         else:
-            ax.text(0.9, 0.9, '%d' % area, transform=ax.transAxes,
-                    bbox=dict(facecolor='red', alpha=0.5))
+            ax.text(0.9, 0.9, '%d' % area, **kwargs)
 
     def plot_mapPCA(self, area=None, iteration=None, ax=None, **kwargs):
         """ Plot at a given iteration (or at the end) the number of times
@@ -1412,9 +1201,6 @@ class ORIGIN(steps.LogMixin):
                     print(line, end='')
 
     def status(self):
-        """Prints the processing status.
-
-        FIXME: status is not saved and reloaded (yet).
-        """
+        """Prints the processing status."""
         for name, step in self.steps.items():
             print('- {}: {}'.format(name, step.status.name))
