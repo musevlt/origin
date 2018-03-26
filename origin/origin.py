@@ -115,12 +115,11 @@ class ORIGIN(steps.LogMixin):
         Scale parameter of the Gaussian fit used to
         estimate the threshold (step03).
     cube_faint : `~mpdaf.obj.Cube`
-        Projection on the eigenvectors associated to
-        the lower eigenvalues of the data cube
-        (representing the faint signal). Result of step04.
+        Projection on the eigenvectors associated to the lower eigenvalues
+        of the data cube (representing the faint signal). Result of step04.
     mapO2 : `~mpdaf.obj.Image`
-        The numbers of iterations used by testO2 for
-            each spaxel. Result of step04.
+        The numbers of iterations used by testO2 for each spaxel.
+        Result of step04.
     cube_correl : `~mpdaf.obj.Cube`
         Cube of T_GLR values (step05).
     cube_profile : `~mpdaf.obj.Cube` (type int)

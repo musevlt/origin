@@ -193,6 +193,7 @@ class Preprocessing(Step):
 
     def run(self, orig, dct_order=10, dct_approx=True):
         self._loginfo('DCT computation')
+        orig.param['dct_order'] = dct_order
         faint_dct, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
                                            dct_approx)
 
@@ -313,6 +314,7 @@ class ComputePCAThreshold(Step):
         if orig.areamap is None:
             raise IOError('Run the step 02 to initialize self.areamap ')
 
+        orig.param['pfa_test'] = pfa_test
         results = []
 
         for area_ind in range(1, orig.nbAreas + 1):
@@ -394,9 +396,9 @@ class ComputeGreedyPCA(Step):
         self._loginfo('   - List of threshold = %s',
                       ' '.join("%.2f" % x for x in thr))
 
-        # orig.param['threshold_list'] = thr
-        # orig.param['Noise_population'] = Noise_population
-        # orig.param['itermax'] = itermax
+        orig.param['threshold_list'] = thr
+        orig.param['Noise_population'] = Noise_population
+        orig.param['itermax'] = itermax
 
         self._loginfo('Compute greedy PCA on each zone')
         faint, mapO2, nstop = Compute_GreedyPCA_area(
