@@ -228,47 +228,7 @@ class ORIGIN(steps.LogMixin):
         # free memory
         cub = None
 
-        # Define attributes with default values for all the processing steps
-        # step1
-        self.cube_std = None
-        self.cont_dct = None
-        # step 2
-        self.areamap = None
-        # step3
-        self.thresO2 = None
-        self.testO2 = None
-        self.histO2 = None
-        self.binO2 = None
-        self.meaO2 = None
-        self.stdO2 = None
-        # step4
-        self.cube_faint = None
-        self.mapO2 = None
-        # step5
-        self.cube_correl = None
-        self.cube_local_max = None
-        self.cube_local_min = None
-        self.cube_profile = None
-        self.maxmap = None
-        # step7
-        self.Pval_r = None
-        self.index_pval = None
-        self.Det_M = None
-        self.Det_m = None
-        # step8
-        self.Cat0 = None
-        self.det_correl_min = None
-        # step9
-        self.Cat1 = None
-        self.Pval_r_comp = None
-        self.index_pval_comp = None
-        self.Det_M_comp = None
-        self.Det_m_comp = None
-        # step09
         self.spectra = spectra
-        self.Cat2 = None
-        self.Cat3_lines = None
-        self.Cat3_sources = None
         self.Cat3_spectra = Cat3_spectra
         self._loginfo('00 Done')
 

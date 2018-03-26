@@ -86,6 +86,9 @@ class Step(LogMixin):
     """Step requirement (not implemented yet!)."""
     require = None
 
+    """Objects created by the processing step."""
+    attrs = tuple()
+
     def __init__(self, orig, idx, param):
         self.logger = logging.getLogger(__name__)
         self.orig = orig
@@ -100,6 +103,8 @@ class Step(LogMixin):
 
         self.param = self.meta['params']
         self.outputs = self.meta['outputs']
+        for attr in self.attrs:
+            setattr(orig, attr, None)
 
     def __repr__(self):
         return '<{}(status: {})>'.format(self.__class__.__name__,
@@ -222,6 +227,7 @@ class Preprocessing(Step):
 
     name = 'preprocessing'
     desc = 'Preprocessing'
+    attrs = ('cube_std', 'cube_dct')
 
     def run(self, orig, dct_order=10, dct_approx=True):
         self._loginfo('DCT computation')
@@ -266,6 +272,7 @@ class CreateAreas(Step):
 
     name = 'areas'
     desc = 'Areas creation'
+    attrs = ('areamap', )
 
     def run(self, orig, pfa: "pfa of the test"=.2,
             minsize: "minimum size"=100, maxsize=None):
@@ -340,6 +347,7 @@ class ComputePCAThreshold(Step):
 
     name = 'compute_PCA_threshold'
     desc = 'PCA threshold computation'
+    attrs = ('threshO2', 'testO2', 'histO2', 'binO2', 'meaO2', 'stdO2')
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
         if orig.cube_std is None:
@@ -411,6 +419,7 @@ class ComputeGreedyPCA(Step):
 
     name = 'compute_greedy_PCA'
     desc = 'Greedy PCA computation'
+    attrs = ('cube_faint', 'mapO2')
 
     def run(self, orig, Noise_population=50,
             itermax: 'Max number of iterations'=100, threshold_list=None):
@@ -494,6 +503,8 @@ class ComputeTGLR(Step):
 
     name = 'compute_TGLR'
     desc = 'GLR test'
+    attrs = ('cube_correl', 'cube_profile', 'cube_local_min',
+             'cube_local_max', 'maxmap')
 
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=4):
         if orig.cube_faint is None:
@@ -576,6 +587,7 @@ class ComputePurityThreshold(Step):
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
+    attrs = ('Pval_r', 'index_pval', 'Det_M', 'Det_m')
 
     def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
@@ -621,6 +633,7 @@ class Detection(Step):
 
     name = 'detection'
     desc = 'Thresholding and spatio-spectral merging'
+    attrs = ('Cat0', 'det_correl_min')
 
     def run(self, orig, threshold=None):
         if threshold is not None:
@@ -677,6 +690,8 @@ class DetectionLost(Step):
 
     name = 'detection_lost'
     desc = 'Thresholding and spatio-spectral merging'
+    attrs = ('Cat1', 'Pval_r_comp', 'index_pval_comp', 'Det_M_comp',
+             'Det_m_comp')
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
         if orig.Cat0 is None:
@@ -785,6 +800,7 @@ class ComputeSpectra(Step):
 
     name = 'compute_spectra'
     desc = 'Lines estimation'
+    attrs = ('Cat2', 'spectra')
 
     def run(self, orig, grid_dxy=0):
         orig.param['grid_dxy'] = grid_dxy
@@ -852,6 +868,7 @@ class CleanResults(Step):
 
     name = 'clean_results'
     desc = 'Results cleaning'
+    attrs = ('Cat3_lines', 'Cat3_sources', 'Cat3_spectra')
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
         if orig.Cat2 is None:
