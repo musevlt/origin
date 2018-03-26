@@ -11,7 +11,6 @@ The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 
 """
 
-import astropy.units as u
 import glob
 import logging
 import matplotlib.pyplot as plt
@@ -22,7 +21,6 @@ import sys
 import warnings
 import yaml
 
-from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.utils import lazyproperty
@@ -319,7 +317,6 @@ class ORIGIN(object):
         # step09
         self.spectra = spectra
         self.Cat2 = Cat2
-        self._Cat2b = None
         self.Cat3_lines = Cat3_lines
         self.Cat3_sources = Cat3_sources
         self.Cat3_spectra = Cat3_spectra
@@ -692,53 +689,6 @@ class ORIGIN(object):
         maxima of std cube"""
         return self.param.get('threshold2')
 
-    @property
-    def Cat2b(self):
-        if self._Cat2b is None and self.Cat2 is not None:
-            from astropy.table import MaskedColumn
-            cat = self.Cat2.group_by('ID')
-            lmax = max([len(g['lbda']) for g in cat.groups])
-            ncat = Table(names=['ID', 'RA', 'DEC', 'DLINE', 'NLINE', 'SEG', 'COMP'],
-                         dtype=['i4', 'f4', 'f4', 'f4', 'i4', 'i4', 'i4'], masked=True)
-            ncat['DLINE'].format = '.2f'
-            for l in range(lmax):
-                ncat.add_column(MaskedColumn(name='LBDA{}'.format(l),
-                                             dtype='f4', format='.2f'))
-                ncat.add_column(MaskedColumn(name='FLUX{}'.format(l),
-                                             dtype='f4', format='.1f'))
-                ncat.add_column(MaskedColumn(name='EFLUX{}'.format(l),
-                                             dtype='f4', format='.2f'))
-                ncat.add_column(MaskedColumn(name='TGLR{}'.format(l),
-                                             dtype='f4', format='.2f'))
-                ncat.add_column(MaskedColumn(name='STD{}'.format(l),
-                                             dtype='f4', format='.2f'))
-                ncat.add_column(MaskedColumn(name='PURI{}'.format(l),
-                                             dtype='f4', format='.2f'))
-            for key, group in zip(cat.groups.keys, cat.groups):
-                # compute average ra,dec and peak-to-peak distance in arcsec
-                mra = group['ra'].mean()
-                mdec = group['dec'].mean()
-                c0 = SkyCoord([mra], [mdec], unit=(u.deg, u.deg))
-                c = SkyCoord([group['ra']], [group['dec']], unit=(u.deg, u.deg))
-                dist = c0.separation(c)
-                ptp = dist.arcsec.ptp()
-                dic = {'ID': key['ID'], 'RA': mra,
-                       'DEC': mdec, 'DLINE': ptp, 'NLINE': len(group['lbda']),
-                       'SEG': group['seg_label'][0], 'COMP': group['comp'][0]}
-                ksort = group['T_GLR'].argsort()[::-1]
-                for k, (lbda, flux, tglr, std, eflux, purity) in \
-                        enumerate(group['lbda', 'flux', 'T_GLR', 'STD', 'residual', 'purity'][ksort]):
-                    dic['LBDA{}'.format(k)] = lbda
-                    dic['FLUX{}'.format(k)] = flux
-                    dic['EFLUX{}'.format(k)] = eflux
-                    dic['PURI{}'.format(k)] = purity
-                    dic['TGLR{}'.format(k)] = tglr
-                    dic['STD{}'.format(k)] = std
-                ncat.add_row(dic)
-            ncat.sort('SEG')
-            self._Cat2b = ncat
-        return self._Cat2b
-
     def _read_profiles(self, profiles=None):
         """Read the list of spectral profile."""
         self.param['profiles'] = profiles
@@ -985,8 +935,6 @@ class ORIGIN(object):
         # step9
         if self.Cat2 is not None:
             self.Cat2.write('%s/Cat2.fits' % self.outpath, overwrite=True)
-        if self.Cat2b is not None:
-            self.Cat2b.write('%s/Cat2b.fits' % self.outpath, overwrite=True)
 
         def save_spectra(spectra, outname, *, idlist=None):
             """
