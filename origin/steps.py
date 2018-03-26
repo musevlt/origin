@@ -943,8 +943,8 @@ class SaveSources(Step):
             if not os.path.exists(path):
                 raise IOError("Invalid path: {0}".format(path))
             outpath = os.path.join(os.path.normpath(path), orig.name)
-        out_dir = '%s/sources' % outpath
-        catname = '%s/%s.fits' % (outpath, orig.name)
+        out_dir = os.path.join(outpath, 'sources')
+        catname = os.path.join(outpath, '%s.fits' % orig.name)
 
         if overwrite:
             shutil.rmtree(out_dir, ignore_errors=True)
@@ -958,13 +958,13 @@ class SaveSources(Step):
             cat3_sources=orig.Cat3_sources,
             cat3_lines=orig.Cat3_lines,
             origin_params=orig.param,
-            cube_cor_filename="%s/%s/cube_correl.fits" % outpath,
+            cube_cor_filename=os.path.join(outpath, 'cube_correl.fits'),
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
-            spectra_fits_filename="%s/%s/Cat3_spectra.fits" % outpath,
+            spectra_fits_filename=os.path.join(outpath, 'Cat3_spectra.fits'),
             version=version,
             profile_fwhm=orig.FWHM_profiles,
-            out_tpl=f"{out_dir}/source-%0.5d.fits",
+            out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),
             n_jobs=n_jobs,
             author=author,
             nb_fwhm=nb_fwhm,

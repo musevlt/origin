@@ -336,7 +336,7 @@ class ORIGIN(steps.LogMixin):
         """Load a previous session of ORIGIN.
 
         ORIGIN.write() method saves a session in a folder that has the name of
-        the ORIGIN object (self.name)
+        the ORIGIN object (self.name).
 
         Parameters
         ----------
@@ -344,10 +344,9 @@ class ORIGIN(steps.LogMixin):
             Folder name (with the relative path) where the ORIGIN data
             have been stored.
         newname : str
-            New name for this session.
-            This parameter lets the user to load a previous session but
-            continue in a new one.
-            If None, the user will continue the loaded session.
+            New name for this session. This parameter lets the user to load a
+            previous session but continue in a new one. If None, the user will
+            continue the loaded session.
 
         """
         path = os.path.dirname(os.path.abspath(folder))
@@ -589,6 +588,9 @@ class ORIGIN(steps.LogMixin):
             Cat3_spectra = None
 
         if newname is not None:
+            # copy outpath to the new path
+            shutil.copytree(os.path.join(path, name),
+                            os.path.join(path, newname))
             name = newname
 
         return cls(path=path, name=name, param=param,
@@ -772,9 +774,10 @@ class ORIGIN(steps.LogMixin):
             if not os.path.exists(path):
                 raise ValueError("path does not exist: {}".format(path))
             self.path = path
-            self.outpath = os.path.join(path, self.name)
-            # copy logfile to the new path
-            shutil.copy(self.logfile, self.outpath)
+            outpath = os.path.join(path, self.name)
+            # copy outpath to the new path
+            shutil.copytree(self.outpath, outpath)
+            self.outpath = outpath
             self._setup_logfile(self.logger)
 
         if erase:

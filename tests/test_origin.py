@@ -72,8 +72,8 @@ def test_origin():
 
         # list of source objects
         my_origin = ORIGIN.load('tmp2')
-        my_origin.step12_save_sources(version="0.1")
-        my_origin.step12_save_sources(version="0.1", overwrite=True)
+        my_origin.step12_save_sources("0.1")
+        my_origin.step12_save_sources("0.1", n_jobs=2, overwrite=True)
 
         my_origin.info()
 
