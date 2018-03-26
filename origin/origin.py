@@ -365,21 +365,13 @@ class ORIGIN(steps.LogMixin):
         for name, step in obj.steps.items():
             step.load(obj.outpath)
 
-        # step3
-        NbAreas = param.get('nbareas')
-        if NbAreas is not None:
-            if os.path.isfile('%s/testO2_1.txt' % folder):
-                obj.testO2 = [
-                    np.loadtxt('%s/testO2_%d.txt' % (folder, area), ndmin=1)
-                    for area in range(1, NbAreas + 1)]
-            if os.path.isfile('%s/histO2_1.txt' % folder):
-                obj.histO2 = [
-                    np.loadtxt('%s/histO2_%d.txt' % (folder, area), ndmin=1)
-                    for area in range(1, NbAreas + 1)]
-            if os.path.isfile('%s/binO2_1.txt' % folder):
-                obj.binO2 = [
-                    np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
-                    for area in range(1, NbAreas + 1)]
+        # a few special cases need manual handling
+        if obj.testO2 is not None:
+            obj.testO2 = np.atleast_2d(obj.testO2)
+        if obj.histO2 is not None:
+            obj.histO2 = np.atleast_2d(obj.histO2)
+        if obj.binO2 is not None:
+            obj.binO2 = np.atleast_2d(obj.binO2)
 
         if obj.det_correl_min is not None:
             obj.det_correl_min = obj.det_correl_min.astype(int)
@@ -588,21 +580,6 @@ class ORIGIN(steps.LogMixin):
         # parameters in .yaml
         with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
             yaml.dump(self.param, stream)
-
-        # step3 - saving this manually for now
-        if self.nbAreas is not None:
-            if self.testO2 is not None:
-                for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/testO2_%d.txt' % (self.outpath, area),
-                               self.testO2[area - 1])
-            if self.histO2 is not None:
-                for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/histO2_%d.txt' % (self.outpath, area),
-                               self.histO2[area - 1])
-            if self.binO2 is not None:
-                for area in range(1, self.nbAreas + 1):
-                    np.savetxt('%s/binO2_%d.txt' % (self.outpath, area),
-                               self.binO2[area - 1])
 
         def save_spectra(spectra, outname, *, idlist=None):
             """
