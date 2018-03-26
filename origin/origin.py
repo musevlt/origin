@@ -22,7 +22,6 @@ import warnings
 import yaml
 
 from astropy.io import fits
-from astropy.table import Table, MaskedColumn
 from astropy.utils import lazyproperty
 from collections import OrderedDict
 from logging.handlers import RotatingFileHandler

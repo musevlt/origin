@@ -178,9 +178,6 @@ class Step(LogMixin):
         self.logger.debug('%s - LOAD', self.method_name)
         for kind, names in self.outputs.items():
             for name in names:
-                # FIXME: hardcoded list of excluded attrs - remove this!
-                if name in ('Cat2b', ):
-                    continue
                 outf = '{}/{}.{}'.format(outpath, name,
                                          'txt' if kind == 'array' else 'fits')
                 if os.path.isfile(outf):
@@ -818,7 +815,6 @@ class ComputeSpectra(Step):
                       'self.spectra')
 
         self.outputs['table'].append('Cat2')
-        self.outputs['table'].append('Cat2b')  # FIXME: still useful ?
 
 
 class CleanResults(Step):
