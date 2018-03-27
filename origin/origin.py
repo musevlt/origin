@@ -184,7 +184,7 @@ class ORIGIN(steps.LogMixin):
         self.steps = OrderedDict()
         for i, cls in enumerate(steps.STEPS, start=1):
             step = cls(self, i, self.param)
-            self.steps[i] = step
+            self.steps[step.name] = step
             self.__dict__[step.method_name] = step
 
         # MUSE data cube
@@ -358,7 +358,7 @@ class ORIGIN(steps.LogMixin):
                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                   imawhite=ima_white, segmap=param['segmap'], spectra=spectra)
 
-        for _, step in sorted(obj.steps.items()):
+        for step in obj.steps.values():
             step.load(obj.outpath)
 
         # a few special cases need manual handling
@@ -570,7 +570,7 @@ class ORIGIN(steps.LogMixin):
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits' % self.outpath)
 
-        for _, step in sorted(self.steps.items()):
+        for step in self.steps.values():
             step.dump(self.outpath)
 
         # parameters in .yaml
@@ -1135,5 +1135,5 @@ class ORIGIN(steps.LogMixin):
 
     def status(self):
         """Prints the processing status."""
-        for idx, step in sorted(self.steps.items()):
-            print('- {:02d}, {}: {}'.format(idx, step.name, step.status.name))
+        for name, step in self.steps.items():
+            print('- {:02d}, {}: {}'.format(step.idx, name, step.status.name))

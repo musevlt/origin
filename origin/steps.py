@@ -38,10 +38,6 @@ from .lib_origin import (
     unique_sources,
 )
 
-# TODO:
-# - manage requirements between steps
-# - save and update params
-
 
 def _format_cat(cat):
     columns = {'.1f': ('flux', ),
@@ -129,6 +125,13 @@ class Step(LogMixin):
             self._logdebug('   - %s = %r (default: %r)%s', name,
                            kwargs.get(name, ''), default, annotation)
             self.param[name] = kwargs.get(name, p.default)
+
+        if self.require is not None:
+            for req in self.require:
+                step = self.orig.steps[req]
+                if step.status not in (Status.RUN, Status.DUMPED):
+                    raise RuntimeError('step {:02d} must be run before'
+                                       .format(step.idx))
 
         try:
             self.run(self.orig, *args, **kwargs)
@@ -334,13 +337,9 @@ class ComputePCAThreshold(Step):
     name = 'compute_PCA_threshold'
     desc = 'PCA threshold computation'
     attrs = ('threshO2', 'testO2', 'histO2', 'binO2', 'meaO2', 'stdO2')
+    require = ('preprocessing', 'areas')
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
-        if orig.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-        if orig.areamap is None:
-            raise IOError('Run the step 02 to initialize self.areamap ')
-
         results = []
         for area_ind in range(1, orig.nbAreas + 1):
             # limits of each spatial zone
@@ -404,20 +403,11 @@ class ComputeGreedyPCA(Step):
     name = 'compute_greedy_PCA'
     desc = 'Greedy PCA computation'
     attrs = ('cube_faint', 'mapO2')
+    require = ('preprocessing', 'areas', 'compute_PCA_threshold')
 
     def run(self, orig, Noise_population=50,
             itermax: 'Max number of iterations'=100, threshold_list=None):
-        if orig.cube_std is None:
-            raise IOError('Run the step 01 to initialize self.cube_std')
-        if orig.areamap is None:
-            raise IOError('Run the step 02 to initialize self.areamap')
-        if threshold_list is None:
-            if orig.thresO2 is None:
-                raise IOError('Run the step 03 to initialize self.thresO2')
-            thr = orig.thresO2
-        else:
-            thr = threshold_list
-
+        thr = orig.thresO2 if threshold_list is None else threshold_list
         orig.param['threshold_list'] = thr
         self._loginfo('   - List of threshold = %s',
                       ' '.join("%.2f" % x for x in thr))
@@ -484,11 +474,9 @@ class ComputeTGLR(Step):
     desc = 'GLR test'
     attrs = ('cube_correl', 'cube_profile', 'cube_local_min',
              'cube_local_max', 'maxmap')
+    require = ('compute_greedy_PCA', )
 
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=4):
-        if orig.cube_faint is None:
-            raise IOError('Run the step 04 to initialize self.cube_faint')
-
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
@@ -564,13 +552,10 @@ class ComputePurityThreshold(Step):
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
     attrs = ('Pval_r', 'index_pval', 'Det_M', 'Det_m')
+    require = ('compute_TGLR', )
 
     def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
-        if orig.cube_local_max is None:
-            raise IOError('Run the step 05 to initialize '
-                          'self.cube_local_max and self.cube_local_min')
-
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
         threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
@@ -664,11 +649,9 @@ class DetectionLost(Step):
     desc = 'Thresholding and spatio-spectral merging'
     attrs = ('Cat1', 'Pval_r_comp', 'index_pval_comp', 'Det_M_comp',
              'Det_m_comp')
+    require = ('detection', )
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
-        if orig.Cat0 is None:
-            raise IOError('Run the step 07 to initialize Cat0')
-
         self._loginfo('Compute local maximum of std cube values')
         NbSubcube = orig.param['compute_TGLR']['params']['NbSubcube']
         neighbors = orig.param['compute_TGLR']['params']['neighbors']
@@ -680,10 +663,10 @@ class DetectionLost(Step):
         pur_params = orig.param['compute_purity_threshold']['params']
 
         # complementary catalog
-        cube_local_max_faint_dct, cube_local_min_faint_dct = \
-            CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct,
-                      orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
-                      pur_params['spat_size'], pur_params['spect_size'])
+        cube_local_max_faint_dct, cube_local_min_faint_dct = CleanCube(
+            cube_local_max_faint_dct, cube_local_min_faint_dct,
+            orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
+            pur_params['spat_size'], pur_params['spect_size'])
 
         if purity is None:
             purity = pur_params['purity']
@@ -774,11 +757,9 @@ class ComputeSpectra(Step):
     name = 'compute_spectra'
     desc = 'Lines estimation'
     attrs = ('Cat2', 'spectra')
+    require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0):
-        if orig.Cat1 is None:
-            raise IOError('Run the step 08 to initialize self.Cat1 catalog')
-
         orig.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
@@ -837,11 +818,9 @@ class CleanResults(Step):
     name = 'clean_results'
     desc = 'Results cleaning'
     attrs = ('Cat3_lines', 'Cat3_sources', 'Cat3_spectra')
+    require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
-        if orig.Cat2 is None:
-            raise IOError('Run the step 09 to initialize self.Cat2')
-
         unique_lines = remove_identical_duplicates(orig.Cat2)
         orig.Cat3_lines = merge_similar_lines(unique_lines)
         orig.Cat3_sources = unique_sources(orig.Cat3_lines)
@@ -879,12 +858,10 @@ class CreateMasks(Step):
 
     name = 'create_masks'
     desc = 'Mask creation'
+    require = ('clean_results', )
 
     def run(self, orig, path=None, overwrite=True, mask_size=50,
             seg_thres_factor=.5):
-        if orig.Cat3_lines is None:
-            raise IOError('Run the step 10.')
-
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
