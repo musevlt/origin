@@ -4,6 +4,7 @@ import numpy as np
 import os
 import shutil
 import time
+import warnings
 
 from astropy.table import vstack, Table
 from collections import defaultdict
@@ -167,7 +168,12 @@ class Step(LogMixin):
                 if obj is not None:
                     outf = '{}/{}'.format(outpath, name)
                     if kind in ('cube', 'image'):
-                        obj.write(outf + '.fits')
+                        try:
+                            obj.write(outf + '.fits', convert_float32=False)
+                        except TypeError:
+                            warnings.warn('MPDAF version too old to support '
+                                          'the new type conversion parameter')
+                            obj.write(outf + '.fits')
                     elif kind in ('table', ):
                         obj.write(outf + '.fits', overwrite=True)
                     elif kind in ('array', ):
