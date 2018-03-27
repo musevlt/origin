@@ -100,38 +100,56 @@ def create_source(source_id, source_table, line_table, origin_params,
     parameters_to_add = {
         "OR_PROF": ("profiles", "OR input, spectral profiles"),
         "OR_FSF": ("PSF", "OR input, FSF cube"),
-        "OR_PFAA": ("pfa_areas", "OR input, PFA used to create the area map"),
-        "OR_SIZA": ("maxsize_areas", "OR input, maximum area size in pixels"),
-        "OR_MSIZA": ("minsize_areas", "OR input, minimum area size in pixels"),
-        "OR_NA": ("nbareas", "OR number of areas"),
-        "OR_DCT": ("dct_order", "OR input, DCT order"),
-        "OR_FBG": ("Noise_population",
-                   "OR input: fraction of spectra estimated"),
-        "OR_PFAT": ("pfa_test", "OR input, PFA test"),
-        "OR_ITMAX": ("itermax", "OR input, maximum number of iterations"),
         "OR_THL%02d": ("threshold_list", "OR input threshold per area"),
-        "OR_NG": ("neighbors", "OR input, neighbors"),
-        "OR_NS": ("NbSubcube", "OR input, nb of subcubes for spatial seg"),
-        "OR_DXY": ("tol_spat", "OR input, spatial tolerance for merging "
-                   "(pix)"),
-        "OR_DZ": ("tol_spec", "OR input, spectral tolerance for merging "
-                  "(pix)"),
-        "OR_SXY": ("spat_size", "OR input, spatial size of the spatial "
-                   "filter"),
-        "OR_SZ": ("spect_size", "OR input, spectral length of the spect. "
-                  "filter"),
-        "OR_NXZ": ("grid_dxy", "OR input, grid Nxy"),
+        "OR_NA": ("nbareas", "OR number of areas"),
+        "preprocessing": {
+            "OR_DCT": ("dct_order", "OR input, DCT order")},
+        "areas": {
+            "OR_PFAA": ("pfa", "OR input, PFA used to create the area map"),
+            "OR_SIZA": ("maxsize", "OR input, maximum area size in pixels"),
+            "OR_MSIZA": ("minsize", "OR input, minimum area size in pixels"),
+        },
+        "compute_PCA_threshold": {
+            "OR_PFAT": ("pfa_test", "OR input, PFA test")},
+        "compute_greedy_PCA": {
+            "OR_FBG": ("Noise_population",
+                       "OR input: fraction of spectra estimated"),
+            "OR_ITMAX": ("itermax", "OR input, maximum number of iterations"),
+        },
+        "compute_TGLR": {
+            "OR_NG": ("neighbors", "OR input, neighbors"),
+            "OR_NS": ("NbSubcube", "OR input, nb of subcubes for spatial seg"),
+        },
+        "compute_purity_threshold": {
+            "OR_DXY": ("tol_spat",
+                       "OR input, spatial tolerance for merging (pix)"),
+            "OR_DZ": ("tol_spec",
+                      "OR input, spectral tolerance for merging (pix)"),
+            "OR_SXY": ("spat_size",
+                       "OR input, spatial size of the spatial filter"),
+            "OR_SZ": ("spect_size",
+                      "OR input, spectral length of the spect. filter"),
+        },
+        "compute_spectra": {
+            "OR_NXZ": ("grid_dxy", "OR input, grid Nxy")},
     }
-    for keyword, (param_key, description) in parameters_to_add.items():
-        if param_key == "threshold_list" and param_key in origin_params:
-            for idx, threshold in enumerate(origin_params['threshold_list']):
+
+    def add_keyword(keyword, param, description, params):
+        if param == "threshold_list" and param in params:
+            for idx, threshold in enumerate(params['threshold_list']):
                 source.header[keyword % idx] = (float("%0.2f" % threshold),
                                                 description)
-        elif param_key in origin_params:
-            source.header[keyword] = origin_params[param_key], description
+        elif param in params:
+            source.header[keyword] = params[param], description
         else:
-            logger.debug("Parameter %s absent of the parameter list.",
-                         param_key)
+            logger.debug("Parameter %s absent of the parameter list.", param)
+
+    for keyword, val in parameters_to_add.items():
+        if isinstance(val, dict) and keyword in origin_params:
+            for key, val2 in val.items():
+                add_keyword(key, *val2, origin_params[keyword]['params'])
+        else:
+            add_keyword(keyword, *val, origin_params)
 
     source.header["COMP_CAT"] = source_info['comp']
     if source.COMP_CAT:

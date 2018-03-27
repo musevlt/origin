@@ -51,6 +51,7 @@ def _format_cat(cat):
         for name in colnames:
             if name in cat.colnames:
                 cat[name].format = fmt
+    return cat
 
 
 class LogMixin:
@@ -185,8 +186,7 @@ class Step(LogMixin):
                     if kind == 'image':
                         obj = Image(outf)
                     elif kind == 'table':
-                        obj = Table.read(outf)
-                        _format_cat(obj)
+                        obj = _format_cat(Table.read(outf))
                     elif kind == 'array':
                         obj = np.loadtxt(outf, ndmin=1)
                 else:
@@ -224,7 +224,6 @@ class Preprocessing(Step):
 
     def run(self, orig, dct_order=10, dct_approx=True):
         self._loginfo('DCT computation')
-        orig.param['dct_order'] = dct_order
         faint_dct, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
                                            dct_approx)
 
@@ -269,13 +268,7 @@ class CreateAreas(Step):
 
     def run(self, orig, pfa: "pfa of the test"=.2,
             minsize: "min area size"=100, maxsize: "max area size"=None):
-        # TODO: remove this and change in source creation
-        orig.param['pfa_areas'] = pfa
-        orig.param['minsize_areas'] = minsize
-        orig.param['maxsize_areas'] = maxsize
-
         nexpmap = (np.sum(~orig.mask, axis=0) > 0).astype(np.int)
-
         NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize**2))))
         if NbSubcube > 1:
             if maxsize is None:
@@ -348,9 +341,7 @@ class ComputePCAThreshold(Step):
         if orig.areamap is None:
             raise IOError('Run the step 02 to initialize self.areamap ')
 
-        orig.param['pfa_test'] = pfa_test
         results = []
-
         for area_ind in range(1, orig.nbAreas + 1):
             # limits of each spatial zone
             ksel = (orig.areamap._data == area_ind)
@@ -427,14 +418,9 @@ class ComputeGreedyPCA(Step):
         else:
             thr = threshold_list
 
-        # self._loginfo('   - Noise_population = %0.2f' % Noise_population)
+        orig.param['threshold_list'] = thr
         self._loginfo('   - List of threshold = %s',
                       ' '.join("%.2f" % x for x in thr))
-
-        orig.param['threshold_list'] = thr
-        orig.param['Noise_population'] = Noise_population
-        orig.param['itermax'] = itermax
-
         self._loginfo('Compute greedy PCA on each zone')
         faint, mapO2, nstop = Compute_GreedyPCA_area(
             orig.nbAreas, orig.cube_std._data, orig.areamap._data,
@@ -502,9 +488,6 @@ class ComputeTGLR(Step):
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=4):
         if orig.cube_faint is None:
             raise IOError('Run the step 04 to initialize self.cube_faint')
-
-        orig.param['neighbors'] = neighbors
-        orig.param['NbSubcube'] = NbSubcube
 
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
@@ -589,11 +572,6 @@ class ComputePurityThreshold(Step):
                           'self.cube_local_max and self.cube_local_min')
 
         orig.param['purity'] = purity
-        orig.param['tol_spat'] = tol_spat
-        orig.param['tol_spec'] = tol_spec
-        orig.param['spat_size'] = spat_size
-        orig.param['spect_size'] = spect_size
-
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
         threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
             Compute_threshold_purity(purity, orig.cube_local_max.data,
@@ -632,11 +610,12 @@ class Detection(Step):
         if threshold is not None:
             orig.param['threshold'] = threshold
 
+        pur_params = orig.param['compute_purity_threshold']['params']
         orig.Cat0, orig.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max.data,
             orig.cube_local_min.data, orig.segmap.data,
-            orig.param['spat_size'], orig.param['spect_size'],
-            orig.param['tol_spat'], orig.param['tol_spec'],
+            pur_params['spat_size'], pur_params['spect_size'],
+            pur_params['tol_spat'], pur_params['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
         )
         _format_cat(orig.Cat0)
@@ -691,22 +670,23 @@ class DetectionLost(Step):
             raise IOError('Run the step 07 to initialize Cat0')
 
         self._loginfo('Compute local maximum of std cube values')
-        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny,
-                                          orig.param['NbSubcube'])
+        NbSubcube = orig.param['compute_TGLR']['params']['NbSubcube']
+        neighbors = orig.param['compute_TGLR']['params']['neighbors']
+        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
             Compute_local_max_zone(orig.cube_std.data, orig.cube_std.data,
-                                   orig.mask, intx, inty,
-                                   orig.param['NbSubcube'],
-                                   orig.param['neighbors'])
+                                   orig.mask, intx, inty, NbSubcube, neighbors)
+
+        pur_params = orig.param['compute_purity_threshold']['params']
 
         # complementary catalog
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
             CleanCube(cube_local_max_faint_dct, cube_local_min_faint_dct,
                       orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
-                      orig.param['spat_size'], orig.param['spect_size'])
+                      pur_params['spat_size'], pur_params['spect_size'])
 
         if purity is None:
-            purity = orig.param['purity']
+            purity = pur_params['purity']
         orig.param['purity2'] = purity
 
         self._loginfo('Threshold computed with purity = %.1f', purity)
@@ -720,10 +700,10 @@ class DetectionLost(Step):
                 cube_local_max_faint_dct,
                 cube_local_min_faint_dct,
                 orig.segmap._data,
-                orig.param['spat_size'],
-                orig.param['spect_size'],
-                orig.param['tol_spat'],
-                orig.param['tol_spec'],
+                pur_params['spat_size'],
+                pur_params['spect_size'],
+                pur_params['tol_spat'],
+                pur_params['tol_spec'],
                 True, False,
                 auto, threshlist)
         orig.param['threshold2'] = threshold2
@@ -738,10 +718,10 @@ class DetectionLost(Step):
                                               cube_local_max_faint_dct,
                                               cube_local_min_faint_dct,
                                               orig.segmap._data,
-                                              orig.param['spat_size'],
-                                              orig.param['spect_size'],
-                                              orig.param['tol_spat'],
-                                              orig.param['tol_spec'],
+                                              pur_params['spat_size'],
+                                              pur_params['spect_size'],
+                                              pur_params['tol_spat'],
+                                              pur_params['tol_spec'],
                                               True,
                                               orig.cube_profile._data,
                                               orig.wcs, orig.wave)
@@ -751,8 +731,8 @@ class DetectionLost(Step):
             Cat0['comp'] = 0
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            orig.Cat1 = vstack([Cat0, Catcomp])
-            _format_cat(orig.Cat1)
+            orig.Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+
         ns = len(np.unique(orig.Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))
         nl = len(orig.Cat1)
@@ -796,8 +776,6 @@ class ComputeSpectra(Step):
     attrs = ('Cat2', 'spectra')
 
     def run(self, orig, grid_dxy=0):
-        orig.param['grid_dxy'] = grid_dxy
-
         if orig.Cat1 is None:
             raise IOError('Run the step 08 to initialize self.Cat1 catalog')
 
@@ -815,14 +793,11 @@ class ComputeSpectra(Step):
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
                       len(orig.Cat2))
 
-        orig.spectra = []
-        for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T):
-            spe = Spectrum(data=data, var=vari, wave=orig.wave,
-                           mask=np.ma.nomask)
-            orig.spectra.append(spe)
-        self._loginfo('Save the estimated spectrum of each line in '
-                      'self.spectra')
-
+        orig.spectra = [
+            Spectrum(data=data, var=vari, wave=orig.wave, mask=np.ma.nomask)
+            for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T)
+        ]
+        self._loginfo('Save estimated spectrum of each line in self.spectra')
         self.outputs['table'].append('Cat2')
 
 
@@ -867,9 +842,6 @@ class CleanResults(Step):
         if orig.Cat2 is None:
             raise IOError('Run the step 09 to initialize self.Cat2')
 
-        orig.param['merge_lines_z_threshold'] = merge_lines_z_threshold
-        orig.param['spectrum_size_fwhm'] = spectrum_size_fwhm
-
         unique_lines = remove_identical_duplicates(orig.Cat2)
         orig.Cat3_lines = merge_similar_lines(unique_lines)
         orig.Cat3_sources = unique_sources(orig.Cat3_lines)
@@ -912,9 +884,6 @@ class CreateMasks(Step):
             seg_thres_factor=.5):
         if orig.Cat3_lines is None:
             raise IOError('Run the step 10.')
-
-        orig.param['mask_size'] = mask_size
-        orig.param['seg_thres_factor'] = seg_thres_factor
 
         if path is None:
             out_dir = '%s/masks' % orig.outpath
@@ -975,7 +944,7 @@ class SaveSources(Step):
     """
 
     name = 'save_sources'
-    desc = ''
+    desc = 'Save sources'
 
     def run(self, orig, version, *, path=None, n_jobs=1, author="",
             nb_fwhm=2, size=5, expmap_filename=None, fieldmap_filename=None,
