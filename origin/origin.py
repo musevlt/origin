@@ -183,9 +183,9 @@ class ORIGIN(steps.LogMixin):
 
         self.steps = OrderedDict()
         for i, cls in enumerate(steps.STEPS, start=1):
-            method = cls(self, i, self.param)
-            self.steps[method.method_name] = method
-            self.__dict__[method.method_name] = method
+            step = cls(self, i, self.param)
+            self.steps[i] = step
+            self.__dict__[step.method_name] = step
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -292,10 +292,6 @@ class ORIGIN(steps.LogMixin):
         with open('%s/%s.yaml' % (folder, name), 'r') as stream:
             param = yaml.load(stream)
 
-        import pprint
-        print('LOAD:')
-        pprint.pprint(param)
-
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
         else:
@@ -362,7 +358,7 @@ class ORIGIN(steps.LogMixin):
                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                   imawhite=ima_white, segmap=param['segmap'], spectra=spectra)
 
-        for name, step in obj.steps.items():
+        for _, step in sorted(obj.steps.items()):
             step.load(obj.outpath)
 
         # a few special cases need manual handling
@@ -574,7 +570,7 @@ class ORIGIN(steps.LogMixin):
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits' % self.outpath)
 
-        for name, step in self.steps.items():
+        for _, step in sorted(self.steps.items()):
             step.dump(self.outpath)
 
         # parameters in .yaml
@@ -1139,5 +1135,5 @@ class ORIGIN(steps.LogMixin):
 
     def status(self):
         """Prints the processing status."""
-        for name, step in self.steps.items():
-            print('- {}: {}'.format(name, step.status.name))
+        for idx, step in sorted(self.steps.items()):
+            print('- {:02d}, {}: {}'.format(idx, step.name, step.status.name))

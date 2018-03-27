@@ -70,7 +70,7 @@ class Status(Enum):
     NOTRUN = 'not run yet'
     RUN = 'run'
     DUMPED = 'dumped outputs'
-    LOADED = 'reloaded outputs'
+    # LOADED = 'reloaded outputs'
     FAILED = 'failed'
 
 
@@ -94,21 +94,17 @@ class Step(LogMixin):
         self.orig = orig
         self.idx = idx
         self.method_name = 'step%02d_%s' % (idx, self.name)
-        if self.method_name in param:
-            # when a session is reloaded, use its param dict
-            self.meta = param[self.method_name]
-        else:
-            self.meta = param[self.method_name] = {
-                'params': {}, 'outputs': defaultdict(list)}
-
-        self.param = self.meta['params']
-        self.outputs = self.meta['outputs']
+        # when a session is reloaded, use its param dict (don't overwrite it)
+        self.meta = param.setdefault(self.name, {})
+        self.meta.setdefault('stepidx', idx)
+        self.param = self.meta.setdefault('params', {})
+        self.outputs = self.meta.setdefault('outputs', defaultdict(list))
         for attr in self.attrs:
             setattr(orig, attr, None)
 
     def __repr__(self):
-        return '<{}(status: {})>'.format(self.__class__.__name__,
-                                         self.status.name)
+        return 'Step {:02d}: <{}(status: {})>'.format(
+            self.idx, self.__class__.__name__, self.status.name)
 
     @property
     def status(self):
@@ -124,13 +120,13 @@ class Step(LogMixin):
 
         sig = inspect.signature(self.run)
         for name, p in sig.parameters.items():
-            if name == 'orig':
+            if name == 'orig':  # hide the orig param
                 continue
             annotation = ((' - ' + p.annotation)
                           if p.annotation is not p.empty else '')
             default = p.default if p.default is not p.empty else ''
-            self._loginfo('   - %s = %r (default: %r)%s', name,
-                          kwargs.get(name, ''), default, annotation)
+            self._logdebug('   - %s = %r (default: %r)%s', name,
+                           kwargs.get(name, ''), default, annotation)
             self.param[name] = kwargs.get(name, p.default)
 
         try:
@@ -141,11 +137,9 @@ class Step(LogMixin):
         else:
             self.status = Status.RUN
 
-        tot = time.time() - t0
-        self._loginfo('%02d Done - %.2f sec.', self.idx, tot)
-
+        self.meta['runtime'] = tot = time.time() - t0
         self.meta['execution_date'] = datetime.now().isoformat()
-        self.meta['runtime'] = tot
+        self._loginfo('%02d Done - %.2f sec.', self.idx, tot)
 
     def store_cube(self, name, data, **kwargs):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
@@ -197,9 +191,8 @@ class Step(LogMixin):
                         obj = np.loadtxt(outf, ndmin=1)
                 else:
                     obj = None
-                print('SET', name, obj)
                 setattr(self.orig, name, obj)
-        self.status = Status.DUMPED
+        # self.status = Status.LOADED
 
 
 class Preprocessing(Step):
@@ -275,7 +268,7 @@ class CreateAreas(Step):
     attrs = ('areamap', )
 
     def run(self, orig, pfa: "pfa of the test"=.2,
-            minsize: "minimum size"=100, maxsize=None):
+            minsize: "min area size"=100, maxsize: "max area size"=None):
         # TODO: remove this and change in source creation
         orig.param['pfa_areas'] = pfa
         orig.param['minsize_areas'] = minsize
