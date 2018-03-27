@@ -172,7 +172,8 @@ class Step(LogMixin):
                             obj.write(outf + '.fits', convert_float32=False)
                         except TypeError:
                             warnings.warn('MPDAF version too old to support '
-                                          'the new type conversion parameter')
+                                          'the new type conversion parameter, '
+                                          'data will be saved as float32.')
                             obj.write(outf + '.fits')
                     elif kind in ('table', ):
                         obj.write(outf + '.fits', overwrite=True)
