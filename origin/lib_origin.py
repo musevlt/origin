@@ -134,12 +134,15 @@ def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
 
 
 def DCTMAT(nl, order):
-    """Return the DCT Matrix[:,:order+1] of nl
+    """Return the DCT transformation matrix of size nl-by-(order+1).
+
+    Equivalent function to Matlab/Octave's dtcmtx.
+    https://octave.sourceforge.io/signal/function/dctmtx.html
 
     Parameters
     ----------
     order : int
-        order of the dct (spectral length)
+        Order of the DCT (spectral length).
 
     Returns
     -------
@@ -147,8 +150,8 @@ def DCTMAT(nl, order):
 
     """
     yy, xx = np.mgrid[:nl, :order + 1]
-    D0 = np.sqrt(2 / nl) * np.cos((xx + 0.5) * (np.pi / nl) * yy)
-    D0[0, :] /= np.sqrt(2)
+    D0 = np.sqrt(2 / nl) * np.cos((yy + 0.5) * (np.pi / nl) * xx)
+    D0[:, 0] *= 1/np.sqrt(2)
     return D0
 
 
@@ -163,28 +166,35 @@ def dct_residual(w_raw, order, var, approx):
 
     Parameters
     ----------
-    RAW     :   array
-                the RAW data
-
-    order   :   integer
-                The number of atom to keep for the dct decomposition
-
+    w_raw : array
+        Data array.
+    order : int
+        The number of atom to keep for the dct decomposition.
     var : array
-          Variance
+        Variance array.
+    approx : bool
+        If True, an approximate computation is used, not taking the variance
+        into account.
 
     Returns
     -------
-    Faint     : array
-                residual from the dct decomposition
+    Faint, cont : array
+        Residual and continuum estimated from the dct decomposition.
 
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
     """
     nl = w_raw.shape[0]
     D0 = DCTMAT(nl, order)
     if approx:
         A = np.dot(D0, D0.T)
         cont = np.tensordot(A, w_raw, axes=(0, 0))
+
+        # For reference, this is identical to the following scipy version,
+        # though scipy is 2x slower (probably because it computes all the
+        # coefficients)
+        # from scipy.fftpack import dct
+        # w = (np.arange(nl) < (order + 1)).astype(int)
+        # cont = dct(dct(w_raw, type=2, norm='ortho', axis=0) * w[:,None,None],
+        #            type=3, norm='ortho', axis=0, overwrite_x=False)
     else:
         w_raw_var = w_raw / var
         D0T = D0.T
