@@ -221,9 +221,6 @@ class ORIGIN(steps.LogMixin):
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
 
-        # free memory
-        cub = None
-
         self.spectra = spectra
         self.Cat3_spectra = Cat3_spectra
         self._loginfo('00 Done')
@@ -432,8 +429,8 @@ class ORIGIN(steps.LogMixin):
         """Read the list of spectral profile."""
         self.param['profiles'] = profiles
         if profiles is None:
-            profiles = CURDIR + '/Dico_FWHM_2_12.fits'
-        self._loginfo('Load dictionary of spectral profile %s' % profiles)
+            profiles = os.path.join(CURDIR, 'Dico_FWHM_2_12.fits')
+        self._loginfo('Load dictionary of spectral profile %s', profiles)
         self.profiles = []
         self.FWHM_profiles = []
         with fits.open(profiles) as fprof:
@@ -442,20 +439,17 @@ class ORIGIN(steps.LogMixin):
                 self.FWHM_profiles.append(hdu.header['FWHM'])
 
         # check that the profiles have the same size
-        if len(np.unique([p.shape[0] for p in self.profiles])) != 1:
+        if len(set([p.shape[0] for p in self.profiles])) != 1:
             raise IOError('The profiles must have the same size')
 
     def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None):
-        """Read FSF cube(s).
-        With fieldmap in the case of MUSE mosaic
-        """
+        """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
         self.wfields = None
+        info = self.logger.info
         if PSF is None or FWHM_PSF is None:
-            self._loginfo('Compute FSFs from the datacube FITS header '
-                          'keywords')
+            info('Compute FSFs from the datacube FITS header keywords')
             if 'FSFMODE' not in cube.primary_header:
-                raise IOError('PSF are not described in the FITS header'
-                              'of the cube')
+                raise IOError('missing PSF keywords in the cube FITS header')
 
             # FSF created from FSF*** keywords
             Nfsf = 13
@@ -468,8 +462,7 @@ class ORIGIN(steps.LogMixin):
                 # mean of the fwhm of the FSF in pixel
                 self.FWHM_PSF = np.mean(fwhm_pix)
                 self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-                self._loginfo('mean FWHM of the FSFs = %.2f pixels',
-                              self.FWHM_PSF)
+                info('mean FWHM of the FSFs = %.2f pixels', self.FWHM_PSF)
             else:  # mosaic: one FSF cube per field
                 self.PSF = []
                 self.FWHM_PSF = []
@@ -480,17 +473,16 @@ class ORIGIN(steps.LogMixin):
                     # mean of the fwhm of the FSF in pixel
                     fwhm = np.mean(fwhm_pix[i])
                     self.FWHM_PSF.append(fwhm)
-                    self._loginfo('mean FWHM of the FSFs'
-                                  ' (field %d) = %.2f pixels', i, fwhm)
-                self._loginfo('Compute weight maps from field map %s',
-                              fieldmap)
+                    info('mean FWHM of the FSFs (field %d) = %.2f pixels',
+                         i, fwhm)
+                info('Compute weight maps from field map %s', fieldmap)
                 fmap = FieldsMap(fieldmap, nfields=nfields)
                 # weighted field map
                 self.wfields = fmap.compute_weights()
                 self.param['FWHM PSF'] = self.FWHM_PSF
         else:
             if isinstance(PSF, str):
-                self._loginfo('Load FSFs from %s' % PSF)
+                info('Load FSFs from %s', PSF)
                 self.param['PSF'] = PSF
 
                 cubePSF = Cube(PSF)
@@ -505,21 +497,20 @@ class ORIGIN(steps.LogMixin):
                 # mean of the fwhm of the FSF in pixel
                 self.FWHM_PSF = np.mean(FWHM_PSF)
                 self.param['FWHM PSF'] = FWHM_PSF.tolist()
-                self._loginfo('mean FWHM of the FSFs = %.2f pixels',
-                              self.FWHM_PSF)
+                info('mean FWHM of the FSFs = %.2f pixels', self.FWHM_PSF)
             else:
                 nfields = len(PSF)
                 self.PSF = []
                 self.wfields = []
                 self.FWHM_PSF = FWHM_PSF.tolist()
                 for n in range(nfields):
-                    self._loginfo('Load FSF from %s' % PSF[n])
+                    info('Load FSF from %s', PSF[n])
                     self.PSF.append(Cube(PSF[n])._data)
                     # weighted field map
-                    self._loginfo('Load weight maps from %s' % fieldmap[n])
+                    info('Load weight maps from %s', fieldmap[n])
                     self.wfields.append(Image(fieldmap[n])._data)
-                    self._loginfo('mean FWHM of the FSFs'
-                                  ' (field %d) = %.2f pixels', n, FWHM_PSF[n])
+                    info('mean FWHM of the FSFs (field %d) = %.2f pixels',
+                         n, FWHM_PSF[n])
 
     def write(self, path=None, erase=False):
         """Save the current session in a folder that will have the name of the
