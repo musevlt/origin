@@ -615,7 +615,7 @@ class ORIGIN(steps.LogMixin):
 
     def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()
-            on the test used to perform this segmentation
+        on the test used to perform this segmentation.
 
         Parameters
         ----------
@@ -631,14 +631,10 @@ class ORIGIN(steps.LogMixin):
 
         self.segmap.plot(ax=ax)
 
-        if 'cmap' not in kwargs:
-            kwargs['cmap'] = 'jet'
-        if 'alpha' not in kwargs:
-            kwargs['alpha'] = 0.7
-        if 'interpolation' not in kwargs:
-            kwargs['interpolation'] = 'nearest'
+        kwargs.setdefault('cmap', 'jet')
+        kwargs.setdefault('alpha', 0.7)
+        kwargs.setdefault('interpolation', 'nearest')
         kwargs['origin'] = 'lower'
-
         cax = ax.imshow(self.areamap._data, **kwargs)
 
         i0 = np.min(self.areamap._data)
@@ -775,15 +771,16 @@ class ORIGIN(steps.LogMixin):
             raise IOError('Run the step 02 to initialize self.nbAreas')
 
         if pfa_test == 'step03':
-            if 'pfa_test' in self.param:
-                pfa_test = self.param['pfa_test']
+            param = self.param['compute_PCA_threshold']['params']
+            if 'pfa_test' in param:
+                pfa_test = param['pfa_test']
                 hist = self.histO2[area - 1]
                 bins = self.binO2[area - 1]
                 thre = self.thresO2[area - 1]
                 mea = self.meaO2[area - 1]
                 std = self.stdO2[area - 1]
             else:
-                raise IOError('pfa_test param is None: set a value or run' +
+                raise IOError('pfa_test param is None: set a value or run'
                               ' the Step03')
         else:
             if self.cube_std is None:
