@@ -23,7 +23,6 @@ from .lib_origin import (
     Compute_GreedyPCA_area,
     Compute_local_max_zone,
     Compute_PCA_threshold,
-    Compute_Standardized_data,
     Compute_threshold_purity,
     Correlation_GLR_test,
     Correlation_GLR_test_zone,
@@ -218,13 +217,13 @@ class Preprocessing(Step):
     Returns
     -------
     self.cube_std : `~mpdaf.obj.Cube`
-        standardized data for PCA
+        standardized data for PCA.
     self.cont_dct : `~mpdaf.obj.Cube`
-        DCT continuum
+        continuum estimated with a DCT.
     self.ima_std : `~mpdaf.obj.Image`
-        Mean of standardized data for PCA along the wavelength axis
+        Mean of standardized data cube.
     self.ima_dct : `~mpdaf.obj.Image`
-        Mean of DCT continuum cube along the wavelength axis
+        Mean of DCT continuum cube.
 
     """
 
@@ -234,13 +233,19 @@ class Preprocessing(Step):
 
     def run(self, orig, dct_order=10, dct_approx=True):
         self._loginfo('DCT computation')
-        faint_dct, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
-                                           dct_approx)
+        cube_faint, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
+                                            dct_approx)
+        cube_faint[orig.mask] = np.nan
 
         # compute standardized data
         self._loginfo('Data standardizing')
-        cube_std = Compute_Standardized_data(faint_dct, orig.mask, orig.var)
-        cont_dct /= np.sqrt(orig.var)
+        std = np.sqrt(orig.var)
+        cont_dct /= std
+
+        mean = np.nanmean(cube_faint, axis=(1, 2))
+        # orig.var[orig.mask] = np.inf
+        cube_std = (cube_faint - mean[:, np.newaxis, np.newaxis]) / std
+        cube_std[orig.mask] = 0
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.store_cube('cube_std', cube_std)

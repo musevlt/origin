@@ -239,40 +239,6 @@ def dct_residual(w_raw, order, var, approx):
     return Faint, cont
 
 
-@timeit
-def Compute_Standardized_data(cube_dct, mask, var):
-    """Function to compute the standardized data.
-
-    Parameters
-    ----------
-    cube_dct:   array
-                output of dct_residual
-    mask  :   array
-             Mask array (expmap==0)
-    var     : array
-              variance array
-    newvar  : boolean
-              if true, variance is re-estimated
-
-    Returns
-    -------
-    STD     :   array
-                standardized data cube from cube dct
-    VAR     :   array
-                cube of variance
-
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
-    """
-    cube_dct[mask] = np.nan
-    mean_lambda = np.nanmean(cube_dct, axis=(1, 2))
-    var[mask] = np.inf
-
-    STD = (cube_dct - mean_lambda[:, np.newaxis, np.newaxis]) / np.sqrt(var)
-    STD[mask] = 0
-    return STD
-
-
 def createradvar(cu, ot):
     """Function to compute the compactness of areas using variance of
     position. The variance is computed on the position given by
