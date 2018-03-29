@@ -722,20 +722,20 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
 
 
 def Compute_PCA_threshold(faint, pfa_test):
-    """
+    """Compute threshold for the PCA.
 
     Parameters
     ----------
-    faint   :   array
-                The 3D cube data clean
-    pfa_test         : float
-                       PFA of the test
+    faint : array
+        Standardized data.
+    pfa_test : float
+        PFA of the test.
 
     Returns
     -------
-    histO2:
-    frecO2:
-    thresO2 :   Threshold for the O2 test
+    test, histO2, frecO2, thresO2, mea, std
+        Threshold for the O2 test
+
     """
     test = O2test(faint)
 
@@ -862,27 +862,24 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     return faint, mapO2, nstop
 
 
-def O2test(Cube_in):
-    """Function to compute the test on data. The test estimate the background
-    part and nuisance part of the data by mean of second order test:
-    Testing mean and variance at same time of spectra
+def O2test(arr):
+    """Compute the second order test on spaxels.
+
+    The test estimate the background part and nuisance part of the data by mean
+    of second order test: Testing mean and variance at same time of spectra.
 
     Parameters
     ----------
-    Cube_in :   array
-                  The 3D cube data to test
-
+    arr : array-like
+        The 3D cube data to test.
 
     Returns
     -------
-    test    :   array
-                2D result of the test
-
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
+    ndarray
+        result of the test.
     """
-    # np.einsum('ij,ij->j', Cube_in, Cube_in) / Cube_in.shape[0]
-    return np.mean(Cube_in**2, axis=0)
+    # np.einsum('ij,ij->j', arr, arr) / arr.shape[0]
+    return np.mean(arr**2, axis=0)
 
 
 def Compute_thresh_PCA_hist(test, threshold_test):
@@ -890,24 +887,24 @@ def Compute_thresh_PCA_hist(test, threshold_test):
 
     Parameters
     ----------
-    test :   array
-             2D data from the O2 test
-    threshold_test      :   float
-                            the pfa of the test (default=.05)
+    test : array
+        2D data from the O2 test.
+    threshold_test : float
+        the pfa of the test.
 
     Returns
     -------
-    histO2  :   histogram value of the test
-    frecO2  :   frequencies of the histogram
-    thresO2 :   automatic threshold for the O2 test
+    histO2  : histogram value of the test
+    frecO2  : frequencies of the histogram
+    thresO2 : automatic threshold for the O2 test
+    mea     : mean value of the fit
+    std     : sigma value of the fit
 
-    Date  : July, 06 2017
-    Author: antony schutz (antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
     test_v = np.ravel(test)
     c = test_v[test_v > 0]
-    histO2, frecO2 = np.histogram(c, bins='fd', normed=True)
+    histO2, frecO2 = np.histogram(c, bins='fd', density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
     ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind])**2)

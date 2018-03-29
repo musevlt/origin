@@ -210,9 +210,10 @@ class Preprocessing(Step):
     Parameters
     ----------
     dct_order : int
-        The number of atom to keep for the dct decomposition
+        The number of atom to keep for the dct decomposition.
     dct_approx : bool
-        if True, the DCT computation is approximated
+        if True, the DCT computation does not take the variance into account
+        for the computation of the DCT coefficients.
 
     Returns
     -------
