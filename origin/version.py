@@ -1,6 +1,6 @@
 import os
 
-__version__ = '3.0.dev'
+__version__ = '3.0'
 # __description__ = ''
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
