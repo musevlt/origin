@@ -40,6 +40,7 @@ from astropy.stats import gaussian_sigma_to_fwhm
 from functools import wraps
 from joblib import Parallel, delayed
 from numpy import fft
+from numpy.linalg import multi_dot
 from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import measurements, filters
@@ -92,7 +93,7 @@ def orthogonal_projection(a, b):
     # return np.einsum('i,j,jk->ik', a, a, b, optimize=True)
     if a.ndim == 1:
         a = a[:, None]
-    return np.linalg.multi_dot([a, a.T, b])
+    return multi_dot([a, a.T, b])
 
 
 @timeit
@@ -185,12 +186,24 @@ def dct_residual(w_raw, order, var, approx):
     nl = w_raw.shape[0]
     D0 = DCTMAT(nl, order)
     if approx:
-        A = np.dot(D0, D0.T)
-        cont = np.tensordot(A, w_raw, axes=(0, 0))
+        # Compute the DCT transformation, without using the variance.
+        # Given the DCT transformation matrix D0, we compute D0.D0^t.S
+        # for each spectrum S.
+
+        # Old version using tensordot:
+        # A = np.dot(D0, D0.T)
+        # cont = np.tensordot(A, w_raw, axes=(0, 0))
+
+        # Looping on spectra and using multidot is ~6x faster:
+        # D0 is typically 3681x11 elements, so it is much more
+        # efficient to compute D0^t.S first
+        cont = [multi_dot([D0, D0.T, w_raw[:, y, x]])
+                for y, x in np.ndindex(w_raw.shape[1:])]
+        cont = np.stack(cont).T.reshape(w_raw.shape)
 
         # For reference, this is identical to the following scipy version,
-        # though scipy is 2x slower (probably because it computes all the
-        # coefficients)
+        # though scipy is 2x slower than tensordot (probably because it
+        # computes all the coefficients)
         # from scipy.fftpack import dct
         # w = (np.arange(nl) < (order + 1)).astype(int)
         # cont = dct(dct(w_raw, type=2, norm='ortho', axis=0) * w[:,None,None],
