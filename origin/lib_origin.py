@@ -156,11 +156,6 @@ def DCTMAT(nl, order):
     return D0
 
 
-def continuum(D0, D0T, var, w_raw_var):
-    A = np.linalg.inv(np.dot(D0T / var, D0))
-    return np.dot(np.dot(np.dot(D0, A), D0T), w_raw_var)
-
-
 @timeit
 def dct_residual(w_raw, order, var, approx):
     """Function to compute the residual of the DCT on raw data.
@@ -187,19 +182,21 @@ def dct_residual(w_raw, order, var, approx):
     D0 = DCTMAT(nl, order)
     if approx:
         # Compute the DCT transformation, without using the variance.
-        # Given the DCT transformation matrix D0, we compute D0.D0^t.S
-        # for each spectrum S.
+        #
+        # Given the transformation matrix D0, we compute for each spectrum S:
+        #
+        #   C = D0.D0^t.S
+        #
 
         # Old version using tensordot:
         # A = np.dot(D0, D0.T)
         # cont = np.tensordot(A, w_raw, axes=(0, 0))
 
         # Looping on spectra and using multidot is ~6x faster:
-        # D0 is typically 3681x11 elements, so it is much more
-        # efficient to compute D0^t.S first
+        # D0 is typically 3681x11 elements, so it is much more efficient
+        # to compute D0^t.S first (note the array is reshaped below)
         cont = [multi_dot([D0, D0.T, w_raw[:, y, x]])
                 for y, x in np.ndindex(w_raw.shape[1:])]
-        cont = np.stack(cont).T.reshape(w_raw.shape)
 
         # For reference, this is identical to the following scipy version,
         # though scipy is 2x slower than tensordot (probably because it
@@ -209,18 +206,35 @@ def dct_residual(w_raw, order, var, approx):
         # cont = dct(dct(w_raw, type=2, norm='ortho', axis=0) * w[:,None,None],
         #            type=3, norm='ortho', axis=0, overwrite_x=False)
     else:
+        # Compute the DCT transformation, using the variance.
+        #
+        # As the noise differs on each spectral component, we need to take into
+        # account the (diagonal) covariance matrix Σ for each spectrum S:
+        #
+        #   C = D0.(D^t.Σ^-1.D)^-1.D0^t.Σ^-1.S
+        #
+
         w_raw_var = w_raw / var
         D0T = D0.T
-        cont = Parallel()(
-            delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j])
-            for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
-        cont = np.asarray(cont).T.reshape(w_raw.shape)
-    #    cont = np.empty_like(w_raw)
-    #    for i in range(w_raw.shape[1]):
-    #        for j in range(w_raw.shape[2]):
-    #            A = np.linalg.inv(np.dot(D0T/var[:,i,j], D0))
-    #            cont[:,i,j] = np.dot(np.dot(np.dot(D0,A),D0T), w_raw_var[:,i,j])
 
+        # Old version (slow):
+        # def continuum(D0, D0T, var, w_raw_var):
+        #     A = np.linalg.inv(np.dot(D0T / var, D0))
+        #     return np.dot(np.dot(np.dot(D0, A), D0T), w_raw_var)
+        #
+        # cont = Parallel()(
+        #     delayed(continuum)(D0, D0T, var[:, i, j], w_raw_var[:, i, j])
+        #     for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
+        # cont = np.asarray(cont).T.reshape(w_raw.shape)
+
+        from numpy.linalg import inv
+        cont = [multi_dot([D0,
+                           inv(np.dot(D0T / var[:, y, x], D0)),
+                           D0T,
+                           w_raw_var[:, y, x]])
+                for y, x in np.ndindex(w_raw.shape[1:])]
+
+    cont = np.stack(cont).T.reshape(w_raw.shape)
     Faint = w_raw - cont
     return Faint, cont
 
