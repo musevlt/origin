@@ -82,8 +82,7 @@ def test_origin():
 
         # test returned sources are valid
         src = Source.from_file('./tmp2/sources/source-00001.fits')
-        assert set(sp.shape[0] for sp in src.spectra.values()) == {24, 36,
-                                                                   3681}
+        assert set(sp.shape[0] for sp in src.spectra.values()) == {18, 3681}
         assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
         assert src.cubes['MUSE_CUBE'].shape == (3681, 25, 25)
     finally:
