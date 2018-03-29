@@ -2846,17 +2846,17 @@ def trim_spectrum_list(line_table, spectra, profile_fwhm, *, size_fwhm=6):
     return result
 
 
-def create_masks(line_table, source_table, profile_fwhm, correl_cube,
-                 correl_threshold, std_cube, std_threshold, segmap, out_dir, *,
+def create_masks(line_table, source_table, profile_fwhm, cube_correl,
+                 threshold_correl, cube_std, threshold_std, segmap, out_dir, *,
                  mask_size=50, seg_thres_factor=.5, plot_problems=True):
     """Create the mask of each source.
 
     This function creates the masks and sky masks of the sources in the line
     table using the ``origin.source_masks.gen_source_mask`` function on each
-    source. The primary source masks are created using the correl_cube while
-    the complementary source masks are created using the std_cube.
+    source. The primary source masks are created using the cube_correl while
+    the complementary source masks are created using the cube_std.
 
-    The correl_cube and std_cube are expected to have the same WCS.
+    The cube_correl and cube_std are expected to have the same WCS.
 
     TODO: Implement parallel processing.
 
@@ -2870,13 +2870,13 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
         position of the source.
     profile_fwhm: list
         List of the profile FWHMs. The index in the list is the profile number.
-    correl_cube: mpdaf.obj.Cube
+    cube_correl: mpdaf.obj.Cube
         Correlation cube where primary sources where detected.
-    correl_threshold: float
-        Threshold used for detection of sources in the correl_cube.
-    std_cube: mpdaf.obj.Cube
+    threshold_correl: float
+        Threshold used for detection of sources in the cube_correl.
+    cube_std: mpdaf.obj.Cube
         STD cube where complementary sources where detected.
-    std_threshold: float
+    threshold_std: float
         Threshold used for detection of sources in the STD cube.
     segmap: mpdaf.obj.Image
         Segmentation map. Must have the same spatial WCS as the cube. The sky
@@ -2901,7 +2901,7 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
     # and dec).  Using this last postion may cause problem when it falls just
     # outside the segment.  We replace ra, dec, and z by the initial values.
     line_table = line_table.copy()
-    line_table['dec'], line_table['ra'] = correl_cube.wcs.pix2sky(
+    line_table['dec'], line_table['ra'] = cube_correl.wcs.pix2sky(
         np.array([line_table['y0'], line_table['x0']]).T).T
     line_table['z'] = line_table['z0']
     # We also add a fwhm column containing the FWHM of the line profile as
@@ -2920,11 +2920,11 @@ def create_masks(line_table, source_table, profile_fwhm, correl_cube,
         source_x, source_y = source_table.loc[source_id]['x', 'y']
 
         if source_table.loc[source_id]['comp'] == 0:
-            detection_cube = correl_cube
-            threshold = correl_threshold * seg_thres_factor
+            detection_cube = cube_correl
+            threshold = threshold_correl * seg_thres_factor
         else:
-            detection_cube = std_cube
-            threshold = std_threshold * seg_thres_factor
+            detection_cube = cube_std
+            threshold = threshold_std * seg_thres_factor
 
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
