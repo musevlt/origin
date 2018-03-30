@@ -258,6 +258,10 @@ class ORIGIN(steps.LogMixin):
             ORIGIN.write() method saves the session in a folder that
             has this name. The ORIGIN.load() method will be used to
             load a session, continue it or create a new from it.
+        loglevel : str
+            Level for the logger (defaults to DEBUG).
+        logcolor : bool
+            Use color for the logger levels.
 
         """
         return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
@@ -265,7 +269,7 @@ class ORIGIN(steps.LogMixin):
                    segmap=segmap, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
-    def load(cls, folder, newname=None):
+    def load(cls, folder, newname=None, loglevel=None, logcolor=None):
         """Load a previous session of ORIGIN.
 
         ORIGIN.write() method saves a session in a folder that has the name of
@@ -280,6 +284,10 @@ class ORIGIN(steps.LogMixin):
             New name for this session. This parameter lets the user to load a
             previous session but continue in a new one. If None, the user will
             continue the loaded session.
+        loglevel : str
+            Level for the logger (by default reuse the saved level).
+        logcolor : bool
+            Use color for the logger levels.
 
         """
         path = os.path.dirname(os.path.abspath(folder))
@@ -348,8 +356,11 @@ class ORIGIN(steps.LogMixin):
                             os.path.join(path, newname))
             name = newname
 
+        loglevel = loglevel if loglevel is not None else param['loglevel']
+        logcolor = logcolor if logcolor is not None else param['logcolor']
+
         obj = cls(path=path, name=name, param=param,
-                  loglevel=param['loglevel'], logcolor=param['logcolor'],
+                  loglevel=loglevel, logcolor=logcolor,
                   filename=param['cubename'], fieldmap=wfields,
                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
                   imawhite=ima_white, segmap=param['segmap'], spectra=spectra)
@@ -389,6 +400,12 @@ class ORIGIN(steps.LogMixin):
         formatter = logging.Formatter('%(asctime)s %(message)s')
         self.file_handler.setFormatter(formatter)
         logger.addHandler(self.file_handler)
+
+    def set_loglevel(self, level):
+        handler = next(h for h in self.logger.handlers
+                       if isinstance(h, logging.StreamHandler))
+        handler.setLevel(level)
+        self.param['loglevel'] = level
 
     @property
     def nbAreas(self):

@@ -18,10 +18,15 @@ def test_origin():
     # Number of subcubes for the spatial segmentation
 
     try:
-        my_origin = ORIGIN.init(MINICUBE, SEGMAP, name='tmp')
+        my_origin = ORIGIN.init(MINICUBE, SEGMAP, name='tmp', loglevel='INFO')
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
+        # test that log level is correctly reloaded, then change it
+        assert my_origin.logger.handlers[0].level == 20
+        my_origin.set_loglevel('DEBUG')
+        assert my_origin.logger.handlers[0].level == 10
+
         my_origin.step01_preprocessing()
         assert my_origin.ima_dct is not None
         assert my_origin.ima_std is not None
