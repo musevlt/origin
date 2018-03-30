@@ -25,7 +25,6 @@ from .lib_origin import (
     Compute_PCA_threshold,
     Compute_threshold_purity,
     Correlation_GLR_test,
-    Correlation_GLR_test_zone,
     Create_local_max_cat,
     create_masks,
     dct_residual,
@@ -501,14 +500,9 @@ class ComputeTGLR(Step):
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
-        if NbSubcube == 1:
-            correl, profile, cm = Correlation_GLR_test(
-                orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
-                orig.profiles, ncpu)
-        else:
-            correl, profile, cm = Correlation_GLR_test_zone(
-                orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
-                orig.profiles, intx, inty, NbSubcube, ncpu)
+        correl, profile, correl_min = Correlation_GLR_test(
+            orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
+            orig.profiles, ncpu)
 
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0
@@ -526,7 +520,7 @@ class ComputeTGLR(Step):
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
         cube_local_max, cube_local_min = Compute_local_max_zone(
-            correl, cm, orig.mask, intx, inty, NbSubcube, neighbors)
+            correl, correl_min, orig.mask, intx, inty, NbSubcube, neighbors)
         self._loginfo('Save self.cube_local_max from max correlations')
         self.store_cube('cube_local_max', cube_local_max)
         self._loginfo('Save self.cube_local_min from min correlations')
