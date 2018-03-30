@@ -1,5 +1,6 @@
 """Test interface on ORIGIN software."""
 
+import numpy as np
 import os
 import shutil
 
@@ -22,13 +23,18 @@ def test_origin():
 
         my_origin = ORIGIN.load('tmp')
         my_origin.step01_preprocessing()
+        assert my_origin.ima_dct is not None
+        assert my_origin.ima_std is not None
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
         my_origin.step02_areas()
+        assert my_origin.param['nbareas'] == 1
+        assert list(np.unique(my_origin.areamap._data)) == [1]
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
+        assert my_origin.param['nbareas'] == 1
         my_origin.step03_compute_PCA_threshold()
         my_origin.write()
 

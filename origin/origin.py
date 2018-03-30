@@ -22,7 +22,6 @@ import warnings
 import yaml
 
 from astropy.io import fits
-from astropy.utils import lazyproperty
 from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
@@ -391,27 +390,10 @@ class ORIGIN(steps.LogMixin):
         self.file_handler.setFormatter(formatter)
         logger.addHandler(self.file_handler)
 
-    @lazyproperty
-    def ima_dct(self):
-        """DCT image"""
-        if self.cont_dct is not None:
-            return self.cont_dct.mean(axis=0)
-
-    @lazyproperty
-    def ima_std(self):
-        """STD image"""
-        if self.cube_std is not None:
-            return self.cube_std.mean(axis=0)
-
-    @lazyproperty
+    @property
     def nbAreas(self):
         """Number of area (segmentation) for the PCA"""
-        if self.areamap is not None:
-            labels = np.unique(self.areamap._data)
-            if 0 in labels:  # expmap=0
-                return len(labels) - 1
-            else:
-                return len(labels)
+        return self.param.get('nbareas')
 
     @property
     def threshold_correl(self):

@@ -250,9 +250,10 @@ class Preprocessing(Step):
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.store_cube('cube_std', cube_std)
+        self.store_image('ima_std', cube_std.mean(axis=0))
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.store_cube('cont_dct', cont_dct)
-        self.outputs['image'].extend(['ima_std', 'ima_dct'])
+        self.store_image('ima_dct', cont_dct.mean(axis=0))
 
 
 class CreateAreas(Step):
@@ -316,10 +317,17 @@ class CreateAreas(Step):
         elif NbSubcube == 1:
             areamap = nexpmap
 
+        areamap = areamap.astype(int)
+        labels = np.unique(areamap)
+        if 0 in labels:  # expmap=0
+            nbAreas = len(labels) - 1
+        else:
+            nbAreas = len(labels)
+        orig.param['nbareas'] = nbAreas
+
+        self.store_image('areamap', areamap)
         self._loginfo('Save the map of areas in self.areamap')
-        self.store_image('areamap', areamap.astype(int))
-        self._loginfo('%d areas generated', orig.nbAreas)
-        orig.param['nbareas'] = orig.nbAreas
+        self._loginfo('%d areas generated', nbAreas)
 
 
 class ComputePCAThreshold(Step):
