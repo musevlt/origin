@@ -375,8 +375,10 @@ class ComputePCAThreshold(Step):
 
         (orig.testO2, orig.histO2, orig.binO2, orig.thresO2, orig.meaO2,
          orig.stdO2) = zip(*results)
-        self.outputs['array'].extend(['testO2', 'histO2', 'binO2',
-                                      'thresO2', 'meaO2', 'stdO2'])
+        # FIXME: test02, histO2 and binO2 are lists of arrays with variable
+        # sizes so they cannot be managed by the Step class currently
+        self.outputs['array'].extend(['thresO2', 'meaO2', 'stdO2'])
+        # self.outputs['array'].extend(['testO2', 'histO2', 'binO2'])
 
 
 class ComputeGreedyPCA(Step):
