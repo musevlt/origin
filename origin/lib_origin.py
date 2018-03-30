@@ -98,33 +98,31 @@ def orthogonal_projection(a, b):
 
 @timeit
 def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
-    """Function to compute the limits in pixels for each zone.
+    """Compute indices to split spatially in NbSubcube x NbSubcube regions.
+
     Each zone is computed from the left to the right and the top to the bottom
     First pixel of the first zone has coordinates : (row,col) = (Nx,1).
 
     Parameters
     ----------
-    Nx        : integer
-                Number of columns
-    Ny        : integer
-                Number of rows
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
-    start     : tuple
-                if not None, the tupe is the (y,x) starting point
+    Nx : int
+        Number of columns
+    Ny : int
+        Number of rows
+    NbSubcube : int
+        Number of subcubes for the spatial segmentation
+    start : tuple
+        if not None, the tupe is the (y,x) starting point
+
     Returns
     -------
-    intx, inty : integer, integer
-                  limits in pixels of the columns/rows for each zone
+    intx, inty : int, int
+        limits in pixels of the columns/rows for each zone
 
-    Date  : Dec,10 2015
-    Author: Carole Clastre (carole.clastres@univ-lyon1.fr)
     """
-    # Segmentation of the rows vector in Nbsubcube parts from the right to the
-    # left
+    # Segmentation of the rows vector in Nbsubcube parts from right to left
     inty = np.linspace(Ny, 0, NbSubcube + 1, dtype=np.int)
-    # Segmentation of the columns vector in Nbsubcube parts from the left to
-    # the right
+    # Segmentation of the columns vector in Nbsubcube parts from left to right
     intx = np.linspace(0, Nx, NbSubcube + 1, dtype=np.int)
 
     if start is not None:
@@ -985,30 +983,28 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
     Parameters
     ----------
-    cube       : array
-                 data cube on test
-    sigma      : array
-                 MUSE covariance
+    cube : array
+        data cube
+    sigma : array
+        variance cube
     PSF_Moffat : list of arrays
-                 FSF for each field of this data cube
-    weights    : list of array
-                 Weight maps of each field
-    Dico       : array
-                 Dictionary of spectral profiles to test
-    threads    : integer
-                 number of threads
+        FSF for each field of this data cube
+    weights : list of array
+        Weight maps of each field
+    Dico : array
+        Dictionary of spectral profiles to test
+    threads : int
+        number of threads
 
     Returns
     -------
-    correl  : array
-              cube of T_GLR values of maximum correlation
+    correl : array
+        cube of T_GLR values of maximum correlation
     profile : array
-              Number of the profile associated to the T_GLR
+        Number of the profile associated to the T_GLR
     correl_min : array
-                 cube of T_GLR values of minimum correlation
+        cube of T_GLR values of minimum correlation
 
-    Date  : July, 6 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
 
@@ -1093,32 +1089,28 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
 
     Parameters
     ----------
-    correl    : array
-                cube of maximum T_GLR values (correlations)
+    correl : array
+        cube of maximum T_GLR values (correlations)
     correl_min: array
-                cube of minimum T_GLR values (correlations)
-    mask      : array
-                boolean cube (true if pixel is masked)
-    intx      : array
-                limits in pixels of the columns for each zone
-    inty      : array
-                limits in pixels of the rows for each zone
+        cube of minimum T_GLR values (correlations)
+    mask : array
+        boolean cube (True if pixel is masked)
+    intx : array
+        limits in pixels of the columns for each zone
+    inty : array
+        limits in pixels of the rows for each zone
     NbSubcube : int
-                Number of subcube in the spatial segmentation
-    threshold : float
-                The threshold applied to the p-values cube
-    neighbors:  int
-                Number of connected components
+        Number of subcube in the spatial segmentation
+    neighbors :  int
+        Number of connected components
 
     Returns
     -------
     cube_Local_max : array
-                     cube of local maxima from maximum correlation
+        cube of local maxima from maximum correlation
     cube_Local_min : array
-                     cube of local maxima from minus minimum correlation
+        cube of local maxima from minus minimum correlation
 
-    Date  : July, 6 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
     # initialization
     cube_Local_max = np.zeros(correl.shape)
