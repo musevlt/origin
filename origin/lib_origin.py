@@ -43,7 +43,7 @@ from numpy import fft
 from numpy.linalg import multi_dot
 from scipy import stats, fftpack
 from scipy.signal import fftconvolve
-from scipy.ndimage import measurements, filters
+from scipy.ndimage import label as ndi_label, maximum_filter
 from scipy.ndimage import binary_erosion, binary_dilation
 from scipy.spatial import ConvexHull
 from scipy.sparse.linalg import svds
@@ -392,7 +392,7 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
             y1, y2, x1, x2 = inty[numy + 1], inty[numy], intx[numx], intx[numx + 1]
             tmp = nexpmap[y1:y2, x1:x2]
             if np.mean(tmp) != 0:
-                labtest = measurements.label(tmp)[0]
+                labtest = ndi_label(tmp)[0]
                 labtmax = labtest.max()
 
                 for n in range(labtmax):
@@ -1112,18 +1112,15 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
         cube of local maxima from minus minimum correlation
 
     """
-    # initialization
-    cube_Local_max = np.zeros(correl.shape)
-    cube_Local_min = np.zeros(correl.shape)
     cube_Local_max = np.zeros(correl.shape)
     cube_Local_min = np.zeros(correl.shape)
     nl, Ny, Nx = correl.shape
+    # FIXME: should be computed from neighbors ?
     lag = 1
 
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             # limits of each spatial zone
-
             x1 = np.maximum(0, intx[numx] - lag)
             x2 = np.minimum(intx[numx + 1] + lag, Nx)
             y1 = np.maximum(0, inty[numy + 1] - lag)
@@ -1176,47 +1173,43 @@ def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
     return Mdata, mdata
 
 
-def Compute_localmax(correl_temp_edge, correl_temp_edge_min,
-                     mask_temp_edge, neighbors):
-    """Function to compute the local maxima of the maximum correlation and
-    local maxima of minus the minimum correlation
-    distribution
+def Compute_localmax(correl, correl_min, mask, neighbors):
+    """Compute the local maxima of the maximum correlation and local maxima
+    of minus the minimum correlation distribution.
 
     Parameters
     ----------
-    correl_temp_edge :  array
-                        T_GLR values with edges excluded (from max correlation)
-    correl_temp_edge_min :  array
-                        T_GLR values with edges excluded (from min correlation)
-    mask_temp_edge   :  array
-                        mask array (true if pixel is masked)
-    neighbors        :  int
-                        Number of connected components
+    correl : array
+        T_GLR values with edges excluded (from max correlation)
+    correl_min : array
+        T_GLR values with edges excluded (from min correlation)
+    mask : array
+        mask array (true if pixel is masked)
+    neighbors : int
+        Number of connected components
+
     Returns
     -------
     cube_pval_correl : array
-                       p-values asssociated to the local maxima of T_GLR values
+        p-values asssociated to the local maxima of T_GLR values
 
-    Date  : June, 19 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
     # connected components
     conn = (neighbors + 1)**(1 / 3.)
     # local maxima of maximum correlation
-    Max_filter = filters.maximum_filter(correl_temp_edge, size=(conn, conn, conn))
-    Local_max_mask = (correl_temp_edge == Max_filter)
-    Local_max_mask[mask_temp_edge] = 0
-    Local_max = correl_temp_edge * Local_max_mask
+    max_filter = maximum_filter(correl, size=(conn, conn, conn))
+    local_max_mask = (correl == max_filter)
+    local_max_mask[mask] = 0
+    local_max = correl * local_max_mask
 
     # local maxima of minus minimum correlation
-    minus_correl_min = - correl_temp_edge_min
-    Max_filter = filters.maximum_filter(minus_correl_min,
-                                        size=(conn, conn, conn))
-    Local_min_mask = (minus_correl_min == Max_filter)
-    Local_min_mask[mask_temp_edge] = 0
-    Local_min = minus_correl_min * Local_min_mask
+    minus_correl_min = - correl_min
+    max_filter = maximum_filter(minus_correl_min, size=(conn, conn, conn))
+    local_min_mask = (minus_correl_min == max_filter)
+    local_min_mask[mask] = 0
+    local_min = minus_correl_min * local_min_mask
 
-    return Local_max, Local_min
+    return local_max, local_min
 
 
 def itersrc_mat(cat, coord, spatdist, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
