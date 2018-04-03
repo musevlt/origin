@@ -498,7 +498,16 @@ class ComputeTGLR(Step):
              'cube_local_max', 'maxmap')
     require = ('compute_greedy_PCA', )
 
-    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=4):
+    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
+        if ncpu > 1:
+            try:
+                import mkl_fft  # noqa
+            except ImportError:
+                pass
+            else:
+                warnings.warn('using multiprocessing (ncpu>1) is not possible '
+                              'with the mkl_fft package, it will crash')
+
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
