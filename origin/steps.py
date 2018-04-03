@@ -231,7 +231,7 @@ class Preprocessing(Step):
     desc = 'Preprocessing'
     attrs = ('cube_std', 'cube_dct')
 
-    def run(self, orig, dct_order=10, dct_approx=True):
+    def run(self, orig, dct_order=10, dct_approx=False):
         self._loginfo('DCT computation')
         cube_faint, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
                                             dct_approx)
