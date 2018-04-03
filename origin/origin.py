@@ -23,6 +23,7 @@ import yaml
 
 from astropy.io import fits
 from collections import OrderedDict
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
@@ -295,6 +296,8 @@ class ORIGIN(steps.LogMixin):
 
         with open('%s/%s.yaml' % (folder, name), 'r') as stream:
             param = yaml.load(stream)
+
+        param['load_date'] = datetime.now().isoformat()
 
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -572,6 +575,7 @@ class ORIGIN(steps.LogMixin):
             step.dump(self.outpath)
 
         # parameters in .yaml
+        self.param['dump_date'] = datetime.now().isoformat()
         with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
             yaml.dump(self.param, stream)
 
