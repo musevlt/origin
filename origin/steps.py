@@ -233,23 +233,24 @@ class Preprocessing(Step):
 
     def run(self, orig, dct_order=10, dct_approx=False):
         self._loginfo('DCT computation')
-        cube_faint, cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var,
-                                            dct_approx)
-        cube_faint[orig.mask] = np.nan
+        cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx)
+        data = orig.cube_raw - cont_dct
+        data[orig.mask] = np.nan
 
         # compute standardized data
         self._loginfo('Data standardizing')
         std = np.sqrt(orig.var)
         cont_dct /= std
 
-        mean = np.nanmean(cube_faint, axis=(1, 2))
+        mean = np.nanmean(data, axis=(1, 2))
         # orig.var[orig.mask] = np.inf
-        cube_std = (cube_faint - mean[:, np.newaxis, np.newaxis]) / std
-        cube_std[orig.mask] = 0
+        data -= mean[:, np.newaxis, np.newaxis]
+        data /= std
+        data[orig.mask] = 0
 
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
-        self.store_cube('cube_std', cube_std)
-        self.store_image('ima_std', cube_std.mean(axis=0))
+        self.store_cube('cube_std', data)
+        self.store_image('ima_std', data.mean(axis=0))
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         self.store_cube('cont_dct', cont_dct)
         self.store_image('ima_dct', cont_dct.mean(axis=0))

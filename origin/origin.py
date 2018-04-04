@@ -627,7 +627,7 @@ class ORIGIN(steps.LogMixin):
                          '%s/Cat3_spectra.fits' % self.outpath,
                          idlist=self.Cat3_lines['num_line'])
 
-        self._loginfo("Current session saved in %s" % self.outpath)
+        self._loginfo("Current session saved in %s", self.outpath)
 
     def plot_areas(self, ax=None, **kwargs):
         """ Plot the 2D segmentation for PCA from self.step02_areas()

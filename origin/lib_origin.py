@@ -178,6 +178,9 @@ def dct_residual(w_raw, order, var, approx):
     """
     nl = w_raw.shape[0]
     D0 = DCTMAT(nl, order)
+    shape = w_raw.shape[1:]
+    nspec = np.prod(shape)
+
     if approx:
         # Compute the DCT transformation, without using the variance.
         #
@@ -194,7 +197,7 @@ def dct_residual(w_raw, order, var, approx):
         # D0 is typically 3681x11 elements, so it is much more efficient
         # to compute D0^t.S first (note the array is reshaped below)
         cont = [multi_dot([D0, D0.T, w_raw[:, y, x]])
-                for y, x in np.ndindex(w_raw.shape[1:])]
+                for y, x in ProgressBar(np.ndindex(shape), total=nspec)]
 
         # For reference, this is identical to the following scipy version,
         # though scipy is 2x slower than tensordot (probably because it
@@ -230,11 +233,9 @@ def dct_residual(w_raw, order, var, approx):
                            inv(np.dot(D0T / var[:, y, x], D0)),
                            D0T,
                            w_raw_var[:, y, x]])
-                for y, x in np.ndindex(w_raw.shape[1:])]
+                for y, x in ProgressBar(np.ndindex(shape), total=nspec)]
 
-    cont = np.stack(cont).T.reshape(w_raw.shape)
-    Faint = w_raw - cont
-    return Faint, cont
+    return np.stack(cont).T.reshape(w_raw.shape)
 
 
 def createradvar(cu, ot):
