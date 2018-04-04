@@ -23,7 +23,6 @@ import yaml
 
 from astropy.io import fits
 from collections import OrderedDict
-from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
@@ -31,6 +30,7 @@ from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from mpdaf.tools import write_hdulist_to
 
 from . import steps
+from .lib_origin import timeit
 from .version import __version__
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
@@ -270,6 +270,7 @@ class ORIGIN(steps.LogMixin):
                    segmap=segmap, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
+    @timeit
     def load(cls, folder, newname=None, loglevel=None, logcolor=None):
         """Load a previous session of ORIGIN.
 
@@ -296,8 +297,6 @@ class ORIGIN(steps.LogMixin):
 
         with open('%s/%s.yaml' % (folder, name), 'r') as stream:
             param = yaml.load(stream)
-
-        param['load_date'] = datetime.now().isoformat()
 
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -522,6 +521,7 @@ class ORIGIN(steps.LogMixin):
                     info('mean FWHM of the FSFs (field %d) = %.2f pixels',
                          n, FWHM_PSF[n])
 
+    @timeit
     def write(self, path=None, erase=False):
         """Save the current session in a folder that will have the name of the
         ORIGIN object (self.name)
@@ -575,7 +575,6 @@ class ORIGIN(steps.LogMixin):
             step.dump(self.outpath)
 
         # parameters in .yaml
-        self.param['dump_date'] = datetime.now().isoformat()
         with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
             yaml.dump(self.param, stream)
 
