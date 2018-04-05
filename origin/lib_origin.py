@@ -155,7 +155,7 @@ def DCTMAT(nl, order):
 
 
 @timeit
-def dct_residual(w_raw, order, var, approx):
+def dct_residual(w_raw, order, var, approx, mask):
     """Function to compute the residual of the DCT on raw data.
 
     Parameters
@@ -228,12 +228,21 @@ def dct_residual(w_raw, order, var, approx):
         #     for i in range(w_raw.shape[1]) for j in range(w_raw.shape[2]))
         # cont = np.asarray(cont).T.reshape(w_raw.shape)
 
+        # map of valid spaxels, i.e. spaxels with at least one valid value
+        valid = ~np.all(mask, axis=0)
+        zeros = np.zeros(nl)
+
         from numpy.linalg import inv
-        cont = [multi_dot([D0,
-                           inv(np.dot(D0T / var[:, y, x], D0)),
-                           D0T,
-                           w_raw_var[:, y, x]])
-                for y, x in ProgressBar(np.ndindex(shape), total=nspec)]
+        cont = []
+        for y, x in ProgressBar(np.ndindex(shape), total=nspec):
+            if valid[y, x]:
+                res = multi_dot([D0,
+                                 inv(np.dot(D0T / var[:, y, x], D0)),
+                                 D0T,
+                                 w_raw_var[:, y, x]])
+                cont.append(res)
+            else:
+                cont.append(zeros)
 
     return np.stack(cont).T.reshape(w_raw.shape)
 

@@ -233,7 +233,8 @@ class Preprocessing(Step):
 
     def run(self, orig, dct_order=10, dct_approx=False):
         self._loginfo('DCT computation')
-        cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx)
+        cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
+                                orig.mask)
         data = orig.cube_raw - cont_dct
         data[orig.mask] = np.nan
 
