@@ -406,7 +406,7 @@ class ORIGIN(steps.LogMixin):
 
         self.logfile = os.path.join(self.outpath, self.name + '.log')
         self.file_handler = RotatingFileHandler(self.logfile, 'a', 1000000, 1)
-        self.file_handler.setLevel(logging.INFO)
+        self.file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s %(message)s')
         self.file_handler.setFormatter(formatter)
         logger.addHandler(self.file_handler)
