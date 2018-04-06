@@ -216,6 +216,7 @@ class ORIGIN(steps.LogMixin):
         self._read_profiles(profiles)
 
         # FSF
+        self.param['fieldmap'] = fieldmap
         self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF)
 
         # additional images
