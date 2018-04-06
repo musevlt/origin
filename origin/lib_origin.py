@@ -1030,9 +1030,12 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         weights = [None]
 
     nfields = len(PSF_Moffat)
+    fields = range(nfields)
+    if nfields > 1:
+        fields = ProgressBar(fields)
 
     with Parallel(n_jobs=threads) as parallel:
-        for nf in range(nfields):
+        for nf in fields:
             res = parallel(ProgressBar([
                 delayed(_convolve_fsf)(PSF_Moffat[nf][i], cube[i],
                                        sigma[i], weights=weights[nf])
