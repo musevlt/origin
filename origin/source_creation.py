@@ -73,12 +73,8 @@ def create_source(source_id, source_table, line_table, origin_params,
     source_info = source_table[source_table['ID'] == source_id][0]
     source_lines = line_table[line_table['ID'] == source_id]
 
-    data_cube = Cube(origin_params['cubename']).subcube(
-        (source_info['dec'], source_info['ra']), size=size, unit_size=u.arcsec
-    )
-    cube_correl = Cube(cube_cor_filename).subcube(
-        (source_info['dec'], source_info['ra']), size=size, unit_size=u.arcsec
-    )
+    data_cube = Cube(origin_params['cubename'])
+    cube_correl = Cube(cube_cor_filename)
 
     source = Source.from_data(
         source_info['ID'], source_info['ra'], source_info['dec'],
@@ -164,8 +160,9 @@ def create_source(source_id, source_table, line_table, origin_params,
         "OR input, purity")
 
     # Mini-cubes
-    source.cubes["MUSE_CUBE"] = data_cube
-    source.cubes["ORI_CORREL"] = cube_correl
+    source.add_cube(data_cube, "MUSE_CUBE", size=size, unit_size=u.arcsec,
+                    add_white=True)
+    source.add_cube(cube_correl, "ORI_CORREL", size=size, unit_size=u.arcsec)
 
     # Table of sources around the exported sources.
     y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
@@ -178,11 +175,8 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.tables['ORI_CAT'] = source_table['ID', 'ra', 'dec'][nearby_sources]
 
     # Maps
-    # No need to use add_white_image or add_cube as we already have the
-    # sub-cubes.
-    source.images["MUSE_WHITE"] = data_cube.mean(axis=0)
-    # The MAXMAP is the max of the correlation cube
-    source.images["ORI_MAXMAP"] = cube_correl.max(axis=0)
+    # The white map was added when adding the MUSE cube.
+    source.images["ORI_MAXMAP"] = source.cubes['ORI_CORREL'].max(axis=0)
     # Using add_image, the image size is taken from the white map.
     source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
@@ -196,7 +190,8 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False)
     source.spectra['ORI_CORR'] = (
-        cube_correl * source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+        source.cubes["ORI_CORREL"] *
+        source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
     source.add_FSF(data_cube, fieldmap=fieldmap_filename)
