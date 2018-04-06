@@ -27,7 +27,6 @@ from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
-from mpdaf.tools import write_hdulist_to
 
 from . import steps
 from .lib_origin import timeit
@@ -616,7 +615,7 @@ class ORIGIN(steps.LogMixin):
                 hdu = spectra[idx].get_stat_hdu(name='STAT%d' % spec_id)
                 if hdu is not None:
                     hdulist.append(hdu)
-            write_hdulist_to(hdulist, outname, overwrite=True)
+            hdulist.writeto(outname, overwrite=True)
 
         if self.spectra is not None:
             save_spectra(self.spectra, '%s/spectra.fits' % self.outpath)
