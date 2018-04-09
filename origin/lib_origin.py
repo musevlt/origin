@@ -1068,9 +1068,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         norm_fft = _convolve_spectral(parallel, threads, norm_fsf, fshape,
                                       func=fft.rfftn)
 
-    # cube_fft, norm_fft = Parallel(n_jobs=min(2, threads), backend='threading')(
-    #     delayed(fft.rfftn)(arr, fshape, axes=(0,))
-    #     for arr in (cube_fsf, norm_fsf))
+    cube_fsf = norm_fsf = res = None
 
     cube_fft = cube_fft.reshape(cube_fft.shape[0], -1)
     norm_fft = norm_fft.reshape(norm_fft.shape[0], -1)
