@@ -196,8 +196,7 @@ class ORIGIN(steps.LogMixin):
         self.mask = cub._mask
 
         # variance - set to Inf the Nan
-        self.var = cub._var
-        self.var[np.isnan(self.var)] = np.inf
+        self.var = cub.var.filled(np.inf)
 
         # RA-DEC coordinates
         self.wcs = cub.wcs
@@ -411,6 +410,7 @@ class ORIGIN(steps.LogMixin):
         logger.addHandler(self.file_handler)
 
     def set_loglevel(self, level):
+        """Set the logging level for the console logger."""
         handler = next(h for h in self.logger.handlers
                        if isinstance(h, logging.StreamHandler))
         handler.setLevel(level)
@@ -557,15 +557,16 @@ class ORIGIN(steps.LogMixin):
         # PSF
         if isinstance(self.PSF, list):
             for i, psf in enumerate(self.PSF):
-                Cube(data=psf, mask=np.ma.nomask).write(
-                    '%s' % self.outpath + '/cube_psf_%02d.fits' % i)
+                Cube(data=psf, mask=np.ma.nomask, copy=False).write(
+                    os.path.join(self.outpath, 'cube_psf_%02d.fits' % i))
         else:
-            Cube(data=self.PSF, mask=np.ma.nomask).write(
-                '%s' % self.outpath + '/cube_psf.fits')
+            Cube(data=self.PSF, mask=np.ma.nomask, copy=False).write(
+                os.path.join(self.outpath, 'cube_psf.fits'))
+
         if self.wfields is not None:
             for i, wfield in enumerate(self.wfields):
                 Image(data=wfield, mask=np.ma.nomask).write(
-                    '%s' % self.outpath + '/wfield_%02d.fits' % i)
+                    os.path.join(self.outpath, 'wfield_%02d.fits' % i))
 
         if self.ima_white is not None:
             self.ima_white.write('%s/ima_white.fits' % self.outpath)

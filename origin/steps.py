@@ -165,6 +165,7 @@ class Step(LogMixin):
                 obj = getattr(self.orig, name)
                 if obj is not None:
                     outf = '{}/{}'.format(outpath, name)
+                    self.logger.debug('   - %s', name)
                     if kind in ('cube', 'image'):
                         try:
                             obj.write(outf + '.fits', convert_float32=False)
@@ -512,7 +513,6 @@ class ComputeTGLR(Step):
 
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
-        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
         correl, profile, correl_min = Correlation_GLR_test(
             orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
             orig.profiles, ncpu)
@@ -532,6 +532,7 @@ class ComputeTGLR(Step):
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
+        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
         cube_local_max, cube_local_min = Compute_local_max_zone(
             correl, correl_min, orig.mask, intx, inty, NbSubcube, neighbors)
         self._loginfo('Save self.cube_local_max from max correlations')
