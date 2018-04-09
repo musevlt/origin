@@ -229,8 +229,7 @@ def dct_residual(w_raw, order, var, approx, mask):
         # cont = np.asarray(cont).T.reshape(w_raw.shape)
 
         # map of valid spaxels, i.e. spaxels with at least one valid value
-        valid = ~np.all(mask, axis=0)
-        zeros = np.zeros(nl)
+        valid = ~np.any(mask, axis=0)
 
         from numpy.linalg import inv
         cont = []
@@ -240,9 +239,9 @@ def dct_residual(w_raw, order, var, approx, mask):
                                  inv(np.dot(D0T / var[:, y, x], D0)),
                                  D0T,
                                  w_raw_var[:, y, x]])
-                cont.append(res)
             else:
-                cont.append(zeros)
+                res = multi_dot([D0, D0.T, w_raw[:, y, x]])
+            cont.append(res)
 
     return np.stack(cont).T.reshape(w_raw.shape)
 
