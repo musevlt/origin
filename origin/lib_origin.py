@@ -2596,7 +2596,7 @@ def unique_sources(table):
 
 
 def unique_lines(table):
-    """Find index of unique (non dulicated) lines.
+    """Return indices of unique (non duplicated) lines.
 
     ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
     set to the very same (x, y, z) position when computing the optimal
