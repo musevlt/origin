@@ -1072,7 +1072,7 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
     cube_fft = cube_fft.reshape(cube_fft.shape[0], -1)
     norm_fft = norm_fft.reshape(norm_fft.shape[0], -1)
-    profile = np.empty((Nz, Ny * Nx), dtype=np.int)
+    profile = np.empty((Nz, Ny * Nx), dtype=np.uint8)
     correl = np.full((Nz, Ny * Nx), -np.inf)
     correl_min = np.full((Nz, Ny * Nx), np.inf)
 

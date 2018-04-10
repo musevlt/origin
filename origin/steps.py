@@ -523,11 +523,10 @@ class ComputeTGLR(Step):
         self._loginfo('Save the number of profile associated to the TGLR'
                       ' in self.cube_profile')
         profile[orig.mask] = 0
-        self.store_cube('cube_profile', profile.astype(int))
+        self.store_cube('cube_profile', profile)
 
         self._loginfo('Save the map of maxima in self.maxmap')
-        carte_2D_correl = np.amax(orig.cube_correl._data, axis=0)
-        self.store_image('maxmap', carte_2D_correl)
+        self.store_image('maxmap', np.amax(correl, axis=0))
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
