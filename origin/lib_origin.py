@@ -2596,7 +2596,7 @@ def unique_sources(table):
 
 
 def unique_lines(table):
-    """Find index on unique (non dulicated lines).
+    """Find index of unique (non dulicated) lines.
 
     ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
     set to the very same (x, y, z) position when computing the optimal
@@ -2606,8 +2606,7 @@ def unique_lines(table):
     keeping only the purest one when there are duplicates. The indices are
     sorted by ID and z position in the line table.
 
-
-cc
+    Parameters
     ----------
     table: astropy.table.Table
         A table of lines from ORIGIN. The table must contain the columns ID, x,
