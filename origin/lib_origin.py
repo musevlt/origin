@@ -2595,15 +2595,16 @@ def unique_sources(table):
                                           "line_merged_flag"])
 
 
-def remove_identical_duplicates(table):
-    """Remove strictly identical duplicated lines.
+def unique_lines(table):
+    """Return indices of unique (non duplicated) lines.
 
     ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
     set to the very same (x, y, z) position when computing the optimal
     position.
 
-    For such duplicates, this function only keep the line with the highest
-    purity.
+    Given a line table, this function returns the indices of unique lines,
+    keeping only the purest one when there are duplicates. The indices are
+    sorted by ID and z position in the line table.
 
     Parameters
     ----------
@@ -2613,11 +2614,15 @@ def remove_identical_duplicates(table):
 
     Returns
     -------
-    astropy.table.Table
-        Table with only unique (x, y, z) rows.
+    idx: numpy.array of int
+        Indices of unique lines.
 
     """
     table = table.copy()
+
+    # We add a column with the original indices because we will sort the table
+    # by ID and z.
+    table['original_idx'] = np.arange(len(table), dtype=int)
 
     # Sort by decreasing purity
     table.sort('purity')
@@ -2626,10 +2631,10 @@ def remove_identical_duplicates(table):
     # Find position of first unique (x, y, z)
     _, idx = np.unique(table['x', 'y', 'z'], axis=0, return_index=True)
 
-    result = table[idx].copy()
-    result.sort(['ID', 'z'])
+    table = table[idx]
+    table.sort(['ID', 'z'])
 
-    return result
+    return table['original_idx'].data
 
 
 def merge_similar_lines(table, *, z_pix_threshold=5):
@@ -2713,54 +2718,6 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     table.sort(['ID', 'z'])
 
     return table
-
-
-def trim_spectrum_list(line_table, spectra, profile_fwhm, *, size_fwhm=6):
-    """Keep only relevant spectra and limit their extent around the line.
-
-    The “compute spectra” step creates a list of spectra (data and variance)
-    associated to each line.  These spectra are based on the full MUSE
-    wavelength grid.  This function:
-
-    - limits the spectra list to the list of lines present in the line_table
-      (e.g. if the table was processed by remove_identical_duplicates the
-      duplicated spectra will be removed);
-    - limit the wavelength grid of the spectra around the associated line.
-
-    TODO: Include the limiting of the spectra in the spectrum computation code.
-
-    Parameters
-    ----------
-    line_table: astropy.table.Table
-        An ORIGIN table of lines, this table must contain the columns:
-        num_line, profile, and z.
-    spectra: List[mpdaf.obj.spectrum.Spectrum]
-        List of spectrum object associated to each line. The index in the list
-        must be the num_line of the associated line in the line table.
-    profile_fwhm: list
-        List of the profile FWHMs in pixels. The index in the list is the
-        profile number.
-    size_fwhm: float
-        The length of the spectrum to extract around the line in FWHM factor.
-
-    Returns
-    -------
-    List[mpdaf.obj.spectrum.Spectrum]
-        List of spectrum objects.  The index in the list correspond to the
-        index of the line in the line_table.
-
-    """
-    radius = np.ceil(np.array(profile_fwhm) * size_fwhm / 2)
-
-    result = []
-
-    for row in line_table:
-        num_line, line_profile, line_z = row[['num_line', 'profile', 'z']]
-        sp = spectra[num_line]
-        result.append(sp.subspec(line_z - radius[line_profile],
-                                 line_z + radius[line_profile], unit=None))
-
-    return result
 
 
 def create_masks(line_table, source_table, profile_fwhm, cube_correl,

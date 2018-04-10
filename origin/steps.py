@@ -31,9 +31,8 @@ from .lib_origin import (
     Estimation_Line,
     merge_similar_lines,
     Purity_Estimation,
-    remove_identical_duplicates,
     Spatial_Segmentation,
-    trim_spectrum_list,
+    unique_lines,
     unique_sources,
 )
 
@@ -771,6 +770,9 @@ class ComputeSpectra(Step):
     ----------
     grid_dxy : int
         Maximum spatial shift for the grid
+    spectrum_size_fwhm: float
+        The length of the spectrum to keep around each line as a factor of
+        the fitted line FWHM.
 
     Returns
     -------
@@ -788,7 +790,7 @@ class ComputeSpectra(Step):
     attrs = ('Cat2', 'spectra')
     require = ('detection_lost', )
 
-    def run(self, orig, grid_dxy=0):
+    def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
         orig.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
@@ -796,17 +798,36 @@ class ComputeSpectra(Step):
         )
 
         self._loginfo('Purity estimation')
-        orig.Cat2 = Purity_Estimation(orig.Cat2,
-                                      [orig.Pval_r, orig.Pval_r_comp],
-                                      [orig.index_pval, orig.index_pval_comp])
+        tmp_Cat2 = Purity_Estimation(orig.Cat2,
+                                     [orig.Pval_r, orig.Pval_r_comp],
+                                     [orig.index_pval, orig.index_pval_comp])
+        # Remove duplicated lines
+        unique_idx = unique_lines(tmp_Cat2)
+        orig.Cat2 = tmp_Cat2[unique_idx]
+        Cat_est_line_raw_T = np.array(Cat_est_line_raw_T)[unique_idx]
+        Cat_est_line_var_T = np.array(Cat_est_line_var_T)[unique_idx]
+
         _format_cat(orig.Cat2)
+
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
                       len(orig.Cat2))
+        self._loginfo('%d lines were removed for being duplicates.',
+                      len(tmp_Cat2) - len(orig.Cat2))
 
-        orig.spectra = [
-            Spectrum(data=data, var=vari, wave=orig.wave, mask=np.ma.nomask)
-            for data, vari in zip(Cat_est_line_raw_T, Cat_est_line_var_T)
-        ]
+        # Radius for spectrum trimming
+        radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
+                         / 2).astype(int)
+
+        orig.spectra = []
+        for line_idx, (data, vari) in enumerate(zip(Cat_est_line_raw_T,
+                                                    Cat_est_line_var_T)):
+            line_profile, line_z = orig.Cat2[line_idx]['profile', 'z']
+            line_z_min = line_z - radius[line_profile]
+            line_z_max = line_z + radius[line_profile]
+            orig.spectra.append(Spectrum(
+                data=data, var=vari, wave=orig.wave, mask=np.ma.nomask
+            ).subspec(line_z_min, line_z_max, unit=None))
+
         self._loginfo('Save estimated spectrum of each line in self.spectra')
         self.outputs['table'].append('Cat2')
 
@@ -816,52 +837,35 @@ class CleanResults(Step):
 
     This step does several things to “clean” the results of ORIGIN:
 
-    - The Cat2 line table may contain several lines found at the very same
-      x, y, z position in the cube. Only the line with the highest purity
-      is kept in the table.
     - Some lines are associated to the same source but are very near
       considering their z positions.  The lines are all marked as merged in
       the brightest line of the group (but are kept in the line table).
-    - The FITS file containing the spectra is cleaned to keep only the
-      lines from the cleaned line table. The spectrum around each line
-      is trimmed around the line position.
     - A table of unique sources is created.
 
     Attributes added to the ORIGIN object:
     - `Cat3_lines`: clean table of lines;
     - `Cat3_sources`: table of unique sources
-    - `Cat3_spectra`: trimmed spectra. For a given <num_line>, the
-      spectrum is in `DATA<num_line>` extension and the variance in
-      the `STAT<num_line>` extension.
 
     Parameters
     ----------
     merge_lines_z_threshold: int
         z axis pixel threshold used when merging similar lines.
-    spectrum_size_fwhm: float
-        The length of the spectrum to keep around each line as a factor of
-        the fitted line FWHM.
 
     """
 
     name = 'clean_results'
     desc = 'Results cleaning'
-    attrs = ('Cat3_lines', 'Cat3_sources', 'Cat3_spectra')
+    attrs = ('Cat3_lines', 'Cat3_sources')
     require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
-        unique_lines = remove_identical_duplicates(orig.Cat2)
-        orig.Cat3_lines = merge_similar_lines(unique_lines)
+        orig.Cat3_lines = merge_similar_lines(orig.Cat2)
         orig.Cat3_sources = unique_sources(orig.Cat3_lines)
 
         self._loginfo('Save the unique source catalogue in self.Cat3_sources'
                       ' (%d lines)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
-
-        orig.Cat3_spectra = trim_spectrum_list(
-            orig.Cat3_lines, orig.spectra, orig.FWHM_profiles,
-            size_fwhm=spectrum_size_fwhm)
 
         self.outputs['table'].extend(['Cat3_lines', 'Cat3_sources'])
 
@@ -977,7 +981,7 @@ class SaveSources(Step):
             cube_cor_filename=os.path.join(outpath, 'cube_correl.fits'),
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
-            spectra_fits_filename=os.path.join(outpath, 'Cat3_spectra.fits'),
+            spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),
