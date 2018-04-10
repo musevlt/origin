@@ -8,6 +8,7 @@ import warnings
 
 from astropy.io import fits
 from astropy.table import vstack, Table
+from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
@@ -50,48 +51,27 @@ def _format_cat(cat):
     return cat
 
 
-def save_spectra(spectra, outname, *, idlist=None):
+def save_spectra(spectra, outname):
+    """ The spectra are saved to a FITS file with two extension per
+    spectrum, a DATA<ID> one and a STAT<ID> one.
     """
-    The spectra are saved to a FITS file with two extension per
-    spectrum, a DATA<ID> one and a STAT<ID> one. If no idlist is
-    provided, the ID is the index of the spectrum in the spectra list.
-    If an idlist is provided, the ID in the value of the list at the
-    index of the spectrum.
-
-    This is important because the ID in the extension names is the
-    num_line identifying the lines.
-    """
-    if idlist is None:
-        idlist = np.arange(len(spectra))
-
     hdulist = fits.HDUList([fits.PrimaryHDU()])
 
-    for idx, spec_id in enumerate(idlist):
-        hdu = spectra[idx].get_data_hdu(name='DATA%d' % spec_id,
-                                        savemask='nan')
+    for spec_id, sp in spectra.items():
+        hdu = sp.get_data_hdu(name='DATA%d' % spec_id, savemask='nan')
         hdulist.append(hdu)
-        hdu = spectra[idx].get_stat_hdu(name='STAT%d' % spec_id)
+        hdu = sp.get_stat_hdu(name='STAT%d' % spec_id)
         if hdu is not None:
             hdulist.append(hdu)
     hdulist.writeto(outname, overwrite=True)
 
 
-def load_spectra(filename, *, idlist=None):
-    """
-    If no idlist is provided, all the extensions are read as
-    a succession of DATA / STAT parts or a spectrum.
-
-    If an idlist is provided, the extensions DATA<ID> and STAT<ID> for
-    each ID is read and the resulting spectrum is appended to the list.
-    """
-    spectra = []
-    with fits.open(filename) as fspectra:
-        if idlist is None:
-            idlist = np.arange(len(fspectra) // 2)
-
-        for i in idlist:
-            spectra.append(Spectrum(hdulist=fspectra,
-                                    ext=('DATA%d' % i, 'STAT%d' % i)))
+def load_spectra(filename):
+    spectra = OrderedDict()
+    with fits.open(filename) as hdul:
+        for i in range(1, len(hdul), 2):
+            spec_id = int(hdul[i].name[4:])
+            spectra[spec_id] = Spectrum(hdulist=hdul, ext=(i, i+1))
     return spectra
 
 
@@ -139,7 +119,7 @@ class DataObj:
                 elif kind == 'array':
                     val = np.loadtxt(val, ndmin=1)
                 elif kind == 'spectra':
-                    val = load_spectra(val, idlist=obj.orig.Cat2['num_line'])
+                    val = load_spectra(val)
                 obj.__dict__[self.label] = val
             else:
                 val = None
@@ -269,7 +249,7 @@ class Step(LogMixin, metaclass=StepMeta):
                 elif kind in ('array', ):
                     np.savetxt(outf, obj)
                 elif kind in ('spectra', ):
-                    save_spectra(obj, outf, idlist=self.orig.Cat2['num_line'])
+                    save_spectra(obj, outf)
 
                 # delete the object to free its memory. it will reloaded
                 # automatically if needed.
@@ -932,15 +912,16 @@ class ComputeSpectra(Step):
         radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
                          / 2).astype(int)
 
-        self.spectra = []
+        self.spectra = OrderedDict()
         for line_idx, (data, vari) in enumerate(zip(Cat_est_line_raw_T,
                                                     Cat_est_line_var_T)):
-            line_profile, line_z = self.Cat2[line_idx]['profile', 'z']
-            line_z_min = line_z - radius[line_profile]
-            line_z_max = line_z + radius[line_profile]
-            self.spectra.append(Spectrum(
+            profile, z, num_line = self.Cat2[line_idx]['profile', 'z',
+                                                       'num_line']
+            line_z_min = z - radius[profile]
+            line_z_max = z + radius[profile]
+            self.spectra[num_line] = Spectrum(
                 data=data, var=vari, wave=orig.wave, mask=np.ma.nomask
-            ).subspec(line_z_min, line_z_max, unit=None))
+            ).subspec(line_z_min, line_z_max, unit=None)
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
 
