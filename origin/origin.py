@@ -161,7 +161,7 @@ class ORIGIN(steps.LogMixin):
     def __init__(self, filename, segmap, name='origin', path='.',
                  loglevel='DEBUG', logcolor=False, fieldmap=None,
                  profiles=None, PSF=None, FWHM_PSF=None, param=None,
-                 imawhite=None, spectra=None, Cat3_spectra=None):
+                 imawhite=None, spectra=None):
 
         self.path = path
         self.name = name
@@ -221,7 +221,6 @@ class ORIGIN(steps.LogMixin):
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
 
         self.spectra = spectra
-        self.Cat3_spectra = Cat3_spectra
         self._loginfo('00 Done')
 
     @classmethod
@@ -346,11 +345,6 @@ class ORIGIN(steps.LogMixin):
                                             ext=('DATA%d' % i, 'STAT%d' % i)))
             return spectra
 
-        if os.path.isfile('%s/spectra.fits' % folder):
-            spectra = load_spectra('%s/spectra.fits' % folder)
-        else:
-            spectra = None
-
         if newname is not None:
             # copy outpath to the new path
             shutil.copytree(os.path.join(path, name),
@@ -364,7 +358,7 @@ class ORIGIN(steps.LogMixin):
                   loglevel=loglevel, logcolor=logcolor,
                   filename=param['cubename'], fieldmap=wfields,
                   profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                  imawhite=ima_white, segmap=param['segmap'], spectra=spectra)
+                  imawhite=ima_white, segmap=param['segmap'])
 
         for step in obj.steps.values():
             step.load(obj.outpath)
@@ -390,10 +384,9 @@ class ORIGIN(steps.LogMixin):
             if obj.det_correl_min.shape == (3,):
                 obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
 
-        # step10
-        if os.path.isfile('%s/Cat3_spectra.fits' % folder):
-            obj.Cat3_spectra = load_spectra('%s/Cat3_spectra.fits' % folder,
-                                            idlist=obj.Cat3_lines['num_line'])
+        if os.path.isfile('%s/spectra.fits' % folder):
+            obj.spectra = load_spectra('%s/spectra.fits' % folder,
+                                       idlist=obj.Cat2['num_line'])
 
         return obj
 
@@ -620,13 +613,8 @@ class ORIGIN(steps.LogMixin):
             hdulist.writeto(outname, overwrite=True)
 
         if self.spectra is not None:
-            save_spectra(self.spectra, '%s/spectra.fits' % self.outpath)
-
-        # step 10
-        if self.Cat3_spectra is not None:
-            save_spectra(self.Cat3_spectra,
-                         '%s/Cat3_spectra.fits' % self.outpath,
-                         idlist=self.Cat3_lines['num_line'])
+            save_spectra(self.spectra, '%s/spectra.fits' % self.outpath,
+                         idlist=self.Cat2['num_line'])
 
         self._loginfo("Current session saved in %s", self.outpath)
 
