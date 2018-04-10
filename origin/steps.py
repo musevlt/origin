@@ -67,11 +67,63 @@ class Status(Enum):
     NOTRUN = 'not run yet'
     RUN = 'run'
     DUMPED = 'dumped outputs'
-    # LOADED = 'reloaded outputs'
     FAILED = 'failed'
 
 
-class Step(LogMixin):
+class DataObj:
+
+    def __init__(self, kind):
+        # Note: self.label is set by the metaclass
+        self.kind = kind
+
+    def __get__(self, obj, owner=None):
+        print(f'get {obj.idx} {self.label}')
+        try:
+            val = obj.orig.__dict__[self.label]
+        except KeyError:
+            return
+
+        if isinstance(val, str):
+            if os.path.isfile(val):
+                kind = self.kind
+                if kind == 'cube':
+                    val = Cube(val)
+                if kind == 'image':
+                    val = Image(val)
+                elif kind == 'table':
+                    val = _format_cat(Table.read(val))
+                elif kind == 'array':
+                    val = np.loadtxt(val, ndmin=1)
+                # TODO: spectra ?
+                obj.orig.__dict__[self.label] = val
+            else:
+                val = None
+
+        return val
+
+    def __set__(self, obj, val):
+        print(f'set {obj.idx} {self.label} {val}')
+        obj.orig.__dict__[self.label] = val
+
+    def __delete__(self, obj):
+        del obj.orig.__dict__[self.label]
+
+
+class StepMeta(type):
+
+    def __new__(cls, name, bases, attrs):
+        # find all descriptors, auto-set their labels
+        descr = []
+        for n, inst in attrs.items():
+            if isinstance(inst, DataObj):
+                inst.label = n
+                descr.append(n)
+        print(f'Step {name}: {descr}')
+        attrs['_dataobjs'] = descr
+        return super(StepMeta, cls).__new__(cls, name, bases, attrs)
+
+
+class Step(LogMixin, metaclass=StepMeta):
     """Define a processing step."""
 
     """Name of the function to run the step."""
@@ -80,11 +132,8 @@ class Step(LogMixin):
     """Description of the step."""
     desc = None
 
-    """Step requirement (not implemented yet!)."""
+    """List of required steps (that must be run before)."""
     require = None
-
-    """Objects created by the processing step."""
-    attrs = tuple()
 
     def __init__(self, orig, idx, param):
         self.logger = logging.getLogger(__name__)
@@ -96,8 +145,8 @@ class Step(LogMixin):
         self.meta.setdefault('stepidx', idx)
         self.param = self.meta.setdefault('params', {})
         self.outputs = self.meta.setdefault('outputs', defaultdict(list))
-        for attr in self.attrs:
-            setattr(orig, attr, None)
+        # for attr in self._dataobjs:
+        #     setattr(orig, attr, getattr(self, attr))
 
     def __repr__(self):
         return 'Step {:02d}: <{}(status: {})>'.format(
@@ -148,41 +197,48 @@ class Step(LogMixin):
     def store_cube(self, name, data, **kwargs):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
-        setattr(self.orig, name, cube)
+        setattr(self, name, cube)
         self.outputs['cube'].append(name)
 
     def store_image(self, name, data, **kwargs):
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
-        setattr(self.orig, name, im)
+        setattr(self, name, im)
         self.outputs['image'].append(name)
 
     def dump(self, outpath):
         if self.status is not Status.RUN:
+            # If the step was not run, there is nothing to dump
             return
 
         self.logger.debug('%s - DUMP', self.method_name)
         for kind, names in self.outputs.items():
             for name in names:
-                obj = getattr(self.orig, name)
+                obj = getattr(self, name)
                 if obj is not None:
-                    outf = '{}/{}'.format(outpath, name)
+                    outf = '{}/{}.{}'.format(
+                        outpath, name, 'txt' if kind == 'array' else 'fits')
                     self.logger.debug('   - %s', name)
                     if kind in ('cube', 'image'):
                         try:
-                            obj.write(outf + '.fits', convert_float32=False)
+                            obj.write(outf, convert_float32=False)
                         except TypeError:
                             warnings.warn('MPDAF version too old to support '
                                           'the new type conversion parameter, '
                                           'data will be saved as float32.')
-                            obj.write(outf + '.fits')
+                            obj.write(outf)
                     elif kind in ('table', ):
-                        obj.write(outf + '.fits', overwrite=True)
+                        obj.write(outf, overwrite=True)
                     elif kind in ('array', ):
-                        np.savetxt(outf + '.txt', obj)
+                        np.savetxt(outf, obj)
+
+                    # delete the object to free its memory. it will reloaded
+                    # automatically if needed.
+                    obj = outf
         self.status = Status.DUMPED
 
     def load(self, outpath):
         if self.status is not Status.DUMPED:
+            # If the step was not dumped previously, there is nothing to load
             return
 
         self.logger.debug('%s - LOAD', self.method_name)
@@ -190,19 +246,9 @@ class Step(LogMixin):
             for name in names:
                 outf = '{}/{}.{}'.format(outpath, name,
                                          'txt' if kind == 'array' else 'fits')
-                if os.path.isfile(outf):
-                    if kind == 'cube':
-                        obj = Cube(outf)
-                    if kind == 'image':
-                        obj = Image(outf)
-                    elif kind == 'table':
-                        obj = _format_cat(Table.read(outf))
-                    elif kind == 'array':
-                        obj = np.loadtxt(outf, ndmin=1)
-                else:
-                    obj = None
-                setattr(self.orig, name, obj)
-        # self.status = Status.LOADED
+                # we just set the paths here, the data will be loaded only if
+                # the attribute is accessed.
+                setattr(self, name, outf)
 
 
 class Preprocessing(Step):
@@ -231,7 +277,10 @@ class Preprocessing(Step):
 
     name = 'preprocessing'
     desc = 'Preprocessing'
-    attrs = ('cube_std', 'cube_dct')
+    cube_std = DataObj('cube')
+    cont_dct = DataObj('cube')
+    ima_std = DataObj('image')
+    ima_dct = DataObj('image')
 
     def run(self, orig, dct_order=10, dct_approx=False):
         self._loginfo('DCT computation')
@@ -284,7 +333,7 @@ class CreateAreas(Step):
 
     name = 'areas'
     desc = 'Areas creation'
-    attrs = ('areamap', )
+    areamap = DataObj('image')
 
     def run(self, orig, pfa: "pfa of the test"=.2,
             minsize: "min area size"=100, maxsize: "max area size"=None):
@@ -328,6 +377,7 @@ class CreateAreas(Step):
             nbAreas = len(labels)
         orig.param['nbareas'] = nbAreas
 
+        __import__('pdb').set_trace()
         self.store_image('areamap', areamap)
         self._loginfo('Save the map of areas in self.areamap')
         self._loginfo('%d areas generated', nbAreas)
@@ -360,7 +410,12 @@ class ComputePCAThreshold(Step):
 
     name = 'compute_PCA_threshold'
     desc = 'PCA threshold computation'
-    attrs = ('threshO2', 'testO2', 'histO2', 'binO2', 'meaO2', 'stdO2')
+    thresO2 = DataObj('array')
+    # testO2 = DataObj('array')
+    # histO2 = DataObj('array')
+    # binO2 = DataObj('array')
+    meaO2 = DataObj('array')
+    stdO2 = DataObj('array')
     require = ('preprocessing', 'areas')
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
@@ -428,7 +483,8 @@ class ComputeGreedyPCA(Step):
 
     name = 'compute_greedy_PCA'
     desc = 'Greedy PCA computation'
-    attrs = ('cube_faint', 'mapO2')
+    cube_faint = DataObj('cube')
+    mapO2 = DataObj('image')
     require = ('preprocessing', 'areas', 'compute_PCA_threshold')
 
     def run(self, orig, Noise_population=50,
@@ -498,8 +554,11 @@ class ComputeTGLR(Step):
 
     name = 'compute_TGLR'
     desc = 'GLR test'
-    attrs = ('cube_correl', 'cube_profile', 'cube_local_min',
-             'cube_local_max', 'maxmap')
+    cube_correl = DataObj('cube')
+    cube_profile = DataObj('cube')
+    cube_local_min = DataObj('cube')
+    cube_local_max = DataObj('cube')
+    maxmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
@@ -580,7 +639,10 @@ class ComputePurityThreshold(Step):
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
-    attrs = ('Pval_r', 'index_pval', 'Det_M', 'Det_m')
+    Pval_r = DataObj('array')
+    index_pval = DataObj('array')
+    Det_M = DataObj('array')
+    Det_m = DataObj('array')
     require = ('compute_TGLR', )
 
     def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
@@ -618,7 +680,8 @@ class Detection(Step):
 
     name = 'detection'
     desc = 'Thresholding and spatio-spectral merging'
-    attrs = ('Cat0', 'det_correl_min')
+    Cat0 = DataObj('table')
+    det_correl_min = DataObj('array')
 
     def run(self, orig, threshold=None):
         if threshold is not None:
@@ -676,8 +739,11 @@ class DetectionLost(Step):
 
     name = 'detection_lost'
     desc = 'Thresholding and spatio-spectral merging'
-    attrs = ('Cat1', 'Pval_r_comp', 'index_pval_comp', 'Det_M_comp',
-             'Det_m_comp')
+    Cat1 = DataObj('table')
+    Pval_r_comp = DataObj('array')
+    index_pval_comp = DataObj('array')
+    Det_M_comp = DataObj('array')
+    Det_m_comp = DataObj('array')
     require = ('detection', )
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
@@ -793,7 +859,8 @@ class ComputeSpectra(Step):
 
     name = 'compute_spectra'
     desc = 'Lines estimation'
-    attrs = ('Cat2', 'spectra')
+    Cat2 = DataObj('table')
+    spectra = DataObj('spectra')
     require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
@@ -861,7 +928,8 @@ class CleanResults(Step):
 
     name = 'clean_results'
     desc = 'Results cleaning'
-    attrs = ('Cat3_lines', 'Cat3_sources')
+    Cat3_lines = DataObj('table')
+    Cat3_sources = DataObj('table')
     require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
