@@ -181,10 +181,13 @@ class ORIGIN(steps.LogMixin):
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
         self.steps = OrderedDict()
+        self._dataobjs = {}
         for i, cls in enumerate(steps.STEPS, start=1):
             step = cls(self, i, self.param)
             self.steps[step.name] = step
             self.__dict__[step.method_name] = step
+            for name, _ in step._dataobjs:
+                self._dataobjs[name] = step
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -222,6 +225,14 @@ class ORIGIN(steps.LogMixin):
 
         self.spectra = spectra
         self._loginfo('00 Done')
+
+    def __getattr__(self, name):
+        # Use __getattr__ to provide access to the steps data attribute
+        # via the ORIGIN object. This will also trigger the loading of
+        # the objects if needed.
+        if name in self._dataobjs:
+            return getattr(self._dataobjs[name], name)
+        super().__getattr__(name)
 
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
@@ -379,10 +390,10 @@ class ORIGIN(steps.LogMixin):
                     np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
                     for area in range(1, NbAreas + 1)]
 
-        if obj.det_correl_min is not None:
-            obj.det_correl_min = obj.det_correl_min.astype(int)
-            if obj.det_correl_min.shape == (3,):
-                obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
+        # if obj.det_correl_min is not None:
+        #     obj.det_correl_min = obj.det_correl_min.astype(int)
+        #     if obj.det_correl_min.shape == (3,):
+        #         obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
 
         if os.path.isfile('%s/spectra.fits' % folder):
             obj.spectra = load_spectra('%s/spectra.fits' % folder,

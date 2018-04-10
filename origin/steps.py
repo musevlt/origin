@@ -7,7 +7,6 @@ import time
 import warnings
 
 from astropy.table import vstack, Table
-from collections import defaultdict
 from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
@@ -77,12 +76,12 @@ class DataObj:
         self.kind = kind
 
     def __get__(self, obj, owner=None):
-        print(f'get {obj.idx} {self.label}')
         try:
-            val = obj.orig.__dict__[self.label]
+            val = obj.__dict__[self.label]
         except KeyError:
             return
 
+        print(f'get {obj.idx} {self.label} {val}')
         if isinstance(val, str):
             if os.path.isfile(val):
                 kind = self.kind
@@ -95,7 +94,7 @@ class DataObj:
                 elif kind == 'array':
                     val = np.loadtxt(val, ndmin=1)
                 # TODO: spectra ?
-                obj.orig.__dict__[self.label] = val
+                obj.__dict__[self.label] = val
             else:
                 val = None
 
@@ -103,22 +102,22 @@ class DataObj:
 
     def __set__(self, obj, val):
         print(f'set {obj.idx} {self.label} {val}')
-        obj.orig.__dict__[self.label] = val
+        obj.__dict__[self.label] = val
 
     def __delete__(self, obj):
-        del obj.orig.__dict__[self.label]
+        del obj.__dict__[self.label]
 
 
 class StepMeta(type):
 
     def __new__(cls, name, bases, attrs):
-        # find all descriptors, auto-set their labels
+        # find all descriptors, auto-set their labels and store the list of
+        # descriptors on the instance
         descr = []
         for n, inst in attrs.items():
             if isinstance(inst, DataObj):
                 inst.label = n
-                descr.append(n)
-        print(f'Step {name}: {descr}')
+                descr.append((n, inst.kind))
         attrs['_dataobjs'] = descr
         return super(StepMeta, cls).__new__(cls, name, bases, attrs)
 
@@ -144,9 +143,6 @@ class Step(LogMixin, metaclass=StepMeta):
         self.meta = param.setdefault(self.name, {})
         self.meta.setdefault('stepidx', idx)
         self.param = self.meta.setdefault('params', {})
-        self.outputs = self.meta.setdefault('outputs', defaultdict(list))
-        # for attr in self._dataobjs:
-        #     setattr(orig, attr, getattr(self, attr))
 
     def __repr__(self):
         return 'Step {:02d}: <{}(status: {})>'.format(
@@ -198,12 +194,10 @@ class Step(LogMixin, metaclass=StepMeta):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
         setattr(self, name, cube)
-        self.outputs['cube'].append(name)
 
     def store_image(self, name, data, **kwargs):
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
         setattr(self, name, im)
-        self.outputs['image'].append(name)
 
     def dump(self, outpath):
         if self.status is not Status.RUN:
@@ -211,29 +205,28 @@ class Step(LogMixin, metaclass=StepMeta):
             return
 
         self.logger.debug('%s - DUMP', self.method_name)
-        for kind, names in self.outputs.items():
-            for name in names:
-                obj = getattr(self, name)
-                if obj is not None:
-                    outf = '{}/{}.{}'.format(
-                        outpath, name, 'txt' if kind == 'array' else 'fits')
-                    self.logger.debug('   - %s', name)
-                    if kind in ('cube', 'image'):
-                        try:
-                            obj.write(outf, convert_float32=False)
-                        except TypeError:
-                            warnings.warn('MPDAF version too old to support '
-                                          'the new type conversion parameter, '
-                                          'data will be saved as float32.')
-                            obj.write(outf)
-                    elif kind in ('table', ):
-                        obj.write(outf, overwrite=True)
-                    elif kind in ('array', ):
-                        np.savetxt(outf, obj)
+        for name, kind in self._dataobjs:
+            obj = getattr(self, name)
+            if obj is not None:
+                outf = '{}/{}.{}'.format(
+                    outpath, name, 'txt' if kind == 'array' else 'fits')
+                self.logger.debug('   - %s [%s]', name, kind)
+                if kind in ('cube', 'image'):
+                    try:
+                        obj.write(outf, convert_float32=False)
+                    except TypeError:
+                        warnings.warn('MPDAF version too old to support '
+                                      'the new type conversion parameter, '
+                                      'data will be saved as float32.')
+                        obj.write(outf)
+                elif kind in ('table', ):
+                    obj.write(outf, overwrite=True)
+                elif kind in ('array', ):
+                    np.savetxt(outf, obj)
 
-                    # delete the object to free its memory. it will reloaded
-                    # automatically if needed.
-                    obj = outf
+                # delete the object to free its memory. it will reloaded
+                # automatically if needed.
+                setattr(self, name, outf)
         self.status = Status.DUMPED
 
     def load(self, outpath):
@@ -242,13 +235,12 @@ class Step(LogMixin, metaclass=StepMeta):
             return
 
         self.logger.debug('%s - LOAD', self.method_name)
-        for kind, names in self.outputs.items():
-            for name in names:
-                outf = '{}/{}.{}'.format(outpath, name,
-                                         'txt' if kind == 'array' else 'fits')
-                # we just set the paths here, the data will be loaded only if
-                # the attribute is accessed.
-                setattr(self, name, outf)
+        for name, kind in self._dataobjs:
+            # we just set the paths here, the data will be loaded only if
+            # the attribute is accessed.
+            outf = '{}/{}.{}'.format(outpath, name,
+                                     'txt' if kind == 'array' else 'fits')
+            setattr(self, name, outf)
 
 
 class Preprocessing(Step):
@@ -377,7 +369,6 @@ class CreateAreas(Step):
             nbAreas = len(labels)
         orig.param['nbareas'] = nbAreas
 
-        __import__('pdb').set_trace()
         self.store_image('areamap', areamap)
         self._loginfo('Save the map of areas in self.areamap')
         self._loginfo('%d areas generated', nbAreas)
@@ -411,11 +402,13 @@ class ComputePCAThreshold(Step):
     name = 'compute_PCA_threshold'
     desc = 'PCA threshold computation'
     thresO2 = DataObj('array')
+    meaO2 = DataObj('array')
+    stdO2 = DataObj('array')
+    # FIXME: test02, histO2 and binO2 are lists of arrays with variable
+    # sizes so they cannot be managed by the Step class currently
     # testO2 = DataObj('array')
     # histO2 = DataObj('array')
     # binO2 = DataObj('array')
-    meaO2 = DataObj('array')
-    stdO2 = DataObj('array')
     require = ('preprocessing', 'areas')
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
@@ -432,12 +425,8 @@ class ComputePCAThreshold(Step):
             self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f',
                           area_ind, res[4], res[5], res[3])
 
-        (orig.testO2, orig.histO2, orig.binO2, orig.thresO2, orig.meaO2,
-         orig.stdO2) = zip(*results)
-        # FIXME: test02, histO2 and binO2 are lists of arrays with variable
-        # sizes so they cannot be managed by the Step class currently
-        self.outputs['array'].extend(['thresO2', 'meaO2', 'stdO2'])
-        # self.outputs['array'].extend(['testO2', 'histO2', 'binO2'])
+        (orig.testO2, orig.histO2, orig.binO2, self.thresO2, self.meaO2,
+         self.stdO2) = zip(*results)
 
 
 class ComputeGreedyPCA(Step):
@@ -649,15 +638,13 @@ class ComputePurityThreshold(Step):
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
-        threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
+        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
             Compute_threshold_purity(
                 purity, orig.cube_local_max._data, orig.cube_local_min._data,
                 orig.segmap.data, spat_size, spect_size, tol_spat, tol_spec,
                 True, True, auto, threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
-        self.outputs['array'].extend(['Pval_r', 'index_pval', 'Det_M',
-                                      'Det_m'])
 
 
 class Detection(Step):
@@ -688,7 +675,7 @@ class Detection(Step):
             orig.param['threshold'] = threshold
 
         pur_params = orig.param['compute_purity_threshold']['params']
-        orig.Cat0, orig.det_correl_min = Create_local_max_cat(
+        self.Cat0, self.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
             orig.cube_local_min._data, orig.segmap.data,
             pur_params['spat_size'], pur_params['spect_size'],
@@ -698,8 +685,12 @@ class Detection(Step):
         _format_cat(orig.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
                       len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
-        self.outputs['table'].append('Cat0')
-        self.outputs['array'].append('det_correl_min')
+
+    def load(self, outpath):
+        if self.det_correl_min is not None:
+            self.det_correl_min = self.det_correl_min.astype(int)
+            if self.det_correl_min.shape == (3,):
+                self.det_correl_min = self.det_correl_min.reshape(3, 1)
 
 
 class DetectionLost(Step):
