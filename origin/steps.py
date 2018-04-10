@@ -942,8 +942,6 @@ class SaveSources(Step):
         (for images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map to add to the source.
-    fieldmap_filename: str
-        Name of the file containing the fieldmap.
     overwrite: bool
         Overwrite the folder if it already exists.
 
@@ -953,8 +951,7 @@ class SaveSources(Step):
     desc = 'Save sources'
 
     def run(self, orig, version, *, path=None, n_jobs=1, author="",
-            nb_fwhm=2, size=5, expmap_filename=None, fieldmap_filename=None,
-            overwrite=True):
+            nb_fwhm=2, size=5, expmap_filename=None, overwrite=True):
 
         if path is None:
             outpath = orig.outpath
@@ -989,7 +986,6 @@ class SaveSources(Step):
             nb_fwhm=nb_fwhm,
             size=size,
             expmap_filename=expmap_filename,
-            fieldmap_filename=fieldmap_filename,
         )
 
         # create the final catalog

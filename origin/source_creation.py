@@ -17,7 +17,7 @@ def create_source(source_id, source_table, line_table, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, version, profile_fwhm, *,
                   author="", nb_fwhm=2, size=5, expmap_filename=None,
-                  fieldmap_filename=None, save_to=None):
+                  save_to=None):
     """Create a MPDAF source.
 
     This function create a MPDAF source object for the ORIGIN source.
@@ -56,8 +56,6 @@ def create_source(source_id, source_table, line_table, origin_params,
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
-    fieldmap_filename: str
-        Name of the file containing the fieldmap.
     save_to: str
         If not None, the source will be saved to the given file.
 
@@ -194,7 +192,7 @@ def create_source(source_id, source_table, line_table, origin_params,
         source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
-    source.add_FSF(data_cube, fieldmap=fieldmap_filename)
+    source.add_FSF(data_cube, fieldmap=origin_params['fieldmap'])
     a, b, beta, _ = source.get_FSF()
     fwhm_fsf = b * data_cube.wave.coord() + a
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
@@ -301,7 +299,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
                        skymask_filename_tpl, spectra_fits_filename,
                        version, profile_fwhm, out_tpl, *,
                        n_jobs=1, author="", nb_fwhm=2, size=5,
-                       expmap_filename=None, fieldmap_filename=None):
+                       expmap_filename=None):
     """Create and save a MPDAF source file for each source.
 
     Parameters
@@ -344,8 +342,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
-    fieldmap_filename: str
-        Name of the file containing the fieldmap.
 
     """
     job_list = []
@@ -366,7 +362,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             nb_fwhm=nb_fwhm,
             size=size,
             expmap_filename=expmap_filename,
-            fieldmap_filename=fieldmap_filename,
             save_to=out_tpl % source_id
         ))
 
