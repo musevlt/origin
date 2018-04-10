@@ -390,11 +390,6 @@ class ORIGIN(steps.LogMixin):
                     np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
                     for area in range(1, NbAreas + 1)]
 
-        # if obj.det_correl_min is not None:
-        #     obj.det_correl_min = obj.det_correl_min.astype(int)
-        #     if obj.det_correl_min.shape == (3,):
-        #         obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
-
         if os.path.isfile('%s/spectra.fits' % folder):
             obj.spectra = load_spectra('%s/spectra.fits' % folder,
                                        idlist=obj.Cat2['num_line'])

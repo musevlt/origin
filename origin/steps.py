@@ -81,7 +81,6 @@ class DataObj:
         except KeyError:
             return
 
-        print(f'get {obj.idx} {self.label} {val}')
         if isinstance(val, str):
             if os.path.isfile(val):
                 kind = self.kind
@@ -101,7 +100,6 @@ class DataObj:
         return val
 
     def __set__(self, obj, val):
-        print(f'set {obj.idx} {self.label} {val}')
         obj.__dict__[self.label] = val
 
     def __delete__(self, obj):
@@ -682,11 +680,17 @@ class Detection(Step):
             pur_params['tol_spat'], pur_params['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
         )
-        _format_cat(orig.Cat0)
+        _format_cat(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
-                      len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
+                      len(np.unique(self.Cat0['ID'])), len(self.Cat0))
 
     def load(self, outpath):
+        if self.status is not Status.DUMPED:
+            # If the step was not dumped previously, there is nothing to load
+            return
+
+        super().load(outpath)
+
         if self.det_correl_min is not None:
             self.det_correl_min = self.det_correl_min.astype(int)
             if self.det_correl_min.shape == (3,):
@@ -763,8 +767,8 @@ class DetectionLost(Step):
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, orig.Pval_r_comp, orig.index_pval_comp, orig.Det_m_comp, \
-            orig.Det_M_comp = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
+            self.Det_M_comp = Compute_threshold_purity(
                 purity,
                 cube_local_max_faint_dct,
                 cube_local_min_faint_dct,
@@ -779,9 +783,9 @@ class DetectionLost(Step):
         self._loginfo('Threshold: %.2f ', threshold2)
 
         if threshold2 == np.inf:
-            orig.Cat1 = orig.Cat0.copy()
-            orig.Cat1['comp'] = 0
-            orig.Cat1['STD'] = 0
+            Cat1 = orig.Cat0.copy()
+            Cat1['comp'] = 0
+            Cat1['STD'] = 0
         else:
             Catcomp, _ = Create_local_max_cat(threshold2,
                                               cube_local_max_faint_dct,
@@ -800,23 +804,20 @@ class DetectionLost(Step):
             Cat0['comp'] = 0
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            orig.Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            Cat1 = _format_cat(vstack([Cat0, Catcomp]))
             # vstack creates a masked Table, masking the missing values. But
             # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
             # modified later by Cat2 operations, if it was not dumped before.
             # So for now we transform the table to a non-masked one.
             orig.Cat1 = orig.Cat1.filled()
 
-        ns = len(np.unique(orig.Cat1['ID']))
+        ns = len(np.unique(Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))
-        nl = len(orig.Cat1)
+        nl = len(Cat1)
         dl = nl - len(orig.Cat0)
+        self.Cat1 = Cat1
         self._loginfo('Save the catalogue in self.Cat1'
                       ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
-
-        self.outputs['table'].append('Cat1')
-        self.outputs['array'].extend(['Pval_r_comp', 'index_pval_comp',
-                                      'Det_M_comp', 'Det_m_comp'])
 
 
 class ComputeSpectra(Step):
@@ -851,32 +852,32 @@ class ComputeSpectra(Step):
     name = 'compute_spectra'
     desc = 'Lines estimation'
     Cat2 = DataObj('table')
-    spectra = DataObj('spectra')
+    # spectra = DataObj('spectra')
     require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
-        orig.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
+        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
             criteria='flux', order_dct=30, horiz_psf=1, horiz=5
         )
 
         self._loginfo('Purity estimation')
-        tmp_Cat2 = Purity_Estimation(orig.Cat2,
+        tmp_Cat2 = Purity_Estimation(self.Cat2,
                                      [orig.Pval_r, orig.Pval_r_comp],
                                      [orig.index_pval, orig.index_pval_comp])
         # Remove duplicated lines
         unique_idx = unique_lines(tmp_Cat2)
-        orig.Cat2 = tmp_Cat2[unique_idx]
+        self.Cat2 = tmp_Cat2[unique_idx]
         Cat_est_line_raw_T = np.array(Cat_est_line_raw_T)[unique_idx]
         Cat_est_line_var_T = np.array(Cat_est_line_var_T)[unique_idx]
 
-        _format_cat(orig.Cat2)
+        _format_cat(self.Cat2)
 
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
-                      len(orig.Cat2))
+                      len(self.Cat2))
         self._loginfo('%d lines were removed for being duplicates.',
-                      len(tmp_Cat2) - len(orig.Cat2))
+                      len(tmp_Cat2) - len(self.Cat2))
 
         # Radius for spectrum trimming
         radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
@@ -885,7 +886,7 @@ class ComputeSpectra(Step):
         orig.spectra = []
         for line_idx, (data, vari) in enumerate(zip(Cat_est_line_raw_T,
                                                     Cat_est_line_var_T)):
-            line_profile, line_z = orig.Cat2[line_idx]['profile', 'z']
+            line_profile, line_z = self.Cat2[line_idx]['profile', 'z']
             line_z_min = line_z - radius[line_profile]
             line_z_max = line_z + radius[line_profile]
             orig.spectra.append(Spectrum(
@@ -893,7 +894,6 @@ class ComputeSpectra(Step):
             ).subspec(line_z_min, line_z_max, unit=None))
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
-        self.outputs['table'].append('Cat2')
 
 
 class CleanResults(Step):
@@ -924,15 +924,13 @@ class CleanResults(Step):
     require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
-        orig.Cat3_lines = merge_similar_lines(orig.Cat2)
-        orig.Cat3_sources = unique_sources(orig.Cat3_lines)
+        self.Cat3_lines = merge_similar_lines(orig.Cat2)
+        self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
         self._loginfo('Save the unique source catalogue in self.Cat3_sources'
                       ' (%d lines)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
-
-        self.outputs['table'].extend(['Cat3_lines', 'Cat3_sources'])
 
 
 class CreateMasks(Step):
