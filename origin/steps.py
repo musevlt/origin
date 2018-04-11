@@ -45,6 +45,8 @@ def _format_cat(cat):
         for name in colnames:
             if name in cat.colnames:
                 cat[name].format = fmt
+                if name in ('STD', 'T_GLR') and np.ma.is_masked(cat[name]):
+                    cat[name].fill_value = np.nan
     return cat
 
 
@@ -586,10 +588,10 @@ class ComputePurityThreshold(Step):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
         threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
-            Compute_threshold_purity(purity, orig.cube_local_max.data,
-                                     orig.cube_local_min.data, orig.segmap.data,
-                                     spat_size, spect_size, tol_spat, tol_spec,
-                                     True, True, auto, threshlist)
+            Compute_threshold_purity(
+                purity, orig.cube_local_max._data, orig.cube_local_min._data,
+                orig.segmap.data, spat_size, spect_size, tol_spat, tol_spec,
+                True, True, auto, threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
         self.outputs['array'].extend(['Pval_r', 'index_pval', 'Det_M',
@@ -624,8 +626,8 @@ class Detection(Step):
 
         pur_params = orig.param['compute_purity_threshold']['params']
         orig.Cat0, orig.det_correl_min = Create_local_max_cat(
-            orig.param['threshold'], orig.cube_local_max.data,
-            orig.cube_local_min.data, orig.segmap.data,
+            orig.param['threshold'], orig.cube_local_max._data,
+            orig.cube_local_min._data, orig.segmap.data,
             pur_params['spat_size'], pur_params['spect_size'],
             pur_params['tol_spat'], pur_params['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
@@ -742,6 +744,11 @@ class DetectionLost(Step):
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
             orig.Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            # vstack creates a masked Table, masking the missing values. But
+            # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
+            # modified later by Cat2 operations, if it was not dumped before.
+            # So for now we transform the table to a non-masked one.
+            orig.Cat1 = orig.Cat1.filled()
 
         ns = len(np.unique(orig.Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))

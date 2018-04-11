@@ -65,15 +65,21 @@ def test_origin():
 
         my_origin = ORIGIN.load('tmp')
         my_origin.step08_detection_lost()
-        my_origin.write()
 
         # estimation
-        my_origin = ORIGIN.load('tmp', newname='tmp2')
         my_origin.step09_compute_spectra()
         my_origin.write()
 
+        cat = Catalog.read('tmp/Cat1.fits')
+        subcat = cat[cat['comp'] == 0]
+        assert np.all(np.isnan(subcat['STD']))
+        # Test that the columns mask is correct. To be tested when we switch
+        # back to a masked table
+        # assert np.all(subcat['T_GLR'].mask == False)
+        # assert np.all(subcat['STD'].mask == True)
+
         # cleaned results
-        my_origin = ORIGIN.load('tmp2')
+        my_origin = ORIGIN.load('tmp', newname='tmp2')
         my_origin.step10_clean_results()
         my_origin.write()
 
