@@ -969,8 +969,9 @@ class SaveSources(Step):
             shutil.rmtree(out_dir, ignore_errors=True)
         os.makedirs(out_dir, exist_ok=True)
 
-        # FIXME: We need to have the file containing the spectra saved for the
-        # create_all_sources function.
+        # We need the correlation cube and the spectrum FITS files saved to
+        # disk.
+        orig.write()
 
         from .source_creation import create_all_sources
         create_all_sources(
