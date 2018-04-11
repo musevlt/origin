@@ -223,6 +223,8 @@ class ORIGIN(steps.LogMixin):
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
 
+        self.testO2, self.histO2, self.binO2 = None, None, None
+
         self._loginfo('00 Done')
 
     def __getattr__(self, name):
@@ -231,7 +233,8 @@ class ORIGIN(steps.LogMixin):
         # the objects if needed.
         if name in self._dataobjs:
             return getattr(self._dataobjs[name], name)
-        super().__getattr__(name)
+        else:
+            raise AttributeError
 
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,

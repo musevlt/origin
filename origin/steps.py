@@ -838,7 +838,7 @@ class DetectionLost(Step):
             # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
             # modified later by Cat2 operations, if it was not dumped before.
             # So for now we transform the table to a non-masked one.
-            orig.Cat1 = orig.Cat1.filled()
+            Cat1 = Cat1.filled()
 
         ns = len(np.unique(Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))
