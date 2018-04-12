@@ -135,9 +135,6 @@ class DataObj:
     def __set__(self, obj, val):
         obj.__dict__[self.label] = val
 
-    def __delete__(self, obj):
-        del obj.__dict__[self.label]
-
 
 class StepMeta(type):
     """Metaclass used to manage DataObj descriptors.
