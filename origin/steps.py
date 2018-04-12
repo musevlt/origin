@@ -96,7 +96,13 @@ class Status(Enum):
 
 
 class DataObj:
+    """Descriptor used to load the data on demand.
 
+    The "kind" of data is stored (cube, image, array, etc.), and used to load
+    the data is the attribute is accessed. This requires that the path of the
+    file associated to the data is set to its value.
+
+    """
     def __init__(self, kind):
         # Note: self.label is set by the metaclass
         self.kind = kind
@@ -134,10 +140,17 @@ class DataObj:
 
 
 class StepMeta(type):
+    """Metaclass used to manage DataObj descriptors.
 
+    The metaclass does two things:
+    - It sets the "label" attribute on the descriptors, which allow to use
+      ``cube_std = DataObj('cube')`` instead of ``cube_std =
+      DataObj('cube_std', 'cube')`` is the label must be set manually.
+    - It stores a list of all the descriptors in a ``_dataobjs`` attribute on
+      the instance.
+
+    """
     def __new__(cls, name, bases, attrs):
-        # find all descriptors, auto-set their labels and store the list of
-        # descriptors on the instance
         descr = []
         for n, inst in attrs.items():
             if isinstance(inst, DataObj):
@@ -251,9 +264,11 @@ class Step(LogMixin, metaclass=StepMeta):
                 elif kind in ('spectra', ):
                     save_spectra(obj, outf)
 
-                # delete the object to free its memory. it will reloaded
-                # automatically if needed.
+                # now set the value to the path of the written file, which
+                # frees memory, and allow the object to reload automatically
+                # the data if needed.
                 setattr(self, name, outf)
+
         self.status = Status.DUMPED
 
     def load(self, outpath):

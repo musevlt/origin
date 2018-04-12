@@ -228,7 +228,7 @@ class ORIGIN(steps.LogMixin):
         self._loginfo('00 Done')
 
     def __getattr__(self, name):
-        # Use __getattr__ to provide access to the steps data attribute
+        # Use __getattr__ to provide access to the steps data attributes
         # via the ORIGIN object. This will also trigger the loading of
         # the objects if needed.
         if name in self._dataobjs:
