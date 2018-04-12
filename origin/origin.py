@@ -25,7 +25,7 @@ from astropy.io import fits
 from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
-from mpdaf.obj import Cube, Image, Spectrum
+from mpdaf.obj import Cube, Image
 from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 
 from . import steps
@@ -161,7 +161,7 @@ class ORIGIN(steps.LogMixin):
     def __init__(self, filename, segmap, name='origin', path='.',
                  loglevel='DEBUG', logcolor=False, fieldmap=None,
                  profiles=None, PSF=None, FWHM_PSF=None, param=None,
-                 imawhite=None, spectra=None):
+                 imawhite=None):
 
         self.path = path
         self.name = name
@@ -181,10 +181,13 @@ class ORIGIN(steps.LogMixin):
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
         self.steps = OrderedDict()
+        self._dataobjs = {}
         for i, cls in enumerate(steps.STEPS, start=1):
             step = cls(self, i, self.param)
             self.steps[step.name] = step
             self.__dict__[step.method_name] = step
+            for name, _ in step._dataobjs:
+                self._dataobjs[name] = step
 
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
@@ -220,8 +223,18 @@ class ORIGIN(steps.LogMixin):
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
 
-        self.spectra = spectra
+        self.testO2, self.histO2, self.binO2 = None, None, None
+
         self._loginfo('00 Done')
+
+    def __getattr__(self, name):
+        # Use __getattr__ to provide access to the steps data attributes
+        # via the ORIGIN object. This will also trigger the loading of
+        # the objects if needed.
+        if name in self._dataobjs:
+            return getattr(self._dataobjs[name], name)
+        else:
+            raise AttributeError
 
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
@@ -326,25 +339,6 @@ class ORIGIN(steps.LogMixin):
         else:
             ima_white = None
 
-        # step09
-        def load_spectra(filename, *, idlist=None):
-            """
-            If no idlist is provided, all the extensions are read as
-            a succession of DATA / STAT parts or a spectrum.
-
-            If an idlist is provided, the extensions DATA<ID> and STAT<ID> for
-            each ID is read and the resulting spectrum is appended to the list.
-            """
-            spectra = []
-            with fits.open(filename) as fspectra:
-                if idlist is None:
-                    idlist = np.arange(len(fspectra) // 2)
-
-                for i in idlist:
-                    spectra.append(Spectrum(hdulist=fspectra,
-                                            ext=('DATA%d' % i, 'STAT%d' % i)))
-            return spectra
-
         if newname is not None:
             # copy outpath to the new path
             shutil.copytree(os.path.join(path, name),
@@ -378,15 +372,6 @@ class ORIGIN(steps.LogMixin):
                 obj.binO2 = [
                     np.loadtxt('%s/binO2_%d.txt' % (folder, area), ndmin=1)
                     for area in range(1, NbAreas + 1)]
-
-        if obj.det_correl_min is not None:
-            obj.det_correl_min = obj.det_correl_min.astype(int)
-            if obj.det_correl_min.shape == (3,):
-                obj.det_correl_min = obj.det_correl_min.reshape(3, 1)
-
-        if os.path.isfile('%s/spectra.fits' % folder):
-            obj.spectra = load_spectra('%s/spectra.fits' % folder,
-                                       idlist=obj.Cat2['num_line'])
 
         return obj
 
@@ -586,35 +571,6 @@ class ORIGIN(steps.LogMixin):
                 for area in range(1, self.nbAreas + 1):
                     np.savetxt('%s/binO2_%d.txt' % (self.outpath, area),
                                self.binO2[area - 1])
-
-        def save_spectra(spectra, outname, *, idlist=None):
-            """
-            The spectra are saved to a FITS file with two extension per
-            spectrum, a DATA<ID> one and a STAT<ID> one. If no idlist is
-            provided, the ID is the index of the spectrum in the spectra list.
-            If an idlist is provided, the ID in the value of the list at the
-            index of the spectrum.
-
-            This is important because the ID in the extension names is the
-            num_line identifying the lines.
-            """
-            if idlist is None:
-                idlist = np.arange(len(spectra))
-
-            hdulist = fits.HDUList([fits.PrimaryHDU()])
-
-            for idx, spec_id in enumerate(idlist):
-                hdu = spectra[idx].get_data_hdu(name='DATA%d' % spec_id,
-                                                savemask='nan')
-                hdulist.append(hdu)
-                hdu = spectra[idx].get_stat_hdu(name='STAT%d' % spec_id)
-                if hdu is not None:
-                    hdulist.append(hdu)
-            hdulist.writeto(outname, overwrite=True)
-
-        if self.spectra is not None:
-            save_spectra(self.spectra, '%s/spectra.fits' % self.outpath,
-                         idlist=self.Cat2['num_line'])
 
         self._loginfo("Current session saved in %s", self.outpath)
 
