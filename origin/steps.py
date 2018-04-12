@@ -55,14 +55,15 @@ def save_spectra(spectra, outname):
     """ The spectra are saved to a FITS file with two extension per
     spectrum, a DATA<ID> one and a STAT<ID> one.
     """
-    hdulist = fits.HDUList([fits.PrimaryHDU()])
-
+    hdulist = []
     for spec_id, sp in spectra.items():
         hdu = sp.get_data_hdu(name='DATA%d' % spec_id, savemask='nan')
         hdulist.append(hdu)
         hdu = sp.get_stat_hdu(name='STAT%d' % spec_id)
         if hdu is not None:
             hdulist.append(hdu)
+
+    hdulist = fits.HDUList([fits.PrimaryHDU()] + hdulist)
     hdulist.writeto(outname, overwrite=True)
 
 
