@@ -335,6 +335,7 @@ class Preprocessing(Step):
         self.store_cube('cube_std', data)
         self.store_image('ima_std', data.mean(axis=0))
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
+        cont_dct = cont_dct.astype(np.float32)
         self.store_cube('cont_dct', cont_dct)
         self.store_image('ima_dct', cont_dct.mean(axis=0))
 
