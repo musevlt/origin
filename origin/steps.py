@@ -810,8 +810,10 @@ class ComputeSpectra(Step):
 
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
                       len(orig.Cat2))
-        self._loginfo('%d lines were removed for being duplicates.',
-                      len(tmp_Cat2) - len(orig.Cat2))
+        nb_duplicated = len(tmp_Cat2) - len(orig.Cat2)
+        if nb_duplicated:
+            self._loginfo('%d lines were removed for being duplicates.',
+                          nb_duplicated)
 
         # Radius for spectrum trimming
         radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
@@ -865,6 +867,10 @@ class CleanResults(Step):
                       ' (%d lines)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
+        nb_line_merged = np.sum(~orig.Cat3_lines['merged_in'].mask)
+        if nb_line_merged:
+            self._loginfo('%d lines were merged in nearby lines.',
+                          nb_line_merged)
 
         self.outputs['table'].extend(['Cat3_lines', 'Cat3_sources'])
 
