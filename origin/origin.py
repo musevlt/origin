@@ -975,9 +975,7 @@ class ORIGIN(steps.LogMixin):
             raise IOError('Run the step 05 to initialize self.Cat0')
 
         if ax1 is None and ax2 is None and ax3 is None:
-            ax1 = plt.subplot(1, 3, 1)
-            ax2 = plt.subplot(1, 3, 2)
-            ax3 = plt.subplot(1, 3, 3)
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4))
 
         # Coordinates of the source
         x0 = self.Cat0[src_ind]['x0']
