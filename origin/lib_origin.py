@@ -2567,7 +2567,9 @@ def unique_sources(table):
     table_by_id = table.group_by('ID')
 
     result_rows = []
-    for key, group in zip(table_by_id.groups.keys, table_by_id.groups):
+    for key, group in ProgressBar(
+            zip(table_by_id.groups.keys, table_by_id.groups),
+            total=len(table_by_id.groups)):
         group_id = key['ID']
 
         ra_waverage = np.average(group['ra'], weights=group['flux'])
@@ -2682,7 +2684,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     table.add_column(Column(data=np.arange(len(table), dtype=int),
                             name="_idx"))
 
-    for group in table.group_by('ID').groups:
+    for group in ProgressBar(table.group_by('ID').groups):
         # TODO: If astropy guaranties that grouping retains the row order, it
         # is faster to sort by z before grouping (and before adding _idx).
         group.sort('z')
@@ -2789,7 +2791,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
 
     by_id = line_table.group_by('ID')
 
-    for key, group in zip(by_id.groups.keys, by_id.groups):
+    for key, group in ProgressBar(zip(by_id.groups.keys, by_id.groups),
+                                  total=len(by_id.groups)):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
 
