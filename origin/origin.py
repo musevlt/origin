@@ -22,6 +22,7 @@ import warnings
 import yaml
 
 from astropy.io import fits
+from astropy.utils import lazyproperty
 from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
@@ -214,7 +215,9 @@ class ORIGIN(steps.LogMixin):
         self.segmap = Image(segmap)
 
         # List of spectral profile
-        self._read_profiles(profiles)
+        if profiles is None:
+            profiles = os.path.join(CURDIR, 'Dico_FWHM_2_12.fits')
+        self.param['profiles'] = profiles
 
         # FSF
         self.param['fieldmap'] = fieldmap
@@ -412,22 +415,25 @@ class ORIGIN(steps.LogMixin):
         maxima of std cube"""
         return self.param.get('threshold2')
 
-    def _read_profiles(self, profiles=None):
+    @lazyproperty
+    def profiles(self):
         """Read the list of spectral profile."""
-        self.param['profiles'] = profiles
-        if profiles is None:
-            profiles = os.path.join(CURDIR, 'Dico_FWHM_2_12.fits')
+        profiles = self.param['profiles']
         self._loginfo('Load dictionary of spectral profile %s', profiles)
-        self.profiles = []
-        self.FWHM_profiles = []
-        with fits.open(profiles) as fprof:
-            for hdu in fprof[1:]:
-                self.profiles.append(hdu.data)
-                self.FWHM_profiles.append(hdu.header['FWHM'])
+        with fits.open(profiles) as hdul:
+            profiles = [hdu.data for hdu in hdul[1:]]
 
         # check that the profiles have the same size
-        if len(set([p.shape[0] for p in self.profiles])) != 1:
+        if len(set([p.shape[0] for p in profiles])) != 1:
             raise IOError('The profiles must have the same size')
+
+        return profiles
+
+    @lazyproperty
+    def FWHM_profiles(self):
+        """Read the list of FWHM of the spectral profiles."""
+        with fits.open(self.param['profiles']) as hdul:
+            return [hdu.header['FWHM'] for hdu in hdul[1:]]
 
     def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None):
         """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
