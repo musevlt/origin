@@ -2567,8 +2567,9 @@ def unique_sources(table):
     table_by_id = table.group_by('ID')
 
     result_rows = []
-    for key, group in ProgressBar(zip(table_by_id.groups.keys,
-                                      table_by_id.groups)):
+    for key, group in ProgressBar(
+            zip(table_by_id.groups.keys, table_by_id.groups),
+            total=len(table_by_id.groups)):
         group_id = key['ID']
 
         ra_waverage = np.average(group['ra'], weights=group['flux'])
@@ -2790,7 +2791,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
 
     by_id = line_table.group_by('ID')
 
-    for key, group in ProgressBar(zip(by_id.groups.keys, by_id.groups)):
+    for key, group in ProgressBar(zip(by_id.groups.keys, by_id.groups),
+                                  total=len(by_id.groups)):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
 
