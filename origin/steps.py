@@ -6,8 +6,9 @@ import shutil
 import time
 import warnings
 
+from astropy.io import fits
 from astropy.table import vstack, Table
-from collections import defaultdict
+from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
@@ -45,7 +46,34 @@ def _format_cat(cat):
         for name in colnames:
             if name in cat.colnames:
                 cat[name].format = fmt
+                if name in ('STD', 'T_GLR') and np.ma.is_masked(cat[name]):
+                    cat[name].fill_value = np.nan
     return cat
+
+
+def save_spectra(spectra, outname):
+    """ The spectra are saved to a FITS file with two extension per
+    spectrum, a DATA<ID> one and a STAT<ID> one.
+    """
+    hdulist = []
+    for spec_id, sp in spectra.items():
+        hdu = sp.get_data_hdu(name='DATA%d' % spec_id, savemask='nan')
+        hdulist.append(hdu)
+        hdu = sp.get_stat_hdu(name='STAT%d' % spec_id)
+        if hdu is not None:
+            hdulist.append(hdu)
+
+    hdulist = fits.HDUList([fits.PrimaryHDU()] + hdulist)
+    hdulist.writeto(outname, overwrite=True)
+
+
+def load_spectra(filename):
+    spectra = OrderedDict()
+    with fits.open(filename) as hdul:
+        for i in range(1, len(hdul), 2):
+            spec_id = int(hdul[i].name[4:])
+            spectra[spec_id] = Spectrum(hdulist=hdul, ext=(i, i+1))
+    return spectra
 
 
 class LogMixin:
@@ -65,11 +93,72 @@ class Status(Enum):
     NOTRUN = 'not run yet'
     RUN = 'run'
     DUMPED = 'dumped outputs'
-    # LOADED = 'reloaded outputs'
     FAILED = 'failed'
 
 
-class Step(LogMixin):
+class DataObj:
+    """Descriptor used to load the data on demand.
+
+    The "kind" of data is stored (cube, image, array, etc.), and used to load
+    the data is the attribute is accessed. This requires that the path of the
+    file associated to the data is set to its value.
+
+    """
+    def __init__(self, kind):
+        # Note: self.label is set by the metaclass
+        self.kind = kind
+
+    def __get__(self, obj, owner=None):
+        try:
+            val = obj.__dict__[self.label]
+        except KeyError:
+            return
+
+        if isinstance(val, str):
+            if os.path.isfile(val):
+                kind = self.kind
+                if kind == 'cube':
+                    val = Cube(val)
+                if kind == 'image':
+                    val = Image(val)
+                elif kind == 'table':
+                    val = _format_cat(Table.read(val))
+                elif kind == 'array':
+                    val = np.loadtxt(val, ndmin=1)
+                elif kind == 'spectra':
+                    val = load_spectra(val)
+                obj.__dict__[self.label] = val
+            else:
+                val = None
+
+        return val
+
+    def __set__(self, obj, val):
+        obj.__dict__[self.label] = val
+
+
+class StepMeta(type):
+    """Metaclass used to manage DataObj descriptors.
+
+    The metaclass does two things:
+    - It sets the "label" attribute on the descriptors, which allow to use
+      ``cube_std = DataObj('cube')`` instead of ``cube_std =
+      DataObj('cube_std', 'cube')`` is the label must be set manually.
+    - It stores a list of all the descriptors in a ``_dataobjs`` attribute on
+      the instance.
+
+    """
+    def __new__(cls, name, bases, attrs):
+        descr = []
+        for n, inst in attrs.items():
+            if isinstance(inst, DataObj):
+                inst.label = n
+                descr.append((n, inst.kind))
+        attrs['_dataobjs'] = descr
+        return super(StepMeta, cls).__new__(cls, name, bases, attrs)
+
+
+class Step(LogMixin, metaclass=StepMeta):
     """Define a processing step."""
 
     """Name of the function to run the step."""
@@ -78,11 +167,8 @@ class Step(LogMixin):
     """Description of the step."""
     desc = None
 
-    """Step requirement (not implemented yet!)."""
+    """List of required steps (that must be run before)."""
     require = None
-
-    """Objects created by the processing step."""
-    attrs = tuple()
 
     def __init__(self, orig, idx, param):
         self.logger = logging.getLogger(__name__)
@@ -93,9 +179,6 @@ class Step(LogMixin):
         self.meta = param.setdefault(self.name, {})
         self.meta.setdefault('stepidx', idx)
         self.param = self.meta.setdefault('params', {})
-        self.outputs = self.meta.setdefault('outputs', defaultdict(list))
-        for attr in self.attrs:
-            setattr(orig, attr, None)
 
     def __repr__(self):
         return 'Step {:02d}: <{}(status: {})>'.format(
@@ -146,61 +229,58 @@ class Step(LogMixin):
     def store_cube(self, name, data, **kwargs):
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
-        setattr(self.orig, name, cube)
-        self.outputs['cube'].append(name)
+        setattr(self, name, cube)
 
     def store_image(self, name, data, **kwargs):
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
-        setattr(self.orig, name, im)
-        self.outputs['image'].append(name)
+        setattr(self, name, im)
 
     def dump(self, outpath):
         if self.status is not Status.RUN:
+            # If the step was not run, there is nothing to dump
             return
 
         self.logger.debug('%s - DUMP', self.method_name)
-        for kind, names in self.outputs.items():
-            for name in names:
-                obj = getattr(self.orig, name)
-                if obj is not None:
-                    outf = '{}/{}'.format(outpath, name)
-                    self.logger.debug('   - %s', name)
-                    if kind in ('cube', 'image'):
-                        try:
-                            obj.write(outf + '.fits', convert_float32=False)
-                        except TypeError:
-                            warnings.warn('MPDAF version too old to support '
-                                          'the new type conversion parameter, '
-                                          'data will be saved as float32.')
-                            obj.write(outf + '.fits')
-                    elif kind in ('table', ):
-                        obj.write(outf + '.fits', overwrite=True)
-                    elif kind in ('array', ):
-                        np.savetxt(outf + '.txt', obj)
+        for name, kind in self._dataobjs:
+            obj = getattr(self, name)
+            if obj is not None:
+                outf = '{}/{}.{}'.format(
+                    outpath, name, 'txt' if kind == 'array' else 'fits')
+                self.logger.debug('   - %s [%s]', name, kind)
+                if kind in ('cube', 'image'):
+                    try:
+                        obj.write(outf, convert_float32=False)
+                    except TypeError:
+                        warnings.warn('MPDAF version too old to support '
+                                      'the new type conversion parameter, '
+                                      'data will be saved as float32.')
+                        obj.write(outf)
+                elif kind in ('table', ):
+                    obj.write(outf, overwrite=True)
+                elif kind in ('array', ):
+                    np.savetxt(outf, obj)
+                elif kind in ('spectra', ):
+                    save_spectra(obj, outf)
+
+                # now set the value to the path of the written file, which
+                # frees memory, and allow the object to reload automatically
+                # the data if needed.
+                setattr(self, name, outf)
+
         self.status = Status.DUMPED
 
     def load(self, outpath):
         if self.status is not Status.DUMPED:
+            # If the step was not dumped previously, there is nothing to load
             return
 
         self.logger.debug('%s - LOAD', self.method_name)
-        for kind, names in self.outputs.items():
-            for name in names:
-                outf = '{}/{}.{}'.format(outpath, name,
-                                         'txt' if kind == 'array' else 'fits')
-                if os.path.isfile(outf):
-                    if kind == 'cube':
-                        obj = Cube(outf)
-                    if kind == 'image':
-                        obj = Image(outf)
-                    elif kind == 'table':
-                        obj = _format_cat(Table.read(outf))
-                    elif kind == 'array':
-                        obj = np.loadtxt(outf, ndmin=1)
-                else:
-                    obj = None
-                setattr(self.orig, name, obj)
-        # self.status = Status.LOADED
+        for name, kind in self._dataobjs:
+            # we just set the paths here, the data will be loaded only if
+            # the attribute is accessed.
+            outf = '{}/{}.{}'.format(outpath, name,
+                                     'txt' if kind == 'array' else 'fits')
+            setattr(self, name, outf)
 
 
 class Preprocessing(Step):
@@ -229,7 +309,10 @@ class Preprocessing(Step):
 
     name = 'preprocessing'
     desc = 'Preprocessing'
-    attrs = ('cube_std', 'cube_dct')
+    cube_std = DataObj('cube')
+    cont_dct = DataObj('cube')
+    ima_std = DataObj('image')
+    ima_dct = DataObj('image')
 
     def run(self, orig, dct_order=10, dct_approx=False):
         self._loginfo('DCT computation')
@@ -253,6 +336,7 @@ class Preprocessing(Step):
         self.store_cube('cube_std', data)
         self.store_image('ima_std', data.mean(axis=0))
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
+        cont_dct = cont_dct.astype(np.float32)
         self.store_cube('cont_dct', cont_dct)
         self.store_image('ima_dct', cont_dct.mean(axis=0))
 
@@ -282,7 +366,7 @@ class CreateAreas(Step):
 
     name = 'areas'
     desc = 'Areas creation'
-    attrs = ('areamap', )
+    areamap = DataObj('image')
 
     def run(self, orig, pfa: "pfa of the test"=.2,
             minsize: "min area size"=100, maxsize: "max area size"=None):
@@ -358,7 +442,14 @@ class ComputePCAThreshold(Step):
 
     name = 'compute_PCA_threshold'
     desc = 'PCA threshold computation'
-    attrs = ('threshO2', 'testO2', 'histO2', 'binO2', 'meaO2', 'stdO2')
+    thresO2 = DataObj('array')
+    meaO2 = DataObj('array')
+    stdO2 = DataObj('array')
+    # FIXME: test02, histO2 and binO2 are lists of arrays with variable
+    # sizes so they cannot be managed by the Step class currently
+    # testO2 = DataObj('array')
+    # histO2 = DataObj('array')
+    # binO2 = DataObj('array')
     require = ('preprocessing', 'areas')
 
     def run(self, orig, pfa_test: 'pfa of the test'=.01):
@@ -375,12 +466,8 @@ class ComputePCAThreshold(Step):
             self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f',
                           area_ind, res[4], res[5], res[3])
 
-        (orig.testO2, orig.histO2, orig.binO2, orig.thresO2, orig.meaO2,
-         orig.stdO2) = zip(*results)
-        # FIXME: test02, histO2 and binO2 are lists of arrays with variable
-        # sizes so they cannot be managed by the Step class currently
-        self.outputs['array'].extend(['thresO2', 'meaO2', 'stdO2'])
-        # self.outputs['array'].extend(['testO2', 'histO2', 'binO2'])
+        (orig.testO2, orig.histO2, orig.binO2, self.thresO2, self.meaO2,
+         self.stdO2) = zip(*results)
 
 
 class ComputeGreedyPCA(Step):
@@ -426,7 +513,8 @@ class ComputeGreedyPCA(Step):
 
     name = 'compute_greedy_PCA'
     desc = 'Greedy PCA computation'
-    attrs = ('cube_faint', 'mapO2')
+    cube_faint = DataObj('cube')
+    mapO2 = DataObj('image')
     require = ('preprocessing', 'areas', 'compute_PCA_threshold')
 
     def run(self, orig, Noise_population=50,
@@ -496,8 +584,11 @@ class ComputeTGLR(Step):
 
     name = 'compute_TGLR'
     desc = 'GLR test'
-    attrs = ('cube_correl', 'cube_profile', 'cube_local_min',
-             'cube_local_max', 'maxmap')
+    cube_correl = DataObj('cube')
+    cube_profile = DataObj('cube')
+    cube_local_min = DataObj('cube')
+    cube_local_max = DataObj('cube')
+    maxmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
@@ -578,22 +669,23 @@ class ComputePurityThreshold(Step):
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
-    attrs = ('Pval_r', 'index_pval', 'Det_M', 'Det_m')
+    Pval_r = DataObj('array')
+    index_pval = DataObj('array')
+    Det_M = DataObj('array')
+    Det_m = DataObj('array')
     require = ('compute_TGLR', )
 
     def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
-        threshold, orig.Pval_r, orig.index_pval, orig.Det_m, orig.Det_M = \
-            Compute_threshold_purity(purity, orig.cube_local_max.data,
-                                     orig.cube_local_min.data, orig.segmap.data,
-                                     spat_size, spect_size, tol_spat, tol_spec,
-                                     True, True, auto, threshlist)
+        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
+            Compute_threshold_purity(
+                purity, orig.cube_local_max._data, orig.cube_local_min._data,
+                orig.segmap.data, spat_size, spect_size, tol_spat, tol_spec,
+                True, True, auto, threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
-        self.outputs['array'].extend(['Pval_r', 'index_pval', 'Det_M',
-                                      'Det_m'])
 
 
 class Detection(Step):
@@ -616,25 +708,36 @@ class Detection(Step):
 
     name = 'detection'
     desc = 'Thresholding and spatio-spectral merging'
-    attrs = ('Cat0', 'det_correl_min')
+    Cat0 = DataObj('table')
+    det_correl_min = DataObj('array')
 
     def run(self, orig, threshold=None):
         if threshold is not None:
             orig.param['threshold'] = threshold
 
         pur_params = orig.param['compute_purity_threshold']['params']
-        orig.Cat0, orig.det_correl_min = Create_local_max_cat(
-            orig.param['threshold'], orig.cube_local_max.data,
-            orig.cube_local_min.data, orig.segmap.data,
+        self.Cat0, self.det_correl_min = Create_local_max_cat(
+            orig.param['threshold'], orig.cube_local_max._data,
+            orig.cube_local_min._data, orig.segmap.data,
             pur_params['spat_size'], pur_params['spect_size'],
             pur_params['tol_spat'], pur_params['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
         )
-        _format_cat(orig.Cat0)
+        _format_cat(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
-                      len(np.unique(orig.Cat0['ID'])), len(orig.Cat0))
-        self.outputs['table'].append('Cat0')
-        self.outputs['array'].append('det_correl_min')
+                      len(np.unique(self.Cat0['ID'])), len(self.Cat0))
+
+    def load(self, outpath):
+        if self.status is not Status.DUMPED:
+            # If the step was not dumped previously, there is nothing to load
+            return
+
+        super().load(outpath)
+
+        if self.det_correl_min is not None:
+            self.det_correl_min = self.det_correl_min.astype(int)
+            if self.det_correl_min.shape == (3,):
+                self.det_correl_min = self.det_correl_min.reshape(3, 1)
 
 
 class DetectionLost(Step):
@@ -674,8 +777,11 @@ class DetectionLost(Step):
 
     name = 'detection_lost'
     desc = 'Thresholding and spatio-spectral merging'
-    attrs = ('Cat1', 'Pval_r_comp', 'index_pval_comp', 'Det_M_comp',
-             'Det_m_comp')
+    Cat1 = DataObj('table')
+    Pval_r_comp = DataObj('array')
+    index_pval_comp = DataObj('array')
+    Det_M_comp = DataObj('array')
+    Det_m_comp = DataObj('array')
     require = ('detection', )
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
@@ -704,8 +810,8 @@ class DetectionLost(Step):
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, orig.Pval_r_comp, orig.index_pval_comp, orig.Det_m_comp, \
-            orig.Det_M_comp = Compute_threshold_purity(
+        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
+            self.Det_M_comp = Compute_threshold_purity(
                 purity,
                 cube_local_max_faint_dct,
                 cube_local_min_faint_dct,
@@ -720,9 +826,9 @@ class DetectionLost(Step):
         self._loginfo('Threshold: %.2f ', threshold2)
 
         if threshold2 == np.inf:
-            orig.Cat1 = orig.Cat0.copy()
-            orig.Cat1['comp'] = 0
-            orig.Cat1['STD'] = 0
+            Cat1 = orig.Cat0.copy()
+            Cat1['comp'] = 0
+            Cat1['STD'] = 0
         else:
             Catcomp, _ = Create_local_max_cat(threshold2,
                                               cube_local_max_faint_dct,
@@ -741,18 +847,20 @@ class DetectionLost(Step):
             Cat0['comp'] = 0
             Catcomp['comp'] = 1
             Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            orig.Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            # vstack creates a masked Table, masking the missing values. But
+            # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
+            # modified later by Cat2 operations, if it was not dumped before.
+            # So for now we transform the table to a non-masked one.
+            Cat1 = Cat1.filled()
 
-        ns = len(np.unique(orig.Cat1['ID']))
+        ns = len(np.unique(Cat1['ID']))
         ds = ns - len(np.unique(orig.Cat0['ID']))
-        nl = len(orig.Cat1)
+        nl = len(Cat1)
         dl = nl - len(orig.Cat0)
+        self.Cat1 = Cat1
         self._loginfo('Save the catalogue in self.Cat1'
                       ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
-
-        self.outputs['table'].append('Cat1')
-        self.outputs['array'].extend(['Pval_r_comp', 'index_pval_comp',
-                                      'Det_M_comp', 'Det_m_comp'])
 
 
 class ComputeSpectra(Step):
@@ -786,27 +894,28 @@ class ComputeSpectra(Step):
 
     name = 'compute_spectra'
     desc = 'Lines estimation'
-    attrs = ('Cat2', 'spectra')
+    Cat2 = DataObj('table')
+    spectra = DataObj('spectra')
     require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
-        orig.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
+        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
             criteria='flux', order_dct=30, horiz_psf=1, horiz=5
         )
 
         self._loginfo('Purity estimation')
-        tmp_Cat2 = Purity_Estimation(orig.Cat2,
+        tmp_Cat2 = Purity_Estimation(self.Cat2,
                                      [orig.Pval_r, orig.Pval_r_comp],
                                      [orig.index_pval, orig.index_pval_comp])
         # Remove duplicated lines
         unique_idx = unique_lines(tmp_Cat2)
-        orig.Cat2 = tmp_Cat2[unique_idx]
+        self.Cat2 = tmp_Cat2[unique_idx]
         Cat_est_line_raw_T = np.array(Cat_est_line_raw_T)[unique_idx]
         Cat_est_line_var_T = np.array(Cat_est_line_var_T)[unique_idx]
 
-        _format_cat(orig.Cat2)
+        _format_cat(self.Cat2)
 
         self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
                       len(orig.Cat2))
@@ -819,18 +928,18 @@ class ComputeSpectra(Step):
         radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
                          / 2).astype(int)
 
-        orig.spectra = []
+        self.spectra = OrderedDict()
         for line_idx, (data, vari) in enumerate(zip(Cat_est_line_raw_T,
                                                     Cat_est_line_var_T)):
-            line_profile, line_z = orig.Cat2[line_idx]['profile', 'z']
-            line_z_min = line_z - radius[line_profile]
-            line_z_max = line_z + radius[line_profile]
-            orig.spectra.append(Spectrum(
+            profile, z, num_line = self.Cat2[line_idx]['profile', 'z',
+                                                       'num_line']
+            line_z_min = z - radius[profile]
+            line_z_max = z + radius[profile]
+            self.spectra[num_line] = Spectrum(
                 data=data, var=vari, wave=orig.wave, mask=np.ma.nomask
-            ).subspec(line_z_min, line_z_max, unit=None))
+            ).subspec(line_z_min, line_z_max, unit=None)
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
-        self.outputs['table'].append('Cat2')
 
 
 class CleanResults(Step):
@@ -856,12 +965,13 @@ class CleanResults(Step):
 
     name = 'clean_results'
     desc = 'Results cleaning'
-    attrs = ('Cat3_lines', 'Cat3_sources')
+    Cat3_lines = DataObj('table')
+    Cat3_sources = DataObj('table')
     require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
-        orig.Cat3_lines = merge_similar_lines(orig.Cat2)
-        orig.Cat3_sources = unique_sources(orig.Cat3_lines)
+        self.Cat3_lines = merge_similar_lines(orig.Cat2)
+        self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
         self._loginfo('Save the unique source catalogue in self.Cat3_sources'
                       ' (%d lines)', len(orig.Cat3_sources))
@@ -871,8 +981,6 @@ class CleanResults(Step):
         if nb_line_merged:
             self._loginfo('%d lines were merged in nearby lines.',
                           nb_line_merged)
-
-        self.outputs['table'].extend(['Cat3_lines', 'Cat3_sources'])
 
 
 class CreateMasks(Step):
