@@ -1047,7 +1047,7 @@ class SaveSources(Step):
         Version number of the source files.
     path: str
         Path where the sources will be saved.
-    n_job: int
+    n_jobs : int
         Number of jobs for parallel processing.
     author: str
         Name of the author to add in the sources.
