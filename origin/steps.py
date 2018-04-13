@@ -593,7 +593,8 @@ class ComputeTGLR(Step):
     minmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
-    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
+    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1, pcut=1e-8,
+            pmeansub=True):
         if ncpu > 1:
             try:
                 import mkl_fft  # noqa
@@ -607,7 +608,7 @@ class ComputeTGLR(Step):
         self._loginfo('Correlation')
         correl, profile, correl_min = Correlation_GLR_test(
             orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
-            orig.profiles, ncpu)
+            orig.profiles, ncpu, pcut=pcut, pmeansub=pmeansub)
 
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0
