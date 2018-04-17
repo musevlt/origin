@@ -909,6 +909,7 @@ class ComputeSpectra(Step):
         tmp_Cat2 = Purity_Estimation(self.Cat2,
                                      [orig.Pval_r, orig.Pval_r_comp],
                                      [orig.index_pval, orig.index_pval_comp])
+
         # Remove duplicated lines
         unique_idx = unique_lines(tmp_Cat2)
         self.Cat2 = tmp_Cat2[unique_idx]
@@ -969,7 +970,7 @@ class CleanResults(Step):
     Cat3_sources = DataObj('table')
     require = ('compute_spectra', )
 
-    def run(self, orig, merge_lines_z_threshold=5, spectrum_size_fwhm=3):
+    def run(self, orig, merge_lines_z_threshold=5):
         self.Cat3_lines = merge_similar_lines(orig.Cat2)
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
@@ -977,7 +978,7 @@ class CleanResults(Step):
                       ' (%d lines)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
-        nb_line_merged = np.sum(~orig.Cat3_lines['merged_in'].mask)
+        nb_line_merged = np.sum(orig.Cat3_lines['merged_in'] != -9999)
         if nb_line_merged:
             self._loginfo('%d lines were merged in nearby lines.',
                           nb_line_merged)

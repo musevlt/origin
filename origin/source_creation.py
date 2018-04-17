@@ -7,7 +7,6 @@ from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
-from numpy.ma import is_masked
 from tqdm import tqdm as progressbar
 
 from .version import __version__ as origin_version
@@ -247,7 +246,7 @@ def create_source(source_id, source_table, line_table, origin_params,
         dtype=['U20', float, float, float, float]
     )
 
-    for line in [_ for _ in source_lines if is_masked(_['merged_in'])]:
+    for line in [_ for _ in source_lines if _['merged_in'] == -9999]:
         num_line = line['num_line']
         ra_ori, dec_ori = line['ra'], line['dec']
         lbda_ori = line['lbda']
