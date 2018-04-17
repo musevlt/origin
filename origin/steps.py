@@ -971,7 +971,8 @@ class CleanResults(Step):
     require = ('compute_spectra', )
 
     def run(self, orig, merge_lines_z_threshold=5):
-        self.Cat3_lines = merge_similar_lines(orig.Cat2)
+        self.Cat3_lines = merge_similar_lines(
+            orig.Cat2, z_pix_threshold=merge_lines_z_threshold)
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
         self._loginfo('Save the unique source catalogue in self.Cat3_sources'
