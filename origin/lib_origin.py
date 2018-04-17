@@ -33,7 +33,7 @@ lib_origin.py contains the methods that compose the ORIGIN software
 import logging
 import numpy as np
 
-from astropy.table import Table, Column, MaskedColumn
+from astropy.table import Table, Column
 from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.stats import gaussian_sigma_to_fwhm
@@ -79,6 +79,10 @@ def isnotebook():  # pragma: no cover
 
 
 def ProgressBar(*args, **kwargs):
+    logger = logging.getLogger('origin')
+    if logging.getLevelName(logger.getEffectiveLevel()) == 'ERROR':
+        kwargs['disable'] = True
+
     from tqdm import tqdm, tqdm_notebook
     func = tqdm_notebook if isnotebook() else tqdm
     return func(*args, **kwargs)
@@ -1799,8 +1803,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                      (k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity))
+            if not bar.disable:
+                bar.write(
+                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                    (k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity))
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1830,9 +1836,11 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                      (k + 1, len(index_pval3), thresh, det_mit, det_Mit,
-                       est_purity))
+            if not bar.disable:
+                bar.write(
+                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                    (k + 1, len(index_pval3), thresh, det_mit, det_Mit,
+                     est_purity))
             Tval_r.append(thresh)
             Pval_r.append(est_purity)
             det_m.append(det_mit)
@@ -1854,9 +1862,11 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                                                        spect_size, segmap,
                                                        tol_spat, tol_spec,
                                                        filter_act, bkgrd)
-            bar.write('- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                      (k + 1, len(threshlist), thresh, det_mit, det_Mit,
-                       est_purity))
+            if not bar.disable:
+                bar.write(
+                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
+                    (k + 1, len(threshlist), thresh, det_mit, det_Mit,
+                     est_purity))
             Pval_r.append(est_purity)
             det_m.append(det_mit)
             det_M.append(det_Mit)
@@ -2578,7 +2588,7 @@ def unique_sources(table):
         x_waverage = np.average(group['x'], weights=group['flux'])
         y_waverage = np.average(group['y'], weights=group['flux'])
 
-        n_lines = len(group[group['merged_in'].mask])
+        n_lines = len(group[group['merged_in'] != -9999])
 
         seg_label = group['seg_label'][0]
         comp = group['comp'][0]
@@ -2709,10 +2719,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     table['line_merged_flag'] = False
     table['line_merged_flag'][idx_to_flag] = True
 
-    table.add_column(MaskedColumn(data=np.full(len(table), -9999, dtype=int),
-                                  name="merged_in",
-                                  mask=np.full(len(table), True),
-                                  fill_value=-9999))
+    table['merged_in'] = np.full(len(table), -9999, dtype=int)
     for line_id, row_indexes in merge_dict.items():
         table['merged_in'][row_indexes] = line_id
 
