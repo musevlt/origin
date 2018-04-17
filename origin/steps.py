@@ -585,6 +585,7 @@ class ComputeTGLR(Step):
     name = 'compute_TGLR'
     desc = 'GLR test'
     cube_correl = DataObj('cube')
+    cube_correl_min = DataObj('cube')
     cube_profile = DataObj('cube')
     cube_local_min = DataObj('cube')
     cube_local_max = DataObj('cube')
@@ -610,6 +611,7 @@ class ComputeTGLR(Step):
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0
         self.store_cube('cube_correl', correl)
+        self.store_cube('cube_correl_min', correl_min)
 
         self._loginfo('Save the number of profile associated to the TGLR'
                       ' in self.cube_profile')
