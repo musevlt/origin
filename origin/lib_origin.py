@@ -2816,7 +2816,7 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=skymap, out_dir=out_dir
+            cont_sky=skymap, out_dir=out_dir, mask_size=mask_size
         )
 
         if gen_mask_return is not None:
@@ -2829,5 +2829,5 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                     source_id, source_x, source_y,
                     lines=group, detection_cube=detection_cube,
                     threshold=threshold, cont_sky=skymap, out_dir=out_dir,
-                    verbose=True
+                    mask_size=mask_size, verbose=True
                 )
