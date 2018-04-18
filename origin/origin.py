@@ -898,7 +898,7 @@ class ORIGIN(steps.LogMixin):
 #            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
 #                     **kwargs)
 
-    def plot_purity(self, comp=False, ax=None, log10=False):
+    def plot_purity(self, comp=False, ax=None, log10=False, legend=True):
         """Draw number of sources per threshold computed in step06/step08
 
         Parameters
@@ -909,6 +909,8 @@ class ORIGIN(steps.LogMixin):
             The Axes instance in which the image is drawn
         log10 : bool
             To draw histogram in logarithmic scale or not
+        legend: bool
+            To draw the legend
 
         """
         if self.Det_M is None:
@@ -958,7 +960,8 @@ class ORIGIN(steps.LogMixin):
         ax.set_title('threshold %f' % threshold)
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
-        ax.legend(h1 + h2, l1 + l2, loc=2)
+        if legend:
+            ax.legend(h1 + h2, l1 + l2, loc=2)
 
     def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
         """Plot the narrow bands images
