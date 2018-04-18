@@ -239,6 +239,10 @@ class ORIGIN(steps.LogMixin):
         else:
             raise AttributeError
 
+    def __dir__(self):
+        return (list(self._dataobjs.keys()) +
+                [o.method_name for o in self.steps.values()])
+
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
              FWHM_PSF=None, name='origin', loglevel='DEBUG', logcolor=False):
