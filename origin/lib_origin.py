@@ -2776,6 +2776,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         in verbose mode to produce various plots of the mask creation process.
 
     """
+    logger = logging.getLogger(__name__)
+
     source_table = source_table.copy()
     source_table.add_index('ID')
 
@@ -2802,6 +2804,7 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                                   total=len(by_id.groups)):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
+        logger.debug("Making mask of source %s.", source_id)
 
         if source_table.loc[source_id]['comp'] == 0:
             detection_cube = cube_correl
@@ -2813,10 +2816,13 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=skymap, out_dir=out_dir
+            cont_sky=skymap, out_dir=out_dir, mask_size=mask_size
         )
 
         if gen_mask_return is not None:
+            logger.warning("The source %s mask is problematic. You may want "
+                           "to check source-mask-%0.5d.fits", gen_mask_return,
+                           gen_mask_return)
             with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
                 out.write(f"{gen_mask_return}\n")
             if plot_problems:
@@ -2824,5 +2830,5 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                     source_id, source_x, source_y,
                     lines=group, detection_cube=detection_cube,
                     threshold=threshold, cont_sky=skymap, out_dir=out_dir,
-                    verbose=True
+                    mask_size=mask_size, verbose=True
                 )
