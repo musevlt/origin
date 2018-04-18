@@ -2804,7 +2804,7 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                                   total=len(by_id.groups)):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
-        logger.debug("Making mas of source %s.", source_id)
+        logger.debug("Making mask of source %s.", source_id)
 
         if source_table.loc[source_id]['comp'] == 0:
             detection_cube = cube_correl
@@ -2820,7 +2820,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         )
 
         if gen_mask_return is not None:
-            logger.warning("The source %s mask is problematic.",
+            logger.warning("The source %s mask is problematic. You may want "
+                           "to check source-mask-%0.5d.fits", gen_mask_return,
                            gen_mask_return)
             with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
                 out.write(f"{gen_mask_return}\n")
