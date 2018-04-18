@@ -1001,6 +1001,11 @@ class CreateMasks(Step):
     seg_thres_factor: float
         Factor applied to the detection threshold to get the threshold used
         for mask creation.
+    plot_problems: bool
+        If true, when the mask or a source seems dubious, some diagnostic plots
+        about the source and its lines is saved in the output folder. Note that
+        this may be problematic when running the code inside a notebook, hence
+        the option is False by default.
 
     """
 
@@ -1009,7 +1014,7 @@ class CreateMasks(Step):
     require = ('clean_results', )
 
     def run(self, orig, path=None, overwrite=True, mask_size=50,
-            seg_thres_factor=.5):
+            seg_thres_factor=.5, plot_problems=False):
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
@@ -1037,7 +1042,7 @@ class CreateMasks(Step):
             out_dir=out_dir,
             mask_size=mask_size,
             seg_thres_factor=seg_thres_factor,
-            plot_problems=True)
+            plot_problems=plot_problems)
 
 
 class SaveSources(Step):
