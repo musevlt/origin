@@ -590,6 +590,7 @@ class ComputeTGLR(Step):
     cube_local_min = DataObj('cube')
     cube_local_max = DataObj('cube')
     maxmap = DataObj('image')
+    minmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
     def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
@@ -620,6 +621,7 @@ class ComputeTGLR(Step):
 
         self._loginfo('Save the map of maxima in self.maxmap')
         self.store_image('maxmap', np.amax(correl, axis=0))
+        self.store_image('minmap', np.amax(correl_min, axis=0))
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
