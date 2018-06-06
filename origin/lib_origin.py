@@ -167,7 +167,7 @@ def dct_residual(w_raw, order, var, approx, mask):
     w_raw : array
         Data array.
     order : int
-        The number of atom to keep for the dct decomposition.
+        The number of atom to keep for the DCT decomposition.
     var : array
         Variance array.
     approx : bool
@@ -177,7 +177,7 @@ def dct_residual(w_raw, order, var, approx, mask):
     Returns
     -------
     Faint, cont : array
-        Residual and continuum estimated from the dct decomposition.
+        Residual and continuum estimated from the DCT decomposition.
 
     """
     nl = w_raw.shape[0]
@@ -251,21 +251,22 @@ def dct_residual(w_raw, order, var, approx, mask):
 
 
 def createradvar(cu, ot):
-    """Function to compute the compactness of areas using variance of
-    position. The variance is computed on the position given by
-    adding one of the 'ot' to 'cu'
+    """Compute the compactness of areas using variance of position.
+
+    The variance is computed on the position given by adding one of the 'ot'
+    to 'cu'.
 
     Parameters
     ----------
-    cu :   2D array
-           The current array
-    ot :   3D array
-           The other array
+    cu : 2D array
+        The current array
+    ot : 3D array
+        The other array
 
     Returns
     -------
-    var :     array
-              The radial variances
+    var : array
+        The radial variances
 
     Date  : Sept,27 2017
     Author: Antony Schutz (antonyschutz@gmail.com)
@@ -367,16 +368,16 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     Parameters
     ----------
     nexpmap :   2D array
-                the active pixel of the image
+        the active pixel of the image
     MinS    :   number
-                The size of areas under which they need to merge
+        The size of areas under which they need to merge
     MaxS    :   number
-                The size of areas above which they cant merge
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
-    Nx        : integer
-                Number of columns
-    Ny        : integer
+        The size of areas above which they cant merge
+    NbSubcube : int
+        Number of subcubes for the spatial segmentation
+    Nx        : int
+        Number of columns
+    Ny        : int
                 Number of rows
 
 
@@ -428,18 +429,17 @@ def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
     Parameters
     ----------
     labsrc : array
-             segmentation map
+        segmentation map
     label :     array
-                label of fused square generated in
-                area_segmentation_square_fusion
+        label of fused square generated in area_segmentation_square_fusion
     pfa   :     float
-                Pvalue for the test which performs segmentation
-    NbSubcube : integer
-                Number of subcubes for the spatial segmentation
-    Nx        : integer
-                Number of columns
-    Ny        : integer
-                Number of rows
+        Pvalue for the test which performs segmentation
+    NbSubcube : int
+        Number of subcubes for the spatial segmentation
+    Nx        : int
+        Number of columns
+    Ny        : int
+        Number of rows
 
 
     Returns
@@ -683,23 +683,23 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
 
     Parameters
     ----------
-    NbArea           : integer
-                       Number of area
+    NbArea           : int
+        Number of area
     cube_std         : array
-                       Cube data weighted by the standard deviation
+        Cube data weighted by the standard deviation
     areamap          : array
-                       Map of areas
+        Map of areas
     Noise_population : float
-                       Proportion of estimated noise part used to define the
-                       background spectra
+        Proportion of estimated noise part used to define the
+        background spectra
     threshold_test   : list
-                       User given list of threshold (not pfa) to apply
-                       on each area, the list is of lenght NbAreas
-                       or of lenght 1.
-    itermax          : integer
-                       Maximum number of iterations
+        User given list of threshold (not pfa) to apply on each area, the
+        list is of length NbAreas or of length 1.
+    itermax          : int
+        Maximum number of iterations
     testO2           : list of arrays
-                       Result of the O2 test
+        Result of the O2 test
+
     Returns
     -------
     cube_faint : array
@@ -774,27 +774,24 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     Parameters
     ----------
     Cube_in :   array
-                The 3D cube data clean
-
+        The 3D cube data clean
     test_fun:   function
-                the test to be performed on data
-
+        the test to be performed on data
     Noise_population : float
-                       Fraction of spectra estimated as background
-    itermax          : integer
-                       Maximum number of iterations
+        Fraction of spectra estimated as background
+    itermax          : int
+        Maximum number of iterations
 
     Returns
     -------
     faint   :   array
-                cleaned cube
+        cleaned cube
     mapO2   :   array
-                2D MAP filled with the number of iteration per spectra
+        2D MAP filled with the number of iteration per spectra
     thresO2 :   float
-                Threshold for the O2 test
+        Threshold for the O2 test
     nstop   :   int
-                Nb of times the iterations have been stopped when > itermax
-
+        Nb of times the iterations have been stopped when > itermax
 
     Date  : Mar, 28 2017
     Author: antony schutz (antonyschutz@gmail.com)
@@ -1161,7 +1158,8 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
     return cube_Local_max, cube_Local_min
 
 
-def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad, thrdata=None, mthrdata=None):
+def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
+                        thrdata=None, mthrdata=None):
     x, y = np.meshgrid(np.arange(data.shape[2]), np.arange(data.shape[1]))
     ksel = ((x - x0)**2 + (y - y0)**2) < spat_rad**2
     z1 = np.maximum(0, z0 - spect_rad)
@@ -1315,7 +1313,7 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout, dtype=int)
     aout = np.array(aout, dtype=int)
 
-    # ID of Spatiale Merging
+    # ID of spatial Merging
     xout2 = []
     yout2 = []
     zout2 = []
@@ -1338,7 +1336,7 @@ def spatiospectral_merging_mat(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout2, dtype=int)
     aout = np.array(aout2, dtype=int)
 
-    # Group Spectrale Merging
+    # Group spectral Merging
     for n, area_cu in enumerate(np.unique(aout)):
         if area_cu > 0:
             ind = np.where(aout == area_cu)[0]
@@ -1385,10 +1383,10 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
               list of area
 
     tol_spat : int
-               spatiale tolerance for the spatial merging
+               spatial tolerance for the spatial merging
 
     tol_spec : int
-               spectrale tolerance for the spectral merging
+               spectral tolerance for the spectral merging
     n : int
         index of the original seed
     iin : 0-1
@@ -1467,34 +1465,30 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
 def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     """perform the spatial and spatio spectral merging.
     The spectral merging give the same ID if several group of lines (from
-    spatiale merging) if they share at least one line frequency
+    spatial merging) if they share at least one line frequency
 
     Parameters
     ----------
-    z,y,x     : array
-                the 3D position of the estimated lines
-    map_in    : array
-                Segmentation map
-
+    z,y,x : array
+        the 3D position of the estimated lines
+    map_in : array
+        Segmentation map
     tol_spat : int
-               spatiale tolerance for the spatial merging
-
+        spatial tolerance for the spatial merging
     tol_spec : int
-               spectrale tolerance for the spectral merging
+        spectral tolerance for the spectral merging
 
     Returns
     -------
     xout,yout,zout : array
-                     the 3D position of the estimated lines
-                     the same as z,y,x, they are not changed
-
+        the 3D position of the estimated lines the same as z,y,x,
+        they are not changed
     aout : array
-           the index of the label in map_in
+        the index of the label in map_in
     iout : array
-           the ID after spatial and spatio spectral merging
+        the ID after spatial and spatio spectral merging
     iout2 : array
-           the ID after spatial merging
-
+        the ID after spatial merging
 
     Date  : October, 25 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1503,7 +1497,7 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     IDorder = np.arange(Nz)
     area = map_in[y, x]
 
-    # Spatiale Merging
+    # spatial Merging
     xout = []
     yout = []
     zout = []
@@ -1531,7 +1525,7 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout, dtype=int)
     aout = np.array(aout, dtype=int)
 
-    # ID of Spatiale Merging
+    # ID of spatial Merging
     xout2 = []
     yout2 = []
     zout2 = []
@@ -1554,7 +1548,7 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     iout = np.array(iout2, dtype=int)
     aout = np.array(aout2, dtype=int)
 
-    # Group Spectrale Merging
+    # Group spectral Merging
     for n, area_cu in enumerate(np.unique(aout)):
         if area_cu > 0:
             ind = np.where(aout == area_cu)[0]
@@ -1577,7 +1571,7 @@ def spatiospectral_merging(z, y, x, map_in, tol_spat, tol_spec):
     # LPI iout2 pour debbugger
 
 
-def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
+def thresh_max_min_loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
                                  filter_act, both=True):
     """Filter the correl>thresh in + DATA by the correl>thresh in - DATA
     if both = True do the same in opposite
@@ -1588,29 +1582,28 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
     Parameters
     ----------
     MaxLoc : array
-           cube of local maxima from maximum correlation
+        cube of local maxima from maximum correlation
     MinLoc : array
-           cube of local maxima from minus minimum correlation
+        cube of local maxima from minus minimum correlation
     thresh : float
-             a threshold value
+        a threshold value
     spat_size : int
-                spatiale size of the spatiale filter
+        spatial size of the spatial filter
     spect_size : int
-                 spectral lenght of the spectral filter
-    filter_act : Bool
-                 activate or deactivate the spatio spectral filter
-                 default: True
-    both : Bool
-           if true the process is applied in both sense, otherwise it s applied
-           only in detection purpose and not to compute the purity
+        spectral length of the spectral filter
+    filter_act : bool
+        activate or deactivate the spatio spectral filter, default: True
+    both : bool
+        if true the process is applied in both sense, otherwise it is applied
+        only in detection purpose and not to compute the purity
 
     Returns
     -------
     zM,yM,xM : list of tuple of int
-               The spatio spectral position of the lines in the + data correl
-
+        The spatio spectral position of the lines in the + data correl
     zM,yM,xM : (optional) list of tuple of int
-               The spatio spectral position of the lines in the - data correl
+        The spatio spectral position of the lines in the - data correl
+
     Date  : October, 25 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
@@ -1628,12 +1621,14 @@ def Thresh_Max_Min_Loc_filtering(MaxLoc, MinLoc, thresh, spat_size, spect_size,
 
         zm, ym, xm = np.where(locm)
         for x, y, z in zip(xm, ym, zm):
-            _mask_circle_region(LM, x, y, z, spat_rad, spect_rad, MaxLoc, MinLoc)
+            _mask_circle_region(LM, x, y, z, spat_rad, spect_rad,
+                                MaxLoc, MinLoc)
 
         if both:
             zm, ym, xm = np.where(locM)
             for x, y, z in zip(xm, ym, zm):
-                _mask_circle_region(Lm, x, y, z, spat_rad, spect_rad, MinLoc, MaxLoc)
+                _mask_circle_region(Lm, x, y, z, spat_rad, spect_rad,
+                                    MinLoc, MaxLoc)
 
         zM, yM, xM = np.where(LM > 0)
         if both:
@@ -1655,40 +1650,37 @@ def purity_iter(locM, locm, thresh, spat_size, spect_size, map_in, tol_spat,
     Parameters
     ----------
     locM : array
-           cube of local maxima from maximum correlation
+        cube of local maxima from maximum correlation
     locm : array
-           cube of local maxima from minus minimum correlation
+        cube of local maxima from minus minimum correlation
     thresh : float
-             a threshold value
-
+        a threshold value
     spat_size : int
-                spatiale size of the spatiale filter
+        spatial size of the spatial filter
     spect_size : int
-                 spectral lenght of the spectral filter
+        spectral length of the spectral filter
     map_in  : array
-              labels of source segmentation basedd on continuum
+        labels of source segmentation based on continuum
     tol_spat : int
-               spatiale tolerance for the spatial merging
-
+        spatial tolerance for the spatial merging
     tol_spec : int
-               spectrale tolerance for the spectral merging
-    filter_act : Bool
-                 activate or deactivate the spatio spectral filter
-                 default: True
+        spectral tolerance for the spectral merging
+    filter_act : bool
+        activate or deactivate the spatio spectral filter, default: True
     Returns
     -------
     est_purity : float
-                 The estimated purity for this threshold
-    det_m     : float
-                Number of unique ID (-DATA)
-    det_M     : float
-                Number of unique ID (+DATA)
+        The estimated purity for this threshold
+    det_m : float
+        Number of unique ID (-DATA)
+    det_M : float
+        Number of unique ID (+DATA)
 
     Date  : October, 25 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
 
-    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(
+    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
         locM, locm, thresh, spat_size, spect_size, filter_act)
     if len(zM) > 1000:
         xoutM, youtM, zoutM, aoutM, iout1M, iout2M = spatiospectral_merging(
@@ -1728,46 +1720,42 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
     Parameters
     ----------
-    purity    : float
-                the purity between 0 and 1
-    cube_Local_max : array
-                     cube of local maxima from maximum correlation
-    cube_Local_min : array
-                     cube of local maxima from minus minimum correlation
-    segmap: array
-            segmentation map
+    purity : float
+        the purity between 0 and 1
+    cube_local_max : array
+        cube of local maxima from maximum correlation
+    cube_local_min : array
+        cube of local maxima from minus minimum correlation
+    segmap : array
+        segmentation map
     spat_size : int
-                spatiale size of the spatiale filter
+        spatial size of the spatial filter
     spect_size : int
-                 spectral lenght of the spectral filter
+        spectral length of the spectral filter
     tol_spat : int
-               spatiale tolerance for the spatial merging
-
+        spatial tolerance for the spatial merging
     tol_spec : int
-               spectrale tolerance for the spectral merging
-
-    filter_act : Bool
-                 activate or deactivate the spatio spectral filter
-                 default: True
-    auto       : tuple (npts1,npts2,pmargin)
-                 nb of threshold sample for iteration 1 and 2, margin in purity
-                 default (5,15,0.1)
+        spectral tolerance for the spectral merging
+    filter_act : bool
+        activate or deactivate the spatio spectral filter, default: True
+    auto : tuple (npts1, npts2, pmargin)
+        nb of threshold sample for iteration 1 and 2, margin in purity
+        default (5,15,0.1)
     threshlist : list
-                 list of thresholds to compute the purity
-                 default None
+        list of thresholds to compute the purity default None
 
     Returns
     -------
     threshold : float
-                the threshold associated to the purity
+        the threshold associated to the purity
     PVal_r : array
-             The purity function
-    index_pval: array
-                index value to plot
-    det_m     : array
-                Number of detections (-DATA)
-    det_M     : array
-                Number of detections (+DATA)
+        The purity function
+    index_pval : array
+        index value to plot
+    det_m : array
+        Number of detections (-DATA)
+    det_M : array
+        Number of detections (+DATA)
 
     Date  : July, 6 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1797,12 +1785,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                      thresh_min, thresh_max, n_pval1)
         bar = ProgressBar(index_pval1[::-1])
         for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
-                                                       cube_local_min,
-                                                       thresh, spat_size,
-                                                       spect_size, segmap,
-                                                       tol_spat, tol_spec,
-                                                       filter_act, bkgrd)
+            est_purity, det_mit, det_Mit = purity_iter(
+                cube_local_max, cube_local_min, thresh, spat_size,
+                spect_size, segmap, tol_spat, tol_spec, filter_act, bkgrd
+            )
             if not bar.disable:
                 bar.write(
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
@@ -1830,12 +1816,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         for k, thresh in enumerate(bar):
             if np.any(np.isclose(thresh, Tval_r)):
                 continue
-            est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
-                                                       cube_local_min,
-                                                       thresh, spat_size,
-                                                       spect_size, segmap,
-                                                       tol_spat, tol_spec,
-                                                       filter_act, bkgrd)
+            est_purity, det_mit, det_Mit = purity_iter(
+                cube_local_max, cube_local_min, thresh, spat_size,
+                spect_size, segmap, tol_spat, tol_spec, filter_act, bkgrd
+            )
             if not bar.disable:
                 bar.write(
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
@@ -1856,12 +1840,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     else:
         bar = ProgressBar(threshlist)
         for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(cube_local_max,
-                                                       cube_local_min,
-                                                       thresh, spat_size,
-                                                       spect_size, segmap,
-                                                       tol_spat, tol_spec,
-                                                       filter_act, bkgrd)
+            est_purity, det_mit, det_Mit = purity_iter(
+                cube_local_max, cube_local_min, thresh, spat_size,
+                spect_size, segmap, tol_spat, tol_spec, filter_act, bkgrd
+            )
             if not bar.disable:
                 bar.write(
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
@@ -1897,33 +1879,30 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
 
     Parameters
     ----------
-    thresh    : float
-                the threshold for correl
+    thresh : float
+        the threshold for correl
     cube_local_max : array
-                     cube of local maxima from maximum correlation
+        cube of local maxima from maximum correlation
     cube_local_min : array
-                     cube of local maxima from minus minimum correlation
+        cube of local maxima from minus minimum correlation
     segmentation_map : array
-                        map of estimated continuum for segmentation
-
+        map of estimated continuum for segmentation
     spat_size : int
-                spatiale size of the spatiale filter
+        spatial size of the spatial filter
     spect_size : int
-                 spectral lenght of the spectral filter
+        spectral length of the spectral filter
     tol_spat : int
-               spatiale tolerance for the spatial merging
-
+        spatial tolerance for the spatial merging
     tol_spec : int
-               spectrale tolerance for the spectral merging
-    filter_act : Bool
-                 activate or deactivate the spatio spectral filter
-                 default: True
+        spectral tolerance for the spectral merging
+    filter_act : bool
+        activate or deactivate the spatio spectral filter, default: True
 
     Returns
     -------
     Cat_ref : astropy.Table
-              Catalogue of the referent voxels coordinates for each group
-              Columns of Cat_ref : ID ra dec lba x0 y0 z0 profile seglabel T_GLR
+        Catalogue of the referent voxels coordinates for each group
+        Columns of Cat_ref : ID ra dec lba x0 y0 z0 profile seglabel T_GLR
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1931,7 +1910,7 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min,
     logger = logging.getLogger(__name__)
 
     logger.info('Thresholding...')
-    zM, yM, xM, zm, ym, xm = Thresh_Max_Min_Loc_filtering(
+    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
         cube_local_max, cube_local_min, thresh, spat_size, spect_size, filter_act)
     logger.info('Spatio-spectral merging...')
     if len(zM) > 1000:
@@ -1969,23 +1948,22 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
     Parameters
     ----------
     raw_in     : array
-                 RAW data
+        RAW data
     var_in     : array
-                 MUSE covariance
+        MUSE covariance
     psf_in     : array
-                 MUSE PSF
+        MUSE PSF
     weights_in : array
-                 PSF weights
-    y          : integer
-                 y position in pixek estimated in previous catalog
-    x          : integer
-                 x position in pixek estimated in previous catalog
-    size_grid  : integer
-                 Maximum spatial shift for the grid
+        PSF weights
+    y          : int
+        y position in pixel estimated in previous catalog
+    x          : int
+        x position in pixel estimated in previous catalog
+    size_grid  : int
+        Maximum spatial shift for the grid
 
     Returns
     -------
-
     red_dat : cube of raw_in centered in y,x of size PSF+Max spatial shift
     red_var : cube of var_in centered in y,x of size PSF+Max spatial shift
     red_wgt : cube of weights_in centered in y,x of size PSF+Max spatial shift
@@ -2102,37 +2080,37 @@ def conv_wgt(deconv_met, psf_in):
 
 def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     """Function to Perform PCA LS or Denoised PCA LS.
-    algorithm:
-        - principal eigen vector is computed, RAW data are orthogonalized
-          this is the first estimation to modelize the continuum
-        - on residual, the line is estimated by least square estimation
-        - the estimated line is convolved by the psf and removed from RAW data
-        - principal eigen vector is computed.
 
-        - - PCA LS: RAW data are orthogonalized, this is the second estimation
-                    to modelize the continuum
+    Algorithm:
 
-        - - Denoised PCA LS: The eigen vector is denoised by a DCT, with the
-                             new eigen vector RAW data are orthogonalized,
-                             this is the second estimation to modelize the
-                             continuum
-        - on residual, the line is estimated by least square estimation
+    - principal eigen vector is computed, RAW data are orthogonalized
+      this is the first estimation to modelize the continuum
+    - on residual, the line is estimated by least square estimation
+    - the estimated line is convolved by the psf and removed from RAW data
+    - principal eigen vector is computed.
+
+      - PCA LS: RAW data are orthogonalized, this is the second estimation
+        to modelize the continuum
+
+      - Denoised PCA LS: The eigen vector is denoised by a DCT, with the
+        new eigen vector RAW data are orthogonalized, this is the second
+        estimation to modelize the continuum
+
+    - on residual, the line is estimated by least square estimation
 
     Parameters
     ----------
-    data_in    : array
-                 RAW data
-    var_in     : array
-                 MUSE covariance
-    psf_in     : array
-                 MUSE PSF
-    order_dct  : integer
-                 order of the DCT for the Denoised PCA LS
-                 if None the PCA LS is performed
+    data_in : array
+        RAW data
+    var_in : array
+        MUSE covariance
+    psf_in : array
+        MUSE PSF
+    order_dct : int
+        order of the DCT for the Denoised PCA LS. If None use PCA LS.
 
     Returns
     -------
-
     estimated_line : estimated line
     estimated_var  : estimated variance
 
@@ -2200,61 +2178,58 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
 
     Parameters
     ----------
-    data_in    : array
-                 RAW data minicube
-    var_in     : array
-                 MUSE covariance minicube
-    psf        : array
-                 MUSE PSF minicube
-    weight_in  : array
-                 PSF weights minicube
-    horiz      : integer
-                 Maximum spectral shift to compute the criteria for gridding
-    size_grid  : integer
-                 Maximum spatial shift for the grid
-    y0         : integer
-                 y position in pixel from catalog
-    x0         : integer
-                 x position in pixel from catalog
-    z0         : integer
-                 z position in pixel from catalog
-    NY         : integer
-                 Number of y-pixels from Full data Cube
-    NX         : integer
-                 Number of x-pixels from Full data Cube
-    y0         : integer
-                 y position in pixel from catalog
-    horiz_psf  : integer
-                 Maximum spatial shift in size of PSF to compute the MSE
-    criteria   : string
-                 criteria used to choose the candidate in the grid: flux or mse
-    order_dct  : integer
-                 order of the DCT Used in the Denoised PCA LS, set to None the
-                 method become PCA LS only
+    data_in : array
+        RAW data minicube
+    var_in : array
+        MUSE covariance minicube
+    psf : array
+        MUSE PSF minicube
+    weight_in : array
+        PSF weights minicube
+    horiz : int
+        Maximum spectral shift to compute the criteria for gridding
+    size_grid : int
+        Maximum spatial shift for the grid
+    y0 : int
+        y position in pixel from catalog
+    x0 : int
+        x position in pixel from catalog
+    z0 : int
+        z position in pixel from catalog
+    NY : int
+        Number of y-pixels from Full data Cube
+    NX : int
+        Number of x-pixels from Full data Cube
+    y0 : int
+        y position in pixel from catalog
+    horiz_psf : int
+        Maximum spatial shift in size of PSF to compute the MSE
+    criteria : string
+        criteria used to choose the candidate in the grid: flux or mse
+    order_dct : int
+        order of the DCT Used in the Denoised PCA LS, set to None the
+        method become PCA LS only
 
     Returns
     -------
-    flux_est_5          :   float
-                            Estimated flux +/- 5
-    flux_est_10         :   float
-                            Estimated flux +/- 10
-    MSE_5               :   float
-                            Mean square error +/- 5
-    MSE_10              :   float
-                            Mean square error +/- 10
-    estimated_line      :   array
-                            Estimated lines in data space
-    estimated_variance  :   array
-                            Estimated variance in data space
-    y                   :   integer
-                            re-estimated x position in pixel of the source
-                            in the grid
-    x                   :   integer
-                            re-estimated x position in pixel of the source
-                            in the grid
-    z                   :   integer
-                            re-estimated x position in pixel of the source
-                            in the grid
+    flux_est_5 : float
+        Estimated flux +/- 5
+    flux_est_10 : float
+        Estimated flux +/- 10
+    MSE_5 : float
+        Mean square error +/- 5
+    MSE_10 : float
+        Mean square error +/- 10
+    estimated_line : array
+        Estimated lines in data space
+    estimated_variance : array
+        Estimated variance in data space
+    y : int
+        re-estimated x position in pixel of the source in the grid
+    x : int
+        re-estimated x position in pixel of the source in the grid
+    z : int
+        re-estimated x position in pixel of the source in the grid
 
     Date  : June, 21 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
@@ -2381,46 +2356,44 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
 
     Parameters
     ----------
-    Cat1_T     : astropy.Table
-                 Catalogue of parameters of detected emission lines selected
-                 with a narrow band test.
-                 Columns of the Catalogue Cat1_T:
-                 ra dec lbda x0 y0 z0 T_GLR profile
-    DATA       : array
-                 RAW data
-    VAR        : array
-                 MUSE covariance
-    PSF        : array
-                 MUSE PSF
-    WGT        : array
-                 PSF weights
-    size_grid  : integer
-                 Maximum spatial shift for the grid
-    criteria   : string
-                 criteria used to choose the candidate in the grid: flux or mse
-    order_dct  : integer
-                 order of the DCT Used in the Denoised PCA LS, set to None the
-                 method become PCA LS only
-    horiz_psf  : integer
-                 Maximum spatial shift in size of PSF to compute the MSE
-    horiz      : integer
-                 Maximum spectral shift to compute the criteria
-    wcs        : `mpdaf.obj.WCS`
-                  RA-DEC coordinates.
-    wave       : `mpdaf.obj.WaveCoord`
-                 Spectral coordinates.
+    Cat1_T : astropy.Table
+        Catalogue of parameters of detected emission lines selected
+        with a narrow band test.  Columns of the Catalogue Cat1_T:
+        ra dec lbda x0 y0 z0 T_GLR profile
+    DATA : array
+        RAW data
+    VAR : array
+        MUSE covariance
+    PSF : array
+        MUSE PSF
+    WGT : array
+        PSF weights
+    size_grid : int
+        Maximum spatial shift for the grid
+    criteria : string
+        criteria used to choose the candidate in the grid: flux or mse
+    order_dct : int
+        order of the DCT Used in the Denoised PCA LS, set to None the
+        method become PCA LS only
+    horiz_psf : int
+        Maximum spatial shift in size of PSF to compute the MSE
+    horiz : int
+        Maximum spectral shift to compute the criteria
+    wcs : `mpdaf.obj.WCS`
+        RA-DEC coordinates.
+    wave : `mpdaf.obj.WaveCoord`
+        Spectral coordinates.
 
     Returns
     -------
-    Cat2             : astropy.Table
-                       Catalogue of parameters of detected emission lines.
-                       Columns of the Catalogue Cat2:
-                       ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
-                       flux num_line
+    Cat2 : astropy.Table
+        Catalogue of parameters of detected emission lines.
+        Columns of the Catalogue Cat2: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
+        profile residual flux num_line
     Cat_est_line_raw : list of arrays
-                       Estimated lines in data space
+        Estimated lines in data space
     Cat_est_line_std : list of arrays
-                       Estimated lines in SNR space
+        Estimated lines in SNR space
 
     Date  : June, 21 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
@@ -2488,22 +2461,20 @@ def Purity_Estimation(Cat_in, purity_curves, purity_index):
 
     Parameters
     ----------
-    Cat_in     : astropy.Table
-                 Catalogue of parameters of detected emission lines selected
-                 with a narrow band test.
-    purity_curves     : array, array
-                          purity curves related to area
-    purity_index      : array, array
-                          index of purity curves related to area
+    Cat_in : astropy.Table
+        Catalogue of parameters of detected emission lines selected
+        with a narrow band test.
+    purity_curves : array, array
+        purity curves related to area
+    purity_index : array, array
+        index of purity curves related to area
 
     Returns
     -------
-    Cat1_2            : astropy.Table
-                       Catalogue of parameters of detected emission lines.
-                       Columns of the Catalogue Cat2:
-                       ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual
-                       flux num_line purity
-
+    Cat1_2 : astropy.Table
+        Catalogue of parameters of detected emission lines.
+        Columns of the Catalogue Cat2: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
+        profile residual flux num_line purity
 
     Date  : July, 25 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
