@@ -386,7 +386,7 @@ class CreateAreas(Step):
 
             self._logdebug('Sources fusion')
             square_src_fus, src = area_segmentation_sources_fusion(
-                orig.segmap.data, square_cut_fus, pfa, orig.Ny, orig.Nx)
+                orig.segmap._data, square_cut_fus, pfa, orig.Ny, orig.Nx)
 
             self._logdebug('Convex envelope')
             convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
@@ -643,7 +643,7 @@ class ComputeTGLR(Step):
 
 
 class ComputePurityThreshold(Step):
-    """Find the threshold  for a given purity
+    """Find the threshold for a given purity.
 
     Parameters
     ----------
@@ -660,7 +660,7 @@ class ComputePurityThreshold(Step):
         spectral lenght of the spectral filter
     auto : tuple (npts1,npts2,pmargin)
         nb of threshold sample for iteration 1 and 2, margin in purity
-        default (5,15,0.1
+        default: (5, 15, 0.1)
     threshlist : list
         list of thresholds to compute the purity
 
@@ -694,8 +694,8 @@ class ComputePurityThreshold(Step):
         threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
             Compute_threshold_purity(
                 purity, orig.cube_local_max._data, orig.cube_local_min._data,
-                orig.segmap.data, spat_size, spect_size, tol_spat, tol_spec,
-                True, True, auto, threshlist)
+                orig.segmap._data, spat_size, spect_size, tol_spat, tol_spec,
+                filter_act=True, bkgrd=True, auto=auto, threshlist=threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
