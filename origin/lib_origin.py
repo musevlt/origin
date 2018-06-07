@@ -981,7 +981,7 @@ def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
 
 
 @timeit
-def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, threads,
+def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
                          pcut=None, pmeansub=True):
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
@@ -998,8 +998,12 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, threads,
         Weight maps of each field
     profiles : list of ndarray
         Dictionary of spectral profiles to test
-    threads : int
+    nthreads : int
         number of threads
+    pcut : float
+        Cut applied to the profiles to limit their width
+    pmeansub : bool
+        Subtract the mean of the profiles
 
     Returns
     -------
@@ -1027,13 +1031,13 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, threads,
     if nfields > 1:
         fields = ProgressBar(fields)
 
-    if threads != 1:
+    if nthreads != 1:
         # copy the arrays because otherwise joblib's memmap handling fails
         # (maybe because of astropy.io.fits doing weird things with the memap?)
         cube = np.array(cube)
         sigma = np.array(sigma)
 
-    with Parallel(n_jobs=threads) as parallel:
+    with Parallel(n_jobs=nthreads) as parallel:
         for nf in fields:
             # convolve spatially each spectral channel by the FSF, and do the
             # same for the norm (inverse variance)
@@ -1074,10 +1078,10 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, threads,
 
     # Compute the FFTs of the cube and norm cube, splitting them on multiple
     # threads if needed
-    with Parallel(n_jobs=threads, backend='threading') as parallel:
-        cube_fft = _convolve_spectral(parallel, threads, cube_fsf, fshape,
+    with Parallel(n_jobs=nthreads, backend='threading') as parallel:
+        cube_fft = _convolve_spectral(parallel, nthreads, cube_fsf, fshape,
                                       func=fft.rfftn)
-        norm_fft = _convolve_spectral(parallel, threads, norm_fsf, fshape,
+        norm_fft = _convolve_spectral(parallel, nthreads, norm_fsf, fshape,
                                       func=fft.rfftn)
 
     cube_fsf = norm_fsf = res = None
@@ -1091,10 +1095,10 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, threads,
     # for each profile, compute convolve the convolved cube and norm cube.
     # Then for each pixel we keep the maximum correlation (and min correlation)
     # and the profile number with the max correl.
-    with Parallel(n_jobs=threads, backend='threading') as parallel:
+    with Parallel(n_jobs=nthreads, backend='threading') as parallel:
         for k in ProgressBar(range(len(prof_cut))):
             cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
-                                             fshape, threads, parallel)
+                                             fshape, nthreads, parallel)
             cube_profile = cube_profile[cslice[0]]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
