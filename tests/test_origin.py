@@ -27,8 +27,7 @@ def test_origin():
         my_origin.set_loglevel('DEBUG')
         assert my_origin.logger.handlers[0].level == 10
 
-        # FIXME: dct_approx=False does not work with the test dataset
-        my_origin.step01_preprocessing(dct_approx=True)
+        my_origin.step01_preprocessing()
         assert my_origin.ima_dct is not None
         assert my_origin.ima_std is not None
         my_origin.write()
@@ -100,9 +99,9 @@ def test_origin():
 
         # test returned sources are valid
         src = Source.from_file('./tmp2/sources/source-00001.fits')
-        assert set(sp.shape[0] for sp in src.spectra.values()) == {36, 3681}
+        assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
         assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
-        assert src.cubes['MUSE_CUBE'].shape == (3681, 25, 25)
+        assert src.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
     finally:
         # Cleanup (try to close opened files)
         for h in my_origin.logger.handlers:
