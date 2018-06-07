@@ -558,23 +558,30 @@ class ComputeTGLR(Step):
     Parameters
     ----------
     NbSubcube : int
-        Number of sub-cubes for the spatial segmentation
-        If NbSubcube>1 the correlation and local maximas and
-        minimas are performed on smaller subcube and combined
-        after. Useful to avoid swapp
+        Number of sub-cubes for the spatial segmentation. If NbSubcube>1 the
+        correlation and local maximas and minimas are performed on smaller
+        subcube and combined after. Useful to limit memory usage.
     neighbors : int
-        Connectivity of contiguous voxels
+        Connectivity of contiguous voxels, for the maximum filter.
     ncpu : int
-        Number of CPUs used
+        Number of CPUs used, defaults to 1.
+    pcut : float
+        Cut applied to the profiles to limit their width (default 1e-8).
+    pmeansub : bool
+        Subtract the mean of the profiles (default True).
 
     Returns
     -------
     self.cube_correl : `~mpdaf.obj.Cube`
         Cube of T_GLR values
+    self.correl_min : `~mpdaf.obj.Cube`
+        Cube of T_GLR values of minimum correlation
     self.cube_profile : `~mpdaf.obj.Cube` (type int)
         Number of the profile associated to the T_GLR
     self.maxmap : `~mpdaf.obj.Image`
-        Map of maxima along the wavelength axis
+        Map of maximum correlations along the wavelength axis
+    self.minmap : `~mpdaf.obj.Image`
+        Map of minimum correlations along the wavelength axis
     self.cube_local_max : `~mpdaf.obj.Cube`
         Local maxima from max correlation
     self.cube_local_min : `~mpdaf.obj.Cube`
@@ -593,7 +600,8 @@ class ComputeTGLR(Step):
     minmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
-    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1):
+    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1, pcut=1e-8,
+            pmeansub=True):
         if ncpu > 1:
             try:
                 import mkl_fft  # noqa
@@ -607,7 +615,7 @@ class ComputeTGLR(Step):
         self._loginfo('Correlation')
         correl, profile, correl_min = Correlation_GLR_test(
             orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
-            orig.profiles, ncpu)
+            orig.profiles, nthreads=ncpu, pcut=pcut, pmeansub=pmeansub)
 
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0

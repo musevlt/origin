@@ -968,15 +968,9 @@ def _convolve_profile(Dico, cube_fft, norm_fft, fshape, n_jobs, parallel):
     norm_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
                                       func=fft.irfftn)
 
-    # dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
-    # cube_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
-    # dico_fft = fft.rfftn(Dico_sq, fshape)[:, None] * norm_fft
-    # norm_profile = fft.irfftn(dico_fft, fshape, axes=(0,))
-
     norm_profile[norm_profile <= 0] = np.inf
     np.sqrt(norm_profile, out=norm_profile)
     cube_profile /= norm_profile
-
     return cube_profile
 
 
@@ -987,7 +981,8 @@ def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
 
 
 @timeit
-def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
+def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
+                         pcut=None, pmeansub=True):
     """Function to compute the cube of GLR test values obtained with the given
     PSF and dictionary of spectral profile.
 
@@ -997,14 +992,18 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
         data cube
     sigma : array
         variance cube
-    PSF_Moffat : list of arrays
+    fsf : list of arrays
         FSF for each field of this data cube
     weights : list of array
         Weight maps of each field
-    Dico : array
+    profiles : list of ndarray
         Dictionary of spectral profiles to test
-    threads : int
+    nthreads : int
         number of threads
+    pcut : float
+        Cut applied to the profiles to limit their width
+    pmeansub : bool
+        Subtract the mean of the profiles
 
     Returns
     -------
@@ -1017,8 +1016,6 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
 
     """
     logger = logging.getLogger(__name__)
-
-    # Dimensions of the data
     Nz, Ny, Nx = cube.shape
 
     # Spatial convolution of the weighted data with the zero-mean FSF
@@ -1026,21 +1023,28 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
                 'Spatial convolution of weighted data with the zero-mean FSF, '
                 'Computing Spatial part of the norm of the 3D atoms')
     if weights is None:  # one FSF
-        PSF_Moffat = [PSF_Moffat]
+        fsf = [fsf]
         weights = [None]
 
-    nfields = len(PSF_Moffat)
+    nfields = len(fsf)
     fields = range(nfields)
     if nfields > 1:
         fields = ProgressBar(fields)
 
-    with Parallel(n_jobs=threads) as parallel:
+    if nthreads != 1:
+        # copy the arrays because otherwise joblib's memmap handling fails
+        # (maybe because of astropy.io.fits doing weird things with the memap?)
+        cube = np.array(cube)
+        sigma = np.array(sigma)
+
+    with Parallel(n_jobs=nthreads) as parallel:
         for nf in fields:
+            # convolve spatially each spectral channel by the FSF, and do the
+            # same for the norm (inverse variance)
             res = parallel(ProgressBar([
-                delayed(_convolve_fsf)(PSF_Moffat[nf][i], cube[i],
-                                       sigma[i], weights=weights[nf])
-                for i in range(Nz)
-            ]))
+                delayed(_convolve_fsf)(fsf[nf][i], cube[i], sigma[i],
+                                       weights=weights[nf])
+                for i in range(Nz)]))
             res = [np.stack(arr) for arr in zip(*res)]
             if nf == 0:
                 cube_fsf, norm_fsf = res
@@ -1052,21 +1056,32 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     # initialization with the first profile
     logger.info('Step 3/3 Computing second cube of correlation values')
 
-    Dico = np.array(Dico)
-    Dico -= np.mean(Dico, axis=1)[:, None]
+    # Prepare profiles:
+    # Cut the profiles and subtract the mean, if asked to do so
+    prof_cut = []
+    for prof in profiles:
+        if pcut is not None:
+            lmin, lmax = np.where(prof >= pcut)[0][[0, -1]]
+            prof = prof[lmin:lmax+1]
+        if pmeansub:
+            prof -= prof.mean()
+        prof_cut.append(prof)
 
+    # compute the optimal shape for FFTs (on the wavelength axis)
     s1 = np.array(cube_fsf.shape)
-    s2 = np.array((Dico.shape[1], 1, 1))
+    s2 = np.array((max(d.shape[0] for d in prof_cut), 1, 1))
     fftshape = s1 + s2 - 1
     fshape = [fftpack.helper.next_fast_len(int(d)) for d in fftshape[:1]]
     startind = (fftshape - s1) // 2
     endind = startind + s1
     cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
 
-    with Parallel(n_jobs=threads, backend='threading') as parallel:
-        cube_fft = _convolve_spectral(parallel, threads, cube_fsf, fshape,
+    # Compute the FFTs of the cube and norm cube, splitting them on multiple
+    # threads if needed
+    with Parallel(n_jobs=nthreads, backend='threading') as parallel:
+        cube_fft = _convolve_spectral(parallel, nthreads, cube_fsf, fshape,
                                       func=fft.rfftn)
-        norm_fft = _convolve_spectral(parallel, threads, norm_fsf, fshape,
+        norm_fft = _convolve_spectral(parallel, nthreads, norm_fsf, fshape,
                                       func=fft.rfftn)
 
     cube_fsf = norm_fsf = res = None
@@ -1077,12 +1092,14 @@ def Correlation_GLR_test(cube, sigma, PSF_Moffat, weights, Dico, threads):
     correl = np.full((Nz, Ny * Nx), -np.inf)
     correl_min = np.full((Nz, Ny * Nx), np.inf)
 
-    with Parallel(n_jobs=threads, backend='threading') as parallel:
-        for k in ProgressBar(range(len(Dico))):
-            cube_profile = _convolve_profile(Dico[k], cube_fft, norm_fft,
-                                             fshape, threads, parallel)
+    # for each profile, compute convolve the convolved cube and norm cube.
+    # Then for each pixel we keep the maximum correlation (and min correlation)
+    # and the profile number with the max correl.
+    with Parallel(n_jobs=nthreads, backend='threading') as parallel:
+        for k in ProgressBar(range(len(prof_cut))):
+            cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
+                                             fshape, nthreads, parallel)
             cube_profile = cube_profile[cslice[0]]
-            # norm_profile = norm_profile[cslice]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
             np.minimum(correl_min, cube_profile, out=correl_min)
