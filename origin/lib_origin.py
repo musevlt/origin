@@ -1413,8 +1413,11 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     aout2 = []
     iout2 = []
 
+    # renumber output IDs
     for n, id_cu in enumerate(np.unique(iout)):
         area_in_ID = aout[iout == id_cu]
+        # for detections in multiple segmap regions, set the max region
+        # number... this is needed to select all detections in the loop below
         area_cu = area_in_ID.max()
         for id_c in np.where(iout == id_cu)[0]:
             xout2.append(xout[id_c])
@@ -1429,11 +1432,12 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     iout = np.array(iout2, dtype=int)
     aout = np.array(aout2, dtype=int)
 
-    # Group spectral Merging
+    # Special treatment for segmap regions, merge sources with close
+    # spectral lines
     for n, area_cu in enumerate(np.unique(aout)):
         if area_cu > 0:
+            # take all detections inside a segmap region
             ind = np.where(aout == area_cu)[0]
-            # take all the group inside the area
             group_dep = np.unique(iout[ind])
             for cu in group_dep:
                 group = np.unique(iout[ind])
@@ -1446,10 +1450,11 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
                             zot = zout[iout == otg]
                             difz = zin[np.newaxis, :].T - zot[np.newaxis, :]
                             if np.sqrt(difz**2).min() < tol_spec:
+                                # if the minimum z distance is less than
+                                # tol_spec, then merge the sources
                                 iout[iout == otg] = cu
 
     return xout, yout, zout, aout, iout, iout2
-    # LPI iout2 pour debbugger
 
 
 def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
