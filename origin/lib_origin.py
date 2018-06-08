@@ -1241,7 +1241,7 @@ def Compute_localmax(correl, correl_min, mask, neighbors):
     return local_max, local_min
 
 
-def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
+def itersrc(cat, tol_spat, tol_spec, n, id_cu):
     """Recursive function to perform the spatial merging.
 
     If neighborhood are close spatially to a lines: they are merged,
@@ -1261,91 +1261,49 @@ def itersrc(cat, coord, area, tol_spat, tol_spec, n, iin, id_cu, IDorder):
     cat : kinda of catalog of the previously merged lines
         xout,yout,zout,aout,iout:
         the 3D position, area label and ID for all analysed lines
-    coord : the 3D position of the analysed line which become the current
-        seed
-    area : array
-        list of area
     tol_spat : int
         spatial tolerance for the spatial merging
     tol_spec : int
         spectral tolerance for the spectral merging
     n : int
         index of the original seed
-    iin : 0-1
-        index of (not) processed line
     id_cu :
         ID of the original seed
-    IDorder :   list in which the ID are processed,
-        *** maybe to improve ***
-        can be by the max max loc correl
-        can be by the closest distance
 
-    Returns
-    -------
-    xout,yout,zout : array
-        the 3D position of the estimated lines
-        the same as z,y,x, they are not changed
-    aout : array
-        the index of the label in segmap
-    iout : array
-        the ID after spatial and spatio spectral merging
-    spatdist : array
-        the spatial distance of the current line with all others
-    iin : 0-1
-        index of (not) processed line
-
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
-    xout, yout, zout, aout, iout = cat
-    z, y, x = coord
-    spatdist = np.sqrt((x[n] - x)**2 + (y[n] - y)**2)
-    spatdist[iin == 0] = np.inf
+    # compute spatial distance to other points.
+    # - id_cu is the detection processed at the start (from
+    #   spatiospectral_merging), while n is the detection currently processed
+    #   in the recursive call
+    matched = cat['matched']
+    spatdist = np.hypot(cat['x'][n] - cat['x'], cat['y'][n] - cat['y'])
+    spatdist[matched] = np.inf
 
-    cu_spat = np.sqrt((x[id_cu] - x)**2 + (y[id_cu] - y)**2)
-    cu_spat[iin == 0] = np.inf
+    cu_spat = np.hypot(cat['x'][id_cu] - cat['x'], cat['y'][id_cu] - cat['y'])
+    cu_spat[matched] = np.inf
 
     ind = np.where(spatdist < tol_spat)[0]
-    if len(ind) > 0:
-        for indn in ind:
-            if iin[indn] > 0:
+    if len(ind) == 0:
+        return
 
-                if cu_spat[indn] > tol_spat * np.sqrt(2):
-                    # check spectral content
-                    dz = np.sqrt((z[indn] - z[id_cu])**2)
-                    if dz < tol_spec:
-                        xout.append(x[indn])
-                        yout.append(y[indn])
-                        zout.append(z[indn])
-                        aout.append(area[indn])
-                        iout.append(id_cu)
-
-                        iin[indn] = 0
-                        cat = [xout, yout, zout, aout, iout]
-                        coord = [z, y, x]
-                        xout, yout, zout, aout, iout, spatdist, iin = \
-                            itersrc(cat, coord, area, tol_spat,
-                                    tol_spec, indn, iin, id_cu, IDorder)
-
-                else:
-                    xout.append(x[indn])
-                    yout.append(y[indn])
-                    zout.append(z[indn])
-                    aout.append(area[indn])
-                    iout.append(id_cu)
-
-                    iin[indn] = 0
-                    cat = [xout, yout, zout, aout, iout]
-                    coord = [z, y, x]
-                    xout, yout, zout, aout, iout, spatdist, iin = \
-                        itersrc(cat, coord, area, tol_spat,
-                                tol_spec, indn, iin, id_cu, IDorder)
-
-    return xout, yout, zout, aout, iout, spatdist, iin
+    for indn in ind:
+        if not matched[indn]:
+            if cu_spat[indn] > tol_spat * np.sqrt(2):
+                # check spectral content
+                dz = np.sqrt((cat['z'][indn] - cat['z'][id_cu])**2)
+                if dz < tol_spec:
+                    cat[indn]['matched'] = True
+                    cat[indn]['imatch'] = id_cu
+                    itersrc(cat, tol_spat, tol_spec, indn, id_cu)
+            else:
+                cat[indn]['matched'] = True
+                cat[indn]['imatch'] = id_cu
+                itersrc(cat, tol_spat, tol_spec, indn, id_cu)
 
 
 def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
-    """perform the spatial and spatio spectral merging.
+    """Perform the spatial and spatio spectral merging.
+
     The spectral merging give the same ID if several group of lines (from
     spatial merging) if they share at least one line frequency
 
@@ -1376,68 +1334,37 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     Author: Antony Schutz(antonyschutz@gmail.com)
     """
     Nz = len(z)
-    IDorder = np.arange(Nz)
-    area = segmap[y, x]
+    tbl = Table({
+        'id': np.arange(Nz),                  # id of the detection
+        'x': x, 'y': y, 'z': z,               # position
+        'area': segmap[y, x],                 # region of the detection
+        'matched': np.zeros(Nz, dtype=bool),  # is the detection matched ?
+        'imatch': np.arange(Nz),              # id of the matched detection
+    })
 
-    # spatial Merging
-    xout = []
-    yout = []
-    zout = []
-    iout = []
-    aout = []
-
-    iin = np.ones(IDorder.shape, dtype=int)
-    for n in IDorder:
-        if iin[n] == 1:
-            iin[n] = 0
-            xout.append(x[n])
-            yout.append(y[n])
-            zout.append(z[n])
-            iout.append(n)
-            aout.append(area[n])
-            cat = [xout, yout, zout, aout, iout]
-            coord = [z, y, x]
-            xout, yout, zout, aout, iout, spatdist, iin = itersrc(
-                cat, coord, area, tol_spat, tol_spec, n, iin, n, IDorder)
-
-    xout = np.array(xout, dtype=int)
-    yout = np.array(yout, dtype=int)
-    zout = np.array(zout, dtype=int)
-    iout = np.array(iout, dtype=int)
-    aout = np.array(aout, dtype=int)
-
-    # ID of spatial Merging
-    xout2 = []
-    yout2 = []
-    zout2 = []
-    aout2 = []
-    iout2 = []
+    for row in tbl:
+        if not row['matched']:
+            row['matched'] = True
+            itersrc(tbl, tol_spat, tol_spec, row['id'], row['id'])
 
     # renumber output IDs
-    for n, id_cu in enumerate(np.unique(iout)):
-        area_in_ID = aout[iout == id_cu]
+    for n, imatch in enumerate(np.unique(tbl['imatch'])):
         # for detections in multiple segmap regions, set the max region
         # number... this is needed to select all detections in the loop below
-        area_cu = area_in_ID.max()
-        for id_c in np.where(iout == id_cu)[0]:
-            xout2.append(xout[id_c])
-            yout2.append(yout[id_c])
-            zout2.append(zout[id_c])
-            iout2.append(n)
-            aout2.append(area_cu)
-
-    xout = np.array(xout2, dtype=int)
-    yout = np.array(yout2, dtype=int)
-    zout = np.array(zout2, dtype=int)
-    iout = np.array(iout2, dtype=int)
-    aout = np.array(aout2, dtype=int)
+        ind = tbl['imatch'] == imatch
+        tbl['area'][ind] = tbl['area'][ind].max()
+        tbl['imatch'][ind] = n
+    tbl.sort('imatch')
 
     # Special treatment for segmap regions, merge sources with close
     # spectral lines
-    for n, area_cu in enumerate(np.unique(aout)):
+    tbl['imatch2'] = tbl['imatch']
+    iout = tbl['imatch']
+    zout = tbl['z']
+    for n, area_cu in enumerate(np.unique(tbl['area'])):
         if area_cu > 0:
             # take all detections inside a segmap region
-            ind = np.where(aout == area_cu)[0]
+            ind = np.where(tbl['area'] == area_cu)[0]
             group_dep = np.unique(iout[ind])
             for cu in group_dep:
                 group = np.unique(iout[ind])
@@ -1454,7 +1381,8 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
                                 # tol_spec, then merge the sources
                                 iout[iout == otg] = cu
 
-    return xout, yout, zout, aout, iout, iout2
+    tbl.remove_columns(('id', 'matched'))
+    return tbl
 
 
 def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,

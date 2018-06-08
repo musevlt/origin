@@ -146,8 +146,7 @@ def test_merging():
                                  segmap, tol_spat=3, tol_spec=5)
 
     dt = [('x', int), ('y', int), ('z', int),
-          ('area', int), ('iout', int), ('iout2', int)]
-    out = np.array(list(zip(*out)), dtype=dt)
+          ('area', int), ('imatch', int), ('imatch2', int)]
     expected = np.array([
         (72, 49, 545, 0, 0, 0),
         (72, 49, 547, 0, 0, 0),
@@ -166,4 +165,4 @@ def test_merging():
         (20, 10, 749, 1, 6, 6)
     ], dtype=dt)
 
-    assert np.array_equal(out, expected)
+    assert np.array_equal(out.as_array(), expected)
