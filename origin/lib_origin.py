@@ -1320,18 +1320,11 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
 
     Returns
     -------
-    xout,yout,zout : array
-        the 3D position of the estimated lines the same as z,y,x,
-        they are not changed
-    aout : array
-        the index of the label in segmap
-    iout : array
-        the ID after spatial and spatio spectral merging
-    iout2 : array
-        the ID after spatial merging
+    `astropy.table.Table`
+        Table: id, x, y, z, area, imatch, imatch2
+        imatch is the ID after spatial and spatio spectral merging.
+        imatch2 is the ID after spatial merging only.
 
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
     Nz = len(z)
     tbl = Table({
@@ -1358,7 +1351,7 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
 
     # Special treatment for segmap regions, merge sources with close
     # spectral lines
-    tbl['imatch2'] = tbl['imatch']
+    tbl['imatch2'] = tbl['imatch']  # store result before spectral merging
     iout = tbl['imatch']
     zout = tbl['z']
     for n, area_cu in enumerate(np.unique(tbl['area'])):
@@ -1498,18 +1491,16 @@ def purity_iter(cube_local_max, cube_local_min, thresh, spat_size, spect_size,
         cube_local_max, cube_local_min, thresh, spat_size, spect_size,
         filter_act=filter_act)
 
-    _, _, _, aoutM, iout1M, _ = spatiospectral_merging(zM, yM, xM, segmap,
-                                                       tol_spat, tol_spec)
-    _, _, _, aoutm, iout1m, _ = spatiospectral_merging(zm, ym, xm, segmap,
-                                                       tol_spat, tol_spec)
+    outM = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
+    outm = spatiospectral_merging(zm, ym, xm, segmap, tol_spat, tol_spec)
 
     if bkgrd:
-        # purity computed on the background (aout==0)
-        det_m = len(np.unique(iout1m[aoutm == 0]))
-        det_M = len(np.unique(iout1M[aoutM == 0]))
-    else:
-        det_m = len(np.unique(iout1m))
-        det_M = len(np.unique(iout1M))
+        # purity computed on the background (area == 0)
+        outm = outm[outm['area'] == 0]
+        outM = outM[outM['area'] == 0]
+
+    det_m = len(np.unique(outm['imatch']))
+    det_M = len(np.unique(outM['imatch']))
 
     est_purity = (1 - det_m / det_M) if det_M > 0 else 0
     return est_purity, det_m, det_M
@@ -1725,26 +1716,24 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
     zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
         cube_local_max, cube_local_min, thresh, spat_size, spect_size,
         filter_act=filter_act)
-    logger.info('Spatio-spectral merging...')
-    xpixRef, ypixRef, zpixRef, seg_label, idout, iout2M = spatiospectral_merging(
-        zM, yM, xM, segmap, tol_spat, tol_spec)
 
-    correl_max = cube_local_max[zpixRef, ypixRef, xpixRef]
-    profile_max = profile[zpixRef, ypixRef, xpixRef]
+    logger.info('Spatio-spectral merging...')
+    cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
+    correl_max = cube_local_max[cat['z'], cat['y'], cat['x']]
+    profile_max = profile[cat['z'], cat['y'], cat['x']]
 
     # add real coordinates
-    dec, ra = wcs.pix2sky(np.stack((ypixRef, xpixRef)).T).T
-    lbda = wave.coord(zpixRef)
+    dec, ra = wcs.pix2sky(np.stack((cat['y'], cat['x'])).T).T
+    lbda = wave.coord(cat['z'])
 
     # Relabel IDs sequentially
-    idout = np.asarray(idout)
-    oldIDs = np.unique(idout)
+    oldIDs = np.unique(cat['imatch'])
     idmap = np.zeros(oldIDs.max() + 1, dtype=int)
     idmap[oldIDs] = np.arange(len(oldIDs))
 
     # Catalogue of referent pixels
-    Cat_ref = Table([idmap[idout], ra, dec, lbda, xpixRef, ypixRef, zpixRef,
-                     profile_max, seg_label, correl_max],
+    Cat_ref = Table([idmap[cat['imatch']], ra, dec, lbda, cat['x'], cat['y'],
+                     cat['z'], profile_max, cat['area'], correl_max],
                     names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
                            'profile', 'seg_label', 'T_GLR'))
     Cat_ref.sort('ID')

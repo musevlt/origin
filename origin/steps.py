@@ -730,7 +730,7 @@ class Detection(Step):
         pur_params = orig.param['compute_purity_threshold']['params']
         self.Cat0, self.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
-            orig.cube_local_min._data, orig.segmap.data,
+            orig.cube_local_min._data, orig.segmap._data,
             pur_params['spat_size'], pur_params['spect_size'],
             pur_params['tol_spat'], pur_params['tol_spec'],
             True, orig.cube_profile._data, orig.wcs, orig.wave
