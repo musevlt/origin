@@ -4,8 +4,10 @@ import numpy as np
 import os
 import shutil
 
+from astropy.io import fits
 from mpdaf.sdetect import Source, Catalog
 from origin import ORIGIN
+from origin.lib_origin import spatiospectral_merging
 
 MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                         'minicube.fits')
@@ -113,3 +115,52 @@ def test_origin():
             shutil.rmtree('tmp2')
         except OSError:
             print('Failed to remove tmp directories')
+
+
+def test_merging():
+    segmap = fits.getdata(SEGMAP)
+    inputs = np.array([
+        # First source
+        (72, 49, 545),
+        (71, 49, 549),
+        (71, 47, 751),
+        (72, 45, 543),
+        # close line, should be merged
+        (74, 44, 546),
+
+        (51, 44, 360),
+        (51, 44, 564),
+
+        (3, 15, 589),
+        (3, 15, 597),
+        (3, 15, 601),
+        # in a segmap region
+        (24, 12, 733),
+        (24, 15, 736),
+        (29, 11, 740),
+        (20, 10, 749)
+    ], dtype=[('x', int), ('y', int), ('z', int)])
+
+    out = spatiospectral_merging(inputs['z'], inputs['y'], inputs['x'],
+                                 segmap, tol_spat=3, tol_spec=5)
+
+    dt = [('x', int), ('y', int), ('z', int),
+          ('area', int), ('imatch', int), ('imatch2', int)]
+    expected = np.array([
+        (72, 49, 545, 0, 0, 0),
+        (71, 49, 549, 0, 0, 0),
+        (71, 47, 751, 0, 0, 0),
+        (72, 45, 543, 0, 0, 0),
+        (74, 44, 546, 0, 0, 0),
+        (51, 44, 360, 0, 1, 1),
+        (51, 44, 564, 0, 1, 1),
+        (3,  15, 589, 0, 2, 2),
+        (3,  15, 597, 0, 2, 2),
+        (3,  15, 601, 0, 2, 2),
+        (24, 12, 733, 1, 3, 3),
+        (24, 15, 736, 1, 3, 4),
+        (29, 11, 740, 1, 3, 5),
+        (20, 10, 749, 1, 6, 6)
+    ], dtype=dt)
+
+    assert np.array_equal(out.as_array(), expected)
