@@ -143,7 +143,7 @@ class StepMeta(type):
     The metaclass does two things:
     - It sets the "label" attribute on the descriptors, which allow to use
       ``cube_std = DataObj('cube')`` instead of ``cube_std =
-      DataObj('cube_std', 'cube')`` is the label must be set manually.
+      DataObj('cube_std', 'cube')`` if the label must be set manually.
     - It stores a list of all the descriptors in a ``_dataobjs`` attribute on
       the instance.
 
@@ -193,9 +193,18 @@ class Step(LogMixin, metaclass=StepMeta):
         self.meta['status'] = val
 
     def __call__(self, *args, **kwargs):
+        """Run a step, calling its ``run`` method.
+
+        This method is the one that is called from the ORIGIN object. It calls
+        the ``run`` method of the step and also does a few additional things
+        like storing the parameters, execution time and date.
+
+        """
         t0 = time.time()
         self._loginfo('Step %02d - %s', self.idx, self.desc)
 
+        # Use the step's signature to 1) store the parameter values in the
+        # `self.param` dict and 2) to print the default and actual values.
         sig = inspect.signature(self.run)
         for name, p in sig.parameters.items():
             if name == 'orig':  # hide the orig param
@@ -207,6 +216,7 @@ class Step(LogMixin, metaclass=StepMeta):
                            kwargs.get(name, ''), default, annotation)
             self.param[name] = kwargs.get(name, p.default)
 
+        # Manage dependencies between steps
         if self.require is not None:
             for req in self.require:
                 step = self.orig.steps[req]
@@ -227,15 +237,20 @@ class Step(LogMixin, metaclass=StepMeta):
         self._loginfo('%02d Done - %.2f sec.', self.idx, tot)
 
     def store_cube(self, name, data, **kwargs):
+        """Create a MPDAF Cube and store it as an attribute."""
         cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
                     mask=np.ma.nomask, copy=False, **kwargs)
         setattr(self, name, cube)
 
     def store_image(self, name, data, **kwargs):
+        """Create a MPDAF Image and store it as an attribute."""
         im = Image(data=data, wcs=self.orig.wcs, copy=False, **kwargs)
         setattr(self, name, im)
 
     def dump(self, outpath):
+        """Save the attributes that have been created by the steps, and unload
+        them to free memory.
+        """
         if self.status is not Status.RUN:
             # If the step was not run, there is nothing to dump
             return
@@ -270,6 +285,9 @@ class Step(LogMixin, metaclass=StepMeta):
         self.status = Status.DUMPED
 
     def load(self, outpath):
+        """Recreate attributes of a step, not really loading them as just the
+        file is set, and files are loaded in memory only if needed.
+        """
         if self.status is not Status.DUMPED:
             # If the step was not dumped previously, there is nothing to load
             return
