@@ -647,7 +647,7 @@ class ComputeTGLR(Step):
 
         self._loginfo('Save the map of maxima in self.maxmap')
         self.store_image('maxmap', np.amax(correl, axis=0))
-        self.store_image('minmap', np.amax(correl_min, axis=0))
+        self.store_image('minmap', np.amin(correl_min, axis=0))
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
