@@ -33,10 +33,11 @@ lib_origin.py contains the methods that compose the ORIGIN software
 import logging
 import numpy as np
 
-from astropy.table import Table, Column
-from astropy.modeling.models import Gaussian1D
 from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.modeling.models import Gaussian1D
+from astropy.nddata import overlap_slices
 from astropy.stats import gaussian_sigma_to_fwhm
+from astropy.table import Table, Column
 from functools import wraps
 from joblib import Parallel, delayed
 from numpy import fft
@@ -1149,10 +1150,10 @@ def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
     for numy in range(NbSubcube):
         for numx in range(NbSubcube):
             # limits of each spatial zone
-            x1 = np.maximum(0, intx[numx] - lag)
-            x2 = np.minimum(intx[numx + 1] + lag, Nx)
-            y1 = np.maximum(0, inty[numy + 1] - lag)
-            y2 = np.minimum(inty[numy] + lag, Ny)
+            x1 = max(0, intx[numx] - lag)
+            x2 = min(intx[numx + 1] + lag, Nx)
+            y1 = max(0, inty[numy + 1] - lag)
+            y2 = min(inty[numy] + lag, Ny)
 
             x11 = intx[numx] - x1
             y11 = inty[numy + 1] - y1
@@ -1567,7 +1568,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
     if threshlist is None:
         npts1, npts2, dp = auto
-        thresh_max = np.minimum(cube_local_min.max(), cube_local_max.max())
+        thresh_max = min(cube_local_min.max(), cube_local_max.max())
         thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
 
         # first exploration
@@ -1745,19 +1746,19 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
 
     Parameters
     ----------
-    raw_in     : array
+    raw_in : array
         RAW data
-    var_in     : array
+    var_in : array
         MUSE covariance
-    psf_in     : array
+    psf_in : array
         MUSE PSF
     weights_in : array
         PSF weights
-    y          : int
-        y position in pixel estimated in previous catalog
-    x          : int
-        x position in pixel estimated in previous catalog
-    size_grid  : int
+    y : int
+        y position in pixek estimated in previous catalog
+    x : int
+        x position in pixek estimated in previous catalog
+    size_grid : int
         Maximum spatial shift for the grid
 
     Returns
@@ -1769,41 +1770,27 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
 
     Date  : June, 21 2017
     Author: Antony Schutz (antony.schutz@gmail.com)
+
     """
-
-    # size data
-    nl, ny, nx = raw_in.shape
-
     # size psf
     if weights_in is None:
-        sizpsf = psf_in.shape[1]
+        psf_shape = psf_in.shape[1:]
     else:
-        sizpsf = psf_in[0].shape[1]
+        psf_shape = psf_in[0].shape[1:]
 
-    # size minicube
-    sizemc = 2 * size_grid + sizpsf
+    # desired shape
+    margin = 2 * size_grid
+    shape = (psf_shape[0] + margin, psf_shape[1] + margin)
+    cshape = (raw_in.shape[0], ) + shape
 
-    # half size psf
-    longxy = int(sizemc // 2)
-
-    # bound of image
-    psx1 = np.maximum(0, x - longxy)
-    psy1 = np.maximum(0, y - longxy)
-    psx2 = np.minimum(nx, x + longxy + 1)
-    psy2 = np.minimum(ny, y + longxy + 1)
-
-    # take into account bordure of cube
-    psx12 = np.maximum(0, longxy - x + psx1)
-    psy12 = np.maximum(0, longxy - y + psy1)
-    psx22 = np.minimum(sizemc, longxy - x + psx2)
-    psy22 = np.minimum(sizemc, longxy - y + psy2)
+    (psy, psx), (psy2, psx2) = overlap_slices(raw_in.shape[1:], shape, (y, x))
 
     # create weight, data with bordure
-    red_dat = np.zeros((nl, sizemc, sizemc))
-    red_dat[:, psy12:psy22, psx12:psx22] = raw_in[:, psy1:psy2, psx1:psx2]
+    red_dat = np.zeros(cshape)
+    red_dat[:, psy2, psx2] = raw_in[:, psy, psx]
 
-    red_var = np.ones((nl, sizemc, sizemc)) * np.inf
-    red_var[:, psy12:psy22, psx12:psx22] = var_in[:, psy1:psy2, psx1:psx2]
+    red_var = np.full(cshape, np.inf)
+    red_var[:, psy2, psx2] = var_in[:, psy, psx]
 
     if weights_in is None:
         red_wgt = None
@@ -1812,9 +1799,9 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
         red_wgt = []
         red_psf = []
         for n, w in enumerate(weights_in):
-            if np.sum(w[psy1:psy2, psx1:psx2]) > 0:
-                w_tmp = np.zeros((sizemc, sizemc))
-                w_tmp[psy12:psy22, psx12:psx22] = w[psy1:psy2, psx1:psx2]
+            if np.sum(w[psy, psx]) > 0:
+                w_tmp = np.zeros(shape)
+                w_tmp[psy2, psx2] = w[psy, psx]
                 red_wgt.append(w_tmp)
                 red_psf.append(psf_in[n])
 
@@ -2041,7 +2028,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     mse_5 = np.full(shape, np.inf)
 
     nl = data_in.shape[0]
-    ind_max = slice(np.maximum(0, z0 - 5), np.minimum(nl, z0 + 5))
+    ind_max = slice(max(0, z0 - 5), min(nl, z0 + 5))
     if weight_in is None:
         nl, sizpsf, tmp = psf.shape
     else:
@@ -2115,8 +2102,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     estimated_line = lin_est[:, wy, wx]
     estimated_variance = var_est[:, wy, wx]
 
-    return flux_est_5, MSE_5, estimated_line, \
-        estimated_variance, int(y), int(x), int(z)
+    return (flux_est_5, MSE_5, estimated_line.ravel(),
+            estimated_variance.ravel(), int(y), int(x), int(z))
 
 
 def peakdet(v, delta):
@@ -2146,7 +2133,7 @@ def peakdet(v, delta):
 
 
 @timeit
-def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
+def Estimation_Line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
                     criteria='flux', order_dct=30, horiz_psf=1,
                     horiz=5):
     """Function to compute the estimated emission line and the optimal
@@ -2197,61 +2184,38 @@ def Estimation_Line(Cat1_T, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Author: Antony Schutz (antony.schutz@gmail.com)
     """
 
-    # TODO: When computing the optimal position of the lines, we may end up
-    # with duplicated lines at the very same (x, y, z) position because we
-    # manage to correct for double, very near, detections.  We should then keep
-    # only one line.  It's better to keep the “purest” line, but the purity
-    # information is not available at this stage.
-
-    # Initialization
     NL, NY, NX = RAW.shape
-    Cat2_x_grid = []
-    Cat2_y_grid = []
-    Cat2_z_grid = []
-    Cat2_res_min5 = []
-    Cat2_flux5 = []
-    Cat_est_line_raw = []
-    Cat_est_line_var = []
-
-    for src in ProgressBar(Cat1_T):
-        y0 = src['y0']
-        x0 = src['x0']
-        z0 = src['z0']
+    res = []
+    for src in ProgressBar(Cat1):
+        z0, y0, x0 = tuple(src[['z0', 'y0', 'x0']])
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
-
         f5, m5, lin_est, var_est, y, x, z = GridAnalysis(
             red_dat, red_var, red_psf, red_wgt, horiz,
             size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria, order_dct
         )
+        res.append((f5, m5, lin_est, var_est, y, x, z))
 
-        Cat2_x_grid.append(x)
-        Cat2_y_grid.append(y)
-        Cat2_z_grid.append(z)
-        Cat2_res_min5.append(m5)
-        Cat2_flux5.append(f5)
-        Cat_est_line_raw.append(lin_est.ravel())
-        Cat_est_line_var.append(var_est.ravel())
-
-    Cat2 = Cat1_T.copy()
+    flux5, res_min5, lin_est, var_est, y_grid, x_grid, z_grid = zip(*res)
 
     # add real coordinates
-    dec, ra = wcs.pix2sky(np.stack((Cat2_y_grid, Cat2_x_grid)).T).T
+    Cat2 = Cat1.copy()
+    dec, ra = wcs.pix2sky(np.stack((y_grid, x_grid)).T).T
     Cat2['ra'] = ra
     Cat2['dec'] = dec
-    Cat2['lbda'] = wave.coord(Cat2_z_grid)
+    Cat2['lbda'] = wave.coord(z_grid)
 
-    col_flux = Column(name='flux', data=Cat2_flux5)
-    col_res = Column(name='residual', data=Cat2_res_min5)
+    col_flux = Column(name='flux', data=flux5)
+    col_res = Column(name='residual', data=res_min5)
     col_num = Column(name='num_line', data=np.arange(len(Cat2)))
-    col_x = Column(name='x', data=Cat2_x_grid)
-    col_y = Column(name='y', data=Cat2_y_grid)
-    col_z = Column(name='z', data=Cat2_z_grid)
+    col_x = Column(name='x', data=x_grid)
+    col_y = Column(name='y', data=y_grid)
+    col_z = Column(name='z', data=z_grid)
 
     Cat2.add_columns([col_x, col_y, col_z, col_res, col_flux, col_num],
                      indexes=[4, 5, 6, 8, 8, 8])
 
-    return Cat2, Cat_est_line_raw, Cat_est_line_var
+    return Cat2, lin_est, var_est
 
 
 def Purity_Estimation(Cat_in, purity_curves, purity_index):
