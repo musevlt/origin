@@ -22,7 +22,7 @@ from .lib_origin import (
     area_segmentation_square_fusion,
     CleanCube,
     Compute_GreedyPCA_area,
-    Compute_local_max_zone,
+    compute_local_max,
     Compute_PCA_threshold,
     Compute_threshold_purity,
     Correlation_GLR_test,
@@ -32,7 +32,6 @@ from .lib_origin import (
     estimation_line,
     merge_similar_lines,
     purity_estimation,
-    spatial_segmentation,
     unique_lines,
     unique_sources,
 )
@@ -575,11 +574,7 @@ class ComputeTGLR(Step):
 
     Parameters
     ----------
-    NbSubcube : int
-        Number of sub-cubes for the spatial segmentation. If NbSubcube>1 the
-        correlation and local maximas and minimas are performed on smaller
-        subcube and combined after. Useful to limit memory usage.
-    neighbors : int
+    size : int
         Connectivity of contiguous voxels, for the maximum filter.
     ncpu : int
         Number of CPUs used, defaults to 1.
@@ -618,8 +613,7 @@ class ComputeTGLR(Step):
     minmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
-    def run(self, orig, NbSubcube=1, neighbors=26, ncpu=1, pcut=1e-8,
-            pmeansub=True):
+    def run(self, orig, size=26, ncpu=1, pcut=1e-8, pmeansub=True):
         if ncpu > 1:
             try:
                 import mkl_fft  # noqa
@@ -651,9 +645,8 @@ class ComputeTGLR(Step):
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
-        inty, intx = spatial_segmentation(orig.Nx, orig.Ny, NbSubcube)
-        cube_local_max, cube_local_min = Compute_local_max_zone(
-            correl, correl_min, orig.mask, intx, inty, NbSubcube, neighbors)
+        cube_local_max, cube_local_min = compute_local_max(correl, correl_min,
+                                                           orig.mask, size)
         self._loginfo('Save self.cube_local_max from max correlations')
         self.store_cube('cube_local_max', cube_local_max)
         self._loginfo('Save self.cube_local_min from min correlations')
@@ -811,12 +804,10 @@ class DetectionLost(Step):
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
         self._loginfo('Compute local maximum of std cube values')
-        NbSubcube = orig.param['compute_TGLR']['params']['NbSubcube']
-        neighbors = orig.param['compute_TGLR']['params']['neighbors']
-        inty, intx = spatial_segmentation(orig.Nx, orig.Ny, NbSubcube)
+        size = orig.param['compute_TGLR']['params']['size']
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
-            Compute_local_max_zone(orig.cube_std.data, orig.cube_std.data,
-                                   orig.mask, intx, inty, NbSubcube, neighbors)
+            compute_local_max(orig.cube_std.data, orig.cube_std.data,
+                              orig.mask, size)
 
         pur_params = orig.param['compute_purity_threshold']['params']
 

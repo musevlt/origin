@@ -1111,71 +1111,6 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     return correl, profile, correl_min
 
 
-@timeit
-def Compute_local_max_zone(correl, correl_min, mask, intx, inty,
-                           NbSubcube, neighbors):
-    """Function to compute the local max of T_GLR values for each zone
-
-    Parameters
-    ----------
-    correl : array
-        cube of maximum T_GLR values (correlations)
-    correl_min: array
-        cube of minimum T_GLR values (correlations)
-    mask : array
-        boolean cube (True if pixel is masked)
-    intx : array
-        limits in pixels of the columns for each zone
-    inty : array
-        limits in pixels of the rows for each zone
-    NbSubcube : int
-        Number of subcube in the spatial segmentation
-    neighbors :  int
-        Number of connected components
-
-    Returns
-    -------
-    cube_Local_max : array
-        cube of local maxima from maximum correlation
-    cube_Local_min : array
-        cube of local maxima from minus minimum correlation
-
-    """
-    cube_Local_max = np.zeros(correl.shape)
-    cube_Local_min = np.zeros(correl.shape)
-    nl, Ny, Nx = correl.shape
-    # FIXME: should be computed from neighbors ?
-    lag = 1
-
-    for numy in range(NbSubcube):
-        for numx in range(NbSubcube):
-            # limits of each spatial zone
-            x1 = max(0, intx[numx] - lag)
-            x2 = min(intx[numx + 1] + lag, Nx)
-            y1 = max(0, inty[numy + 1] - lag)
-            y2 = min(inty[numy] + lag, Ny)
-
-            x11 = intx[numx] - x1
-            y11 = inty[numy + 1] - y1
-            x22 = intx[numx + 1] - x1
-            y22 = inty[numy] - y1
-
-            correl_temp_edge = correl[:, y1:y2, x1:x2]
-            correl_temp_edge_min = correl_min[:, y1:y2, x1:x2]
-            mask_temp_edge = mask[:, y1:y2, x1:x2]
-            # Cube of pvalues for each zone
-            cube_Local_max_temp, cube_Local_min_temp = Compute_localmax(
-                correl_temp_edge, correl_temp_edge_min, mask_temp_edge,
-                neighbors)
-
-            cube_Local_max[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] =\
-                cube_Local_max_temp[:, y11:y22, x11:x22]
-            cube_Local_min[:, inty[numy + 1]:inty[numy], intx[numx]:intx[numx + 1]] =\
-                cube_Local_min_temp[:, y11:y22, x11:x22]
-
-    return cube_Local_max, cube_Local_min
-
-
 def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
                         thrdata=None, mthrdata=None):
     y, x = np.mgrid[:data.shape[1], :data.shape[2]]
@@ -1203,7 +1138,7 @@ def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
     return Mdata, mdata
 
 
-def Compute_localmax(correl, correl_min, mask, neighbors):
+def compute_local_max(correl, correl_min, mask, size=3):
     """Compute the local maxima of the maximum correlation and local maxima
     of minus the minimum correlation distribution.
 
@@ -1215,29 +1150,27 @@ def Compute_localmax(correl, correl_min, mask, neighbors):
         T_GLR values with edges excluded (from min correlation)
     mask : array
         mask array (true if pixel is masked)
-    neighbors : int
+    size : int
         Number of connected components
 
     Returns
     -------
-    cube_pval_correl : array
-        p-values asssociated to the local maxima of T_GLR values
+    array, array
+        local maxima of correlations and local maxima of -correlations
 
     """
-    # connected components
-    conn = (neighbors + 1)**(1 / 3.)
     # local maxima of maximum correlation
-    max_filter = maximum_filter(correl, size=(conn, conn, conn))
-    local_max_mask = (correl == max_filter)
+    local_max = maximum_filter(correl, size=(size, size, size))
+    local_max_mask = (correl == local_max)
     local_max_mask[mask] = 0
-    local_max = correl * local_max_mask
+    local_max *= local_max_mask
 
     # local maxima of minus minimum correlation
     minus_correl_min = - correl_min
-    max_filter = maximum_filter(minus_correl_min, size=(conn, conn, conn))
-    local_min_mask = (minus_correl_min == max_filter)
-    local_min_mask[mask] = 0
-    local_min = minus_correl_min * local_min_mask
+    local_min = maximum_filter(minus_correl_min, size=(size, size, size))
+    local_max_mask = (minus_correl_min == local_min)
+    local_max_mask[mask] = 0
+    local_min *= local_max_mask
 
     return local_max, local_min
 
@@ -1442,10 +1375,7 @@ def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
         if both:
             zm, ym, xm = np.where(locm)
 
-    if both:
-        return zM, yM, xM, zm, ym, xm
-    else:
-        return zM, yM, xM
+    return zM, yM, xM, zm, ym, xm
 
 
 def purity_iter(cube_local_max, cube_local_min, thresh, spat_size, spect_size,
