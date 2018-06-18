@@ -29,10 +29,10 @@ from .lib_origin import (
     Create_local_max_cat,
     create_masks,
     dct_residual,
-    Estimation_Line,
+    estimation_line,
     merge_similar_lines,
-    Purity_Estimation,
-    Spatial_Segmentation,
+    purity_estimation,
+    spatial_segmentation,
     unique_lines,
     unique_sources,
 )
@@ -651,7 +651,7 @@ class ComputeTGLR(Step):
 
         self._loginfo('Compute p-values of local maximum of correlation '
                       'values')
-        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
+        inty, intx = spatial_segmentation(orig.Nx, orig.Ny, NbSubcube)
         cube_local_max, cube_local_min = Compute_local_max_zone(
             correl, correl_min, orig.mask, intx, inty, NbSubcube, neighbors)
         self._loginfo('Save self.cube_local_max from max correlations')
@@ -686,34 +686,34 @@ class ComputePurityThreshold(Step):
     -------
     self.threshold_correl : float
         Estimated threshold
-    self.Pval_r : array
-        Purity curves
-    self.index_pval : array
-        Indexes of the purity curves
-    self.Det_M : list
-        Number of detections in +DATA
-    self.Det_m : list
-        Number of detections in -DATA
+    self.Pval : astropy.table.Table
+        Table with the purity results for each threshold:
+        - PVal_r : The purity function
+        - index_pval : index value to plot
+        - Det_m : Number of detections (-DATA)
+        - Det_M : Number of detections (+DATA)
 
     """
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
-    Pval_r = DataObj('array')
-    index_pval = DataObj('array')
-    Det_M = DataObj('array')
-    Det_m = DataObj('array')
+    Pval = DataObj('table')
     require = ('compute_TGLR', )
 
     def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
-        threshold, self.Pval_r, self.index_pval, self.Det_m, self.Det_M = \
-            Compute_threshold_purity(
-                purity, orig.cube_local_max._data, orig.cube_local_min._data,
-                orig.segmap._data, spat_size, spect_size, tol_spat, tol_spec,
-                filter_act=True, bkgrd=True, auto=auto, threshlist=threshlist)
+        threshold, self.Pval = Compute_threshold_purity(
+            purity,
+            orig.cube_local_max._data,
+            orig.cube_local_min._data,
+            orig.segmap._data,
+            spat_size, spect_size,
+            tol_spat, tol_spec,
+            filter_act=True, bkgrd=True,
+            auto=auto, threshlist=threshlist
+        )
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
@@ -791,14 +791,8 @@ class DetectionLost(Step):
     self.threshold_correl : float
         Estimated threshold used to detect complementary
         lines on local maxima of std cube
-    self.Pval_r_comp : array
+    self.Pval_comp : array
         Purity curves
-    self.index_pval_comp : array
-        Indexes of the purity curves
-    self.Det_M_comp : list
-        Number of detections in +DATA
-    self.Det_m_comp : list
-        Number of detections in -DATA
     self.Cat1 : astropy.Table
         New catalog.
         Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR STD comp
@@ -808,17 +802,14 @@ class DetectionLost(Step):
     name = 'detection_lost'
     desc = 'Thresholding and spatio-spectral merging'
     Cat1 = DataObj('table')
-    Pval_r_comp = DataObj('array')
-    index_pval_comp = DataObj('array')
-    Det_M_comp = DataObj('array')
-    Det_m_comp = DataObj('array')
+    Pval_comp = DataObj('table')
     require = ('detection', )
 
     def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
         self._loginfo('Compute local maximum of std cube values')
         NbSubcube = orig.param['compute_TGLR']['params']['NbSubcube']
         neighbors = orig.param['compute_TGLR']['params']['neighbors']
-        inty, intx = Spatial_Segmentation(orig.Nx, orig.Ny, NbSubcube)
+        inty, intx = spatial_segmentation(orig.Nx, orig.Ny, NbSubcube)
         cube_local_max_faint_dct, cube_local_min_faint_dct = \
             Compute_local_max_zone(orig.cube_std.data, orig.cube_std.data,
                                    orig.mask, intx, inty, NbSubcube, neighbors)
@@ -840,18 +831,16 @@ class DetectionLost(Step):
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, self.Pval_r_comp, self.index_pval_comp, self.Det_m_comp, \
-            self.Det_M_comp = Compute_threshold_purity(
-                purity,
-                cube_local_max_faint_dct,
-                cube_local_min_faint_dct,
-                orig.segmap._data,
-                pur_params['spat_size'],
-                pur_params['spect_size'],
-                pur_params['tol_spat'],
-                pur_params['tol_spec'],
-                True, False,
-                auto, threshlist)
+        threshold2, self.Pval_comp = Compute_threshold_purity(
+            purity,
+            cube_local_max_faint_dct,
+            cube_local_min_faint_dct,
+            orig.segmap._data,
+            pur_params['spat_size'], pur_params['spect_size'],
+            pur_params['tol_spat'], pur_params['tol_spec'],
+            filter_act=True, bkgrd=False,
+            auto=auto, threshlist=threshlist
+        )
         orig.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ', threshold2)
 
@@ -929,16 +918,14 @@ class ComputeSpectra(Step):
     require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
-        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = Estimation_Line(
+        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = estimation_line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
             criteria='flux', order_dct=30, horiz_psf=1, horiz=5
         )
 
         self._loginfo('Purity estimation')
-        tmp_Cat2 = Purity_Estimation(self.Cat2,
-                                     [orig.Pval_r, orig.Pval_r_comp],
-                                     [orig.index_pval, orig.index_pval_comp])
+        tmp_Cat2 = purity_estimation(self.Cat2, orig.Pval, orig.Pval_comp)
 
         # Remove duplicated lines
         unique_idx = unique_lines(tmp_Cat2)

@@ -102,7 +102,7 @@ def orthogonal_projection(a, b):
 
 
 @timeit
-def Spatial_Segmentation(Nx, Ny, NbSubcube, start=None):
+def spatial_segmentation(Nx, Ny, NbSubcube, start=None):
     """Compute indices to split spatially in NbSubcube x NbSubcube regions.
 
     Each zone is computed from the left to the right and the top to the bottom
@@ -398,7 +398,7 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     y2 = Ny - np.where(Vert[::-1] > 0)[0][0]
     x2 = Nx - np.where(Hori[::-1] > 0)[0][0]
     start = (y1, x1)
-    inty, intx = Spatial_Segmentation(Nx, Ny, NbSubcube, start=start)
+    inty, intx = spatial_segmentation(Nx, Ny, NbSubcube, start=start)
 
     # % FUSION square AREA
     label = []
@@ -1546,42 +1546,34 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     -------
     threshold : float
         the threshold associated to the purity
-    PVal_r : array
-        The purity function
-    index_pval : array
-        index value to plot
-    det_m : array
-        Number of detections (-DATA)
-    det_M : array
-        Number of detections (+DATA)
+    res : astropy.table.Table
+        Table with the purity results for each threshold:
+        - PVal_r : The purity function
+        - index_pval : index value to plot
+        - Det_m : Number of detections (-DATA)
+        - Det_M : Number of detections (+DATA)
 
-    Date  : July, 6 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
-
     logger = logging.getLogger(__name__)
-    # initialization
-    det_m = []
-    det_M = []
-    Pval_r = []
-    Tval_r = []
+    res = []
 
     if threshlist is None:
         npts1, npts2, dp = auto
         thresh_max = min(cube_local_min.max(), cube_local_max.max())
         thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
 
-        # first exploration
-        index_pval1 = np.exp(np.linspace(np.log(thresh_min),
-                                         np.log(thresh_max), npts1))
+        # first exploration, with large steps (auto[0] points)
+        # -----------------------------------------------------
+        index_pval = np.exp(np.linspace(np.log(thresh_min),
+                                        np.log(thresh_max), npts1))
         # make sure that last point is thresh_max (and not an
         # approximate value due to linspace)
-        index_pval1[-1] = thresh_max
-        n_pval1 = len(index_pval1)
+        index_pval[-1] = thresh_max
+        n_pval = len(index_pval)
 
         logger.debug('Iter 1 Threshold min %f max %f npts %d',
-                     thresh_min, thresh_max, n_pval1)
-        bar = ProgressBar(index_pval1[::-1])
+                     thresh_min, thresh_max, n_pval)
+        bar = ProgressBar(index_pval[::-1])
         for k, thresh in enumerate(bar):
             est_purity, det_mit, det_Mit = purity_iter(
                 cube_local_max, cube_local_min, thresh, spat_size, spect_size,
@@ -1590,30 +1582,28 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
             if not bar.disable:
                 bar.write(
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, n_pval1, thresh, det_mit, det_Mit, est_purity))
-            Tval_r.append(thresh)
-            Pval_r.append(est_purity)
-            det_m.append(det_mit)
-            det_M.append(det_Mit)
+                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
+            res.append((thresh, est_purity, det_mit, det_Mit))
             if est_purity == 1:
                 thresh_max = thresh
             if est_purity < purity - dp:
+                bar.write('estimated purity below the required one, stopping')
                 break
         thresh_min = thresh
 
-        # 2nd iter
-        index_pval3 = np.exp(np.linspace(np.log(thresh_min),
-                                         np.log(thresh_max), npts2))
+        # 2nd iter, with small steps (auto[1] points)
+        # -----------------------------------------------------
+        index_pval = np.exp(np.linspace(np.log(thresh_min),
+                                        np.log(thresh_max), npts2))
         # make sure that last point is thresh_max (and not an
         # approximate value due to linspace)
-        index_pval3[-1] = thresh_max
+        index_pval[-1] = thresh_max
+        n_pval = len(index_pval)
 
         logger.debug('Iter 2 Threshold min %f max %f npts %d',
-                     index_pval3[0], index_pval3[-1], len(index_pval3))
-        bar = ProgressBar(index_pval3)
+                     index_pval[0], index_pval[-1], n_pval)
+        bar = ProgressBar(index_pval)
         for k, thresh in enumerate(bar):
-            if np.any(np.isclose(thresh, Tval_r)):
-                continue
             est_purity, det_mit, det_Mit = purity_iter(
                 cube_local_max, cube_local_min, thresh, spat_size, spect_size,
                 segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
@@ -1621,20 +1611,11 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
             if not bar.disable:
                 bar.write(
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, len(index_pval3), thresh, det_mit, det_Mit,
-                     est_purity))
-            Tval_r.append(thresh)
-            Pval_r.append(est_purity)
-            det_m.append(det_mit)
-            det_M.append(det_Mit)
+                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
+            res.append((thresh, est_purity, det_mit, det_Mit))
             if est_purity > purity + dp:
+                bar.write('estimated purity above the required one, stopping')
                 break
-        Tval_r = np.asarray(Tval_r)
-        ksort = Tval_r.argsort()
-        Pval_r = np.asarray(Pval_r)[ksort]
-        det_m = np.asarray(det_m)[ksort]
-        det_M = np.asarray(det_M)[ksort]
-        Tval_r = Tval_r[ksort]
     else:
         bar = ProgressBar(threshlist)
         for k, thresh in enumerate(bar):
@@ -1647,25 +1628,23 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                     '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
                     (k + 1, len(threshlist), thresh, det_mit, det_Mit,
                      est_purity))
-            Pval_r.append(est_purity)
-            det_m.append(det_mit)
-            det_M.append(det_Mit)
-        Tval_r = np.asarray(threshlist)
-        Pval_r = np.asarray(Pval_r)
-        det_m = np.asanyarray(det_m)
-        det_M = np.asanyarray(det_M)
+            res.append((thresh, est_purity, det_mit, det_Mit))
 
-    if Pval_r[-1] < purity:
+    res = Table(rows=res, names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
+    if threshlist is None:
+        res.sort('Tval_r')
+
+    if res['Pval_r'][-1] < purity:
         logger.warning('Maximum computed purity %.2f is below %.2f',
-                       Pval_r[-1], purity)
+                       res['Pval_r'][-1], purity)
         threshold = np.inf
     else:
-        threshold = np.interp(purity, Pval_r, Tval_r)
-        detect = np.interp(threshold, Tval_r, det_M)
-        logger.debug('Interpolated Threshold %.3f Detection %d for Purity %.2f',
-                     threshold, detect, purity)
+        threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
+        detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
+        logger.debug('Interpolated Threshold %.3f Detection %d for '
+                     'Purity %.2f', threshold, detect, purity)
 
-    return threshold, Pval_r, Tval_r, det_m, det_M
+    return threshold, res
 
 
 @timeit
@@ -2133,7 +2112,7 @@ def peakdet(v, delta):
 
 
 @timeit
-def Estimation_Line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
+def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
                     criteria='flux', order_dct=30, horiz_psf=1,
                     horiz=5):
     """Function to compute the estimated emission line and the optimal
@@ -2218,55 +2197,52 @@ def Estimation_Line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     return Cat2, lin_est, var_est
 
 
-def Purity_Estimation(Cat_in, purity_curves, purity_index):
+def purity_estimation(cat, Pval, Pval_comp):
     """Function to compute the estimated purity for each line.
 
     Parameters
     ----------
-    Cat_in : astropy.Table
+    cat : astropy.Table
         Catalogue of parameters of detected emission lines selected
         with a narrow band test.
-    purity_curves : array, array
-        purity curves related to area
-    purity_index : array, array
-        index of purity curves related to area
+    Pval : astropy.table.Table
+        Table with the purity results for each threshold
+    Pval_comp : astropy.table.Table
+        Table with the purity results for each threshold, in complementary
 
     Returns
     -------
-    Cat1_2 : astropy.Table
+    astropy.Table
         Catalogue of parameters of detected emission lines.
         Columns of the Catalogue Cat2: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
         profile residual flux num_line purity
 
-    Date  : July, 25 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
     """
-
-    Cat1_2 = Cat_in.copy()
+    cat = cat.copy()
     # set to 0 if only 1 purity meaurement
-    purity = np.zeros(len(Cat1_2))
+    purity = np.zeros(len(cat))
 
     # Comp=0
-    ksel = Cat1_2['comp'] == 0
+    ksel = cat['comp'] == 0
     if np.count_nonzero(ksel) > 1:
-        tglr = Cat1_2['T_GLR'][ksel]
-        f = interp1d(purity_index[0], purity_curves[0], bounds_error=False,
-                     fill_value="extrapolate")
+        tglr = cat['T_GLR'][ksel]
+        f = interp1d(Pval['Tval_r'], Pval['Pval_r'],
+                     bounds_error=False, fill_value="extrapolate")
         purity[ksel] = f(tglr.data.data)
 
     # comp=1
-    ksel = Cat1_2['comp'] == 1
+    ksel = cat['comp'] == 1
     if np.count_nonzero(ksel) > 1:
-        tglr = Cat1_2['STD'][ksel]
-        f = interp1d(purity_index[1], purity_curves[1], bounds_error=False,
-                     fill_value="extrapolate")
+        tglr = cat['STD'][ksel]
+        f = interp1d(Pval_comp['Tval_r'], Pval_comp['Pval_r'],
+                     bounds_error=False, fill_value="extrapolate")
         purity[ksel] = f(tglr.data.data)
 
     # The purity by definition cannot be > 1 and < 0, if the interpolation
     # gives a value outside these limits, replace by 1 or 0
-    Cat1_2['purity'] = np.clip(purity, 0, 1)
+    cat['purity'] = np.clip(purity, 0, 1)
 
-    return Cat1_2
+    return cat
 
 
 def unique_sources(table):
