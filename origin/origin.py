@@ -12,6 +12,7 @@ The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 """
 
 import glob
+import inspect
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -181,11 +182,23 @@ class ORIGIN(steps.LogMixin):
 
         self._loginfo('Step 00 - Initialization (ORIGIN v%s)', __version__)
 
+        # dict of Step instances, indexed by step names
         self.steps = OrderedDict()
+        # dict containing the data attributes of each step, to expose them on
+        # the ORIGIN object
         self._dataobjs = {}
         for i, cls in enumerate(steps.STEPS, start=1):
+            # Instantiate the step object, give it a step number
             step = cls(self, i, self.param)
+            # force its signature to be the same as step.run (without the
+            # ORIGIN instance), which allows to see its arguments and their
+            # default value.
+            sig = inspect.signature(step.run)
+            step.__signature__ = sig.replace(parameters=[
+                p for p in sig.parameters.values() if p.name != 'orig'])
             self.steps[step.name] = step
+            # Insert the __call__ method of the step in the ORIGIN object. This
+            # allows to run a step with a method like "step01_preprocessing".
             self.__dict__[step.method_name] = step
             for name, _ in step._dataobjs:
                 self._dataobjs[name] = step
