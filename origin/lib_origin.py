@@ -1571,8 +1571,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         index_pval[-1] = thresh_max
         n_pval = len(index_pval)
 
-        logger.debug('Iter 1 Threshold min %f max %f npts %d',
-                     thresh_min, thresh_max, n_pval)
+        logger.info('Iter 1 Threshold min %f max %f npts %d',
+                    thresh_min, thresh_max, n_pval)
         bar = ProgressBar(index_pval[::-1])
         for k, thresh in enumerate(bar):
             est_purity, det_mit, det_Mit = purity_iter(
@@ -1600,7 +1600,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         index_pval[-1] = thresh_max
         n_pval = len(index_pval)
 
-        logger.debug('Iter 2 Threshold min %f max %f npts %d',
+        logger.info('Iter 2 Threshold min %f max %f npts %d',
                      index_pval[0], index_pval[-1], n_pval)
         bar = ProgressBar(index_pval)
         for k, thresh in enumerate(bar):
@@ -1641,8 +1641,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     else:
         threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
         detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
-        logger.debug('Interpolated Threshold %.3f Detection %d for '
-                     'Purity %.2f', threshold, detect, purity)
+        logger.info('Interpolated Threshold %.3f Detection %d for Purity %.2f',
+                    threshold, detect, purity)
 
     return threshold, res
 

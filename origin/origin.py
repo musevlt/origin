@@ -131,26 +131,22 @@ class ORIGIN(steps.LogMixin):
         Local maxima from min correlation (step05).
     threshold : float
         Estimated threshold (step06).
-    Pval_r : array
-        Purity curves (step06).
-    index_pval : array
-        Indexes of the purity curves (step06).
-    Det_M : list
-        Number of detections in +DATA (step06).
-    Det_m : list
-        Number of detections in -DATA  (step06).
+    Pval : astropy.table.Table
+        Table with the purity results for each threshold (step06):
+        - PVal_r : The purity function
+        - index_pval : index value to plot
+        - Det_m : Number of detections (-DATA)
+        - Det_M : Number of detections (+DATA)
     Cat0 : astropy.Table
         Catalog returned by step07
     det_correl_min : array
         Detections from min correlation (step07)
-    Pval_r_comp : array
-        Purity curves (step08).
-    index_pval_comp : array
-        Indexes of the purity curves (step08).
-    Det_M_comp : list
-        Number of detections in +DATA (step08).
-    Det_m_comp : list
-        Number of detections in -DATA  (step08).
+    Pval_comp : astropy.table.Table
+        Table with the purity results for each threshold in compl (step08):
+        - PVal_r : The purity function
+        - index_pval : index value to plot
+        - Det_m : Number of detections (-DATA)
+        - Det_M : Number of detections (+DATA)
     Cat1 : astropy.Table
         Catalog returned by step08
     spectra : list of `~mpdaf.obj.Spectrum`
@@ -926,41 +922,30 @@ class ORIGIN(steps.LogMixin):
             To draw the legend
 
         """
-        if self.Det_M is None:
-            raise IOError('Run the step 06')
-
         if ax is None:
             ax = plt.gca()
 
         if comp:
             threshold = self.param['threshold2']
-            Pval_r = self.Pval_r_comp
-            index_pval = self.index_pval_comp
             purity = self.param['purity2']
-            Det_M = self.Det_M_comp
-            Det_m = self.Det_m_comp
+            Pval = self.Pval_comp
         else:
             threshold = self.param['threshold']
-            Pval_r = self.Pval_r
-            index_pval = self.index_pval
             purity = self.param['purity']
-            Det_M = self.Det_M
-            Det_m = self.Det_m
+            Pval = self.Pval
 
+        if Pval is None:
+            raise IOError('Run the step 06')
+
+        Tval_r = Pval['Tval_r']
         ax2 = ax.twinx()
+        ax2.plot(Tval_r, Pval['Pval_r'], 'y.-', label='purity')
+        ax.plot(Tval_r, Pval['Det_M'], 'b.-', label='n detections (+DATA)')
+        ax.plot(Tval_r, Pval['Det_m'], 'g.-', label='n detections (-DATA)')
+        ax2.plot(threshold, purity, 'xr')
         if log10:
-            ax2.semilogy(index_pval, Pval_r, 'y.-', label='purity')
-            ax.semilogy(index_pval, Det_M, 'b.-',
-                        label='n detections (+DATA)')
-            ax.semilogy(index_pval, Det_m, 'g.-',
-                        label='n detections (-DATA)')
-            ax2.semilogy(threshold, purity, 'xr')
-
-        else:
-            ax2.plot(index_pval, Pval_r, 'y.-', label='purity')
-            ax.plot(index_pval, Det_M, 'b.-', label='n detections (+DATA)')
-            ax.plot(index_pval, Det_m, 'g.-', label='n detections (-DATA)')
-            ax2.plot(threshold, purity, 'xr')
+            ax.set_yscale('log')
+            ax2.set_yscale('log')
 
         ym, yM = ax.get_ylim()
         ax.plot([threshold, threshold], [ym, yM], 'r', alpha=.25, lw=2,

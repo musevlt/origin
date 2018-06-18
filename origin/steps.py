@@ -688,8 +688,8 @@ class ComputePurityThreshold(Step):
         Estimated threshold
     self.Pval : astropy.table.Table
         Table with the purity results for each threshold:
-        - PVal_r : The purity function
-        - index_pval : index value to plot
+        - Pval_r : The purity function
+        - Tval_r : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
 
@@ -791,8 +791,12 @@ class DetectionLost(Step):
     self.threshold_correl : float
         Estimated threshold used to detect complementary
         lines on local maxima of std cube
-    self.Pval_comp : array
-        Purity curves
+    self.Pval_comp : astropy.table.Table
+        Table with the purity results for each threshold:
+        - Pval_r : The purity function
+        - Tval_r : index value to plot
+        - Det_m : Number of detections (-DATA)
+        - Det_M : Number of detections (+DATA)
     self.Cat1 : astropy.Table
         New catalog.
         Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR STD comp
