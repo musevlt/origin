@@ -1120,8 +1120,8 @@ def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
     if thrdata is None or mthrdata is None:
         data[z1:z2, ksel] = 0
     else:
-        ksel2 = (thrdata[z1:z2, ksel] <= np.max(mthrdata[z1:z2, ksel]))
-        data[z1:z2, ksel][ksel2] = 0
+        ksel2 = (thrdata[z1:z2, ksel] > np.max(mthrdata[z1:z2, ksel]))
+        data[z1:z2, ksel] &= ksel2
 
 
 def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
@@ -1349,12 +1349,15 @@ def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
 
     Date  : October, 25 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
+
     """
+    logger = logging.getLogger(__name__)
 
     locM = (cube_local_max > thresh)
     locm = (cube_local_min > thresh)
     zM, yM, xM = np.where(locM)
     zm, ym, xm = np.where(locm)
+    logger.debug('Before: %d in -DATA, %d in +DATA', xm.size, xM.size)
 
     if filter_act:
         spat_rad = int(spat_size / 2)
@@ -1374,6 +1377,7 @@ def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
         zM, yM, xM = np.where(locM)
         if both:
             zm, ym, xm = np.where(locm)
+        logger.debug('After : %d in -DATA, %d in +DATA', xm.size, xM.size)
 
     return zM, yM, xM, zm, ym, xm
 
