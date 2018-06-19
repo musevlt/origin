@@ -76,7 +76,7 @@ class ORIGIN(steps.LogMixin):
     wfields : None or list of arrays
         List of weight maps (one per fields in the case of MUSE mosaic)
         None: just one field
-    PSF : array (Nz, Nfsf, Nfsf) or list of arrays
+    PSF : array (Nz, PSF_size, PSF_size) or list of arrays
         MUSE PSF (one per field)
     FWHM_PSF : float or list of float
         Mean of the fwhm of the PSF in pixel (one per field).
@@ -158,8 +158,8 @@ class ORIGIN(steps.LogMixin):
 
     def __init__(self, filename, segmap, name='origin', path='.',
                  loglevel='DEBUG', logcolor=False, fieldmap=None,
-                 profiles=None, PSF=None, FWHM_PSF=None, param=None,
-                 imawhite=None):
+                 profiles=None, PSF=None, FWHM_PSF=None, PSF_size=25,
+                 param=None, imawhite=None):
 
         self.path = path
         self.name = name
@@ -230,7 +230,9 @@ class ORIGIN(steps.LogMixin):
 
         # FSF
         self.param['fieldmap'] = fieldmap
-        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF)
+        self.param['PSF_size'] = PSF_size
+        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF,
+                       PSF_size=PSF_size)
 
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
@@ -254,7 +256,8 @@ class ORIGIN(steps.LogMixin):
 
     @classmethod
     def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
-             FWHM_PSF=None, name='origin', loglevel='DEBUG', logcolor=False):
+             FWHM_PSF=None, PSF_size=25, name='origin', path='.',
+             loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -281,6 +284,8 @@ class ORIGIN(steps.LogMixin):
             lambda1=4750, lambda2=7000)
         FWHM_PSF : array (Nz)
             FWHM of the PSFs in pixels.
+        PSF_size : int
+            Spatial size of the PSF (when reconstructed from the cube header).
         name : str
             Name of this session and basename for the sources.
             ORIGIN.write() method saves the session in a folder that
@@ -292,9 +297,9 @@ class ORIGIN(steps.LogMixin):
             Use color for the logger levels.
 
         """
-        return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
+        return cls(cube, segmap, path=path, name=name, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   segmap=segmap, loglevel=loglevel, logcolor=logcolor)
+                   PSF_size=PSF_size, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
     @timeit
@@ -448,7 +453,7 @@ class ORIGIN(steps.LogMixin):
         with fits.open(self.param['profiles']) as hdul:
             return [hdu.header['FWHM'] for hdu in hdul[1:]]
 
-    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None):
+    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None, PSF_size=25):
         """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
         self.wfields = None
         info = self.logger.info
@@ -458,8 +463,7 @@ class ORIGIN(steps.LogMixin):
                 raise IOError('missing PSF keywords in the cube FITS header')
 
             # FSF created from FSF*** keywords
-            Nfsf = 13
-            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, Nfsf)
+            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, PSF_size)
             self.param['PSF'] = cube.primary_header['FSFMODE']
             nfields = cube.primary_header['NFIELDS']
             if nfields == 1:  # just one FSF
