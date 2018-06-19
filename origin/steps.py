@@ -575,7 +575,7 @@ class ComputeTGLR(Step):
     Parameters
     ----------
     size : int
-        Connectivity of contiguous voxels, for the maximum filter.
+        Connectivity of contiguous voxels per axis, for the maximum filter.
     ncpu : int
         Number of CPUs used, defaults to 1.
     pcut : float
@@ -613,7 +613,7 @@ class ComputeTGLR(Step):
     minmap = DataObj('image')
     require = ('compute_greedy_PCA', )
 
-    def run(self, orig, size=26, ncpu=1, pcut=1e-8, pmeansub=True):
+    def run(self, orig, size=3, ncpu=1, pcut=1e-8, pmeansub=True):
         if ncpu > 1:
             try:
                 import mkl_fft  # noqa
