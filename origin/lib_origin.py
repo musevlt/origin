@@ -90,7 +90,10 @@ def ProgressBar(*args, **kwargs):
 
 
 def orthogonal_projection(a, b):
-    """Compute the orthogonal projection: ``np.dot(np.dot(a, a.T), b)``."""
+    """Compute the orthogonal projection: a.(a^T.a)-1.a^T.b
+    NOTE: does not include the (a^T.a)-1 term as it is often not needed (when
+    a is already normalized).
+    """
     # Using multi_dot which is faster than np.dot(np.dot(a, a.T), b)
     # Another option would be to use einsum, less readable but also very
     # fast with Numpy 1.14+ and optimize=True. This seems to be as fast as
@@ -838,6 +841,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             x_red /= np.nansum(b**2)
 
             # remove spectral mean from residual data
+            # FIXME: remove this!!
             x_red -= x_red.mean(axis=1)[:, np.newaxis]
 
             # sparse svd if nb spectrum > 1 else normal svd
