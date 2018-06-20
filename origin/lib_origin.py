@@ -840,10 +840,6 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             x_red -= orthogonal_projection(b, x_red)
             x_red /= np.nansum(b**2)
 
-            # remove spectral mean from residual data
-            # FIXME: remove this!!
-            x_red -= x_red.mean(axis=1)[:, np.newaxis]
-
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
                 break
