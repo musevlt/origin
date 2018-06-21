@@ -14,9 +14,9 @@ from .version import __version__ as origin_version
 
 def create_source(source_id, source_table, line_table, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
-                  spectra_fits_filename, version, profile_fwhm, *,
-                  author="", nb_fwhm=2, size=5, expmap_filename=None,
-                  save_to=None):
+                  spectra_fits_filename, segmap_filename, version,
+                  profile_fwhm, *, author="", nb_fwhm=2, size=5,
+                  expmap_filename=None, save_to=None):
     """Create a MPDAF source.
 
     This function create a MPDAF source object for the ORIGIN source.
@@ -110,8 +110,7 @@ def create_source(source_id, source_table, line_table, origin_params,
             "OR_ITMAX": ("itermax", "OR input, maximum number of iterations"),
         },
         "compute_TGLR": {
-            "OR_NG": ("neighbors", "OR input, neighbors"),
-            "OR_NS": ("NbSubcube", "OR input, nb of subcubes for spatial seg"),
+            "OR_NG": ("size", "OR input, connectivity size"),
         },
         "compute_purity_threshold": {
             "OR_DXY": ("tol_spat",
@@ -177,7 +176,7 @@ def create_source(source_id, source_table, line_table, origin_params,
     # Using add_image, the image size is taken from the white map.
     source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
-    source.add_image(Image(origin_params['segmap']), "ORI_SEGMAP")
+    source.add_image(Image(segmap_filename), "ORI_SEGMAP")
     if expmap_filename is not None:
         source.add_image(Image(expmap_filename), "EXPMAP")
 
@@ -296,7 +295,7 @@ def create_source(source_id, source_table, line_table, origin_params,
 def create_all_sources(cat3_sources, cat3_lines, origin_params,
                        cube_cor_filename, mask_filename_tpl,
                        skymask_filename_tpl, spectra_fits_filename,
-                       version, profile_fwhm, out_tpl, *,
+                       segmap_filename, version, profile_fwhm, out_tpl, *,
                        n_jobs=1, author="", nb_fwhm=2, size=5,
                        expmap_filename=None):
     """Create and save a MPDAF source file for each source.
@@ -321,6 +320,8 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
         source. Eg: masks/sky-mask-%0.5d.fits.
     spectra_fits_filename: str
         Name of the FITS file containing the spectra of the lines.
+    segmap_filename: str
+        Name of the FITS file containing the segmap.
     version: str
         Version number stored in the source.
     profile_fwhm: list of int
@@ -355,6 +356,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             mask_filename=mask_filename_tpl % source_id,
             skymask_filename=skymask_filename_tpl % source_id,
             spectra_fits_filename=spectra_fits_filename,
+            segmap_filename=segmap_filename,
             version=version,
             profile_fwhm=profile_fwhm,
             author=author,

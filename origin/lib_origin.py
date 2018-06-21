@@ -158,7 +158,7 @@ def DCTMAT(nl, order):
     """
     yy, xx = np.mgrid[:nl, :order + 1]
     D0 = np.sqrt(2 / nl) * np.cos((yy + 0.5) * (np.pi / nl) * xx)
-    D0[:, 0] *= 1/np.sqrt(2)
+    D0[:, 0] *= 1 / np.sqrt(2)
     return D0
 
 
@@ -252,6 +252,44 @@ def dct_residual(w_raw, order, var, approx, mask):
             cont.append(res)
 
     return np.stack(cont).T.reshape(w_raw.shape)
+
+
+def compute_segmap_gauss(data, pfa, fwhm_fsf):
+    """Compute segmentation map from an image, using gaussian statistics.
+
+    Parameters
+    ----------
+    data : array
+        Input values, typically from a O2 test.
+    pfa : float
+        Desired false alarm.
+    fwhm : int
+        Width (in integer pixels) of the filter, to convolve with a PSF disc.
+
+    Returns
+    -------
+    float, array
+        threshold, and labeled image.
+
+    """
+    # test threshold : uses a Gaussian approximation of the test statistic
+    # under H0
+    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa)
+
+    # threshold - erosion and dilation to clean ponctual "source"
+    mask = data > gamma
+    mask = binary_erosion(mask, border_value=1, iterations=1)
+    mask = binary_dilation(mask, iterations=1)
+
+    # convolve with PSF
+    if fwhm_fsf > 0:
+        fwhm_pix = int(fwhm_fsf) // 2
+        size = fwhm_pix*2 + 1
+        disc = np.hypot(*list(np.mgrid[:size, :size] - fwhm_pix)) < fwhm_pix
+        mask = fftconvolve(mask, disc, mode='same')
+        mask = mask > 1e-9
+
+    return gamma, ndi_label(mask)[0]
 
 
 def createradvar(cu, ot):
@@ -736,14 +774,14 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     return cube_faint, mapO2, nstop
 
 
-def Compute_PCA_threshold(faint, pfa_test):
+def Compute_PCA_threshold(faint, pfa):
     """Compute threshold for the PCA.
 
     Parameters
     ----------
     faint : array
         Standardized data.
-    pfa_test : float
+    pfa : float
         PFA of the test.
 
     Returns
@@ -755,7 +793,7 @@ def Compute_PCA_threshold(faint, pfa_test):
     test = O2test(faint)
 
     # automatic threshold computation
-    histO2, frecO2, thresO2, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
+    histO2, frecO2, thresO2, mea, std = compute_thresh_gaussfit(test, pfa)
 
     return test, histO2, frecO2, thresO2, mea, std
 
@@ -891,15 +929,15 @@ def O2test(arr):
     return np.mean(arr**2, axis=0)
 
 
-def Compute_thresh_PCA_hist(test, threshold_test):
-    """Function to compute greedy svd.
+def compute_thresh_gaussfit(data, pfa):
+    """Compute a threshold with a gaussian fit of a distribution.
 
     Parameters
     ----------
-    test : array
+    data : array
         2D data from the O2 test.
-    threshold_test : float
-        the pfa of the test.
+    pfa : float
+        Desired false alarm.
 
     Returns
     -------
@@ -911,16 +949,15 @@ def Compute_thresh_PCA_hist(test, threshold_test):
 
     """
     logger = logging.getLogger(__name__)
-    test_v = np.ravel(test)
-    c = test_v[test_v > 0]
-    histO2, frecO2 = np.histogram(c, bins='fd', density=True)
+    data = data[data > 0]
+    histO2, frecO2 = np.histogram(data, bins='fd', density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
     ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind])**2)
     fwhm = mod - frecO2[ind2]
     sigma = fwhm / np.sqrt(2 * np.log(2))
 
-    coef = stats.norm.ppf(threshold_test)
+    coef = stats.norm.ppf(pfa)
     thresO2 = mod - sigma * coef
     logger.debug('1st estimation mean/std/threshold: %f/%f/%f',
                  mod, sigma, thresO2)
@@ -1063,7 +1100,7 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     for prof in profiles:
         if pcut is not None:
             lmin, lmax = np.where(prof >= pcut)[0][[0, -1]]
-            prof = prof[lmin:lmax+1]
+            prof = prof[lmin:lmax + 1]
         if pmeansub:
             prof -= prof.mean()
         prof_cut.append(prof)
@@ -1535,7 +1572,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         n_pval = len(index_pval)
 
         logger.info('Iter 2 Threshold min %f max %f npts %d',
-                     index_pval[0], index_pval[-1], n_pval)
+                    index_pval[0], index_pval[-1], n_pval)
         bar = ProgressBar(index_pval)
         for k, thresh in enumerate(bar):
             est_purity, det_mit, det_Mit = purity_iter(

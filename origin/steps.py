@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
+from scipy import ndimage as ndi
 
 from .lib_origin import (
     area_growing,
@@ -24,6 +25,7 @@ from .lib_origin import (
     Compute_GreedyPCA_area,
     compute_local_max,
     Compute_PCA_threshold,
+    compute_segmap_gauss,
     Compute_threshold_purity,
     Correlation_GLR_test,
     Create_local_max_cat,
@@ -31,6 +33,7 @@ from .lib_origin import (
     dct_residual,
     estimation_line,
     merge_similar_lines,
+    O2test,
     purity_estimation,
     unique_lines,
     unique_sources,
@@ -301,7 +304,7 @@ class Step(LogMixin, metaclass=StepMeta):
 
 
 class Preprocessing(Step):
-    """ Preprocessing of data, dct, standardization and noise compensation
+    """Continuum subtraction, standardization and segmentation.
 
     Parameters
     ----------
@@ -310,6 +313,10 @@ class Preprocessing(Step):
     dct_approx : bool
         if True, the DCT computation does not take the variance into account
         for the computation of the DCT coefficients.
+    pfasegcont : float
+        PFA for the segmentation based on the continuum.
+    pfasegres : float
+        PFA for the segmentation based on the residual.
 
     Returns
     -------
@@ -321,6 +328,8 @@ class Preprocessing(Step):
         Mean of standardized data cube.
     self.ima_dct : `~mpdaf.obj.Image`
         Mean of DCT continuum cube.
+    self.segmap : `~mpdaf.obj.Image`
+        Segmentation map.
 
     """
 
@@ -330,12 +339,14 @@ class Preprocessing(Step):
     cont_dct = DataObj('cube')
     ima_std = DataObj('image')
     ima_dct = DataObj('image')
+    segmap = DataObj('image')
 
-    def run(self, orig, dct_order=10, dct_approx=False):
+    def run(self, orig, dct_order=10, dct_approx=False, pfasegcont=0.01,
+            pfasegres=0.01):
         self._loginfo('DCT computation')
         cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
                                 orig.mask)
-        data = orig.cube_raw - cont_dct
+        data = orig.cube_raw - cont_dct  # compute faint_dct
         data[orig.mask] = np.nan
 
         # compute standardized data
@@ -352,10 +363,32 @@ class Preprocessing(Step):
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.store_cube('cube_std', data)
         self.store_image('ima_std', data.mean(axis=0))
+
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         cont_dct = cont_dct.astype(np.float32)
         self.store_cube('cont_dct', cont_dct)
         self.store_image('ima_dct', cont_dct.mean(axis=0))
+
+        mean_fwhm = int(np.ceil(np.mean(self.orig.FWHM_PSF)))
+
+        self._loginfo('Segmentation based on the continuum')
+        # Test statistic for each spaxels - use log here as it gives a more
+        # gaussian distribution
+        map1 = np.log10(np.sum(cont_dct**2, axis=0))
+        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm)
+        self._loginfo('Found %d regions, threshold=%.2f',
+                      len(np.unique(map_cont)) - 1, thresh)
+
+        self._loginfo('Segmentation based on the residual')
+        map2 = O2test(data)
+        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm)
+        self._loginfo('Found %d regions, threshold=%.2f',
+                      len(np.unique(map_res)) - 1, thresh)
+
+        self._loginfo('Merging both maps')
+        segmap, nlabels = ndi.label((map_cont > 0) | (map_res > 0))
+        self._loginfo('Segmap saved in self.segmap (%d regions)', nlabels)
+        self.store_image('segmap', segmap)
 
 
 class CreateAreas(Step):
@@ -1115,6 +1148,7 @@ class SaveSources(Step):
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
+            segmap_filename=os.path.join(outpath, 'segmap.fits'),
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),

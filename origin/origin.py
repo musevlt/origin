@@ -156,11 +156,9 @@ class ORIGIN(steps.LogMixin):
 
     """
 
-    def __init__(self, filename, segmap, name='origin', path='.',
-                 loglevel='DEBUG', logcolor=False, fieldmap=None,
-                 profiles=None, PSF=None, FWHM_PSF=None, PSF_size=25,
-                 param=None, imawhite=None):
-
+    def __init__(self, filename, name='origin', path='.', loglevel='DEBUG',
+                 logcolor=False, fieldmap=None, profiles=None, PSF=None,
+                 FWHM_PSF=None, PSF_size=25, param=None, imawhite=None):
         self.path = path
         self.name = name
         self.outpath = os.path.join(path, name)
@@ -218,11 +216,6 @@ class ORIGIN(steps.LogMixin):
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
 
-        # segmap
-        self._loginfo('Read the Segmentation Map %s', segmap)
-        self.param['segmap'] = segmap
-        self.segmap = Image(segmap)
-
         # List of spectral profile
         if profiles is None:
             profiles = os.path.join(CURDIR, 'Dico_FWHM_2_12.fits')
@@ -255,7 +248,7 @@ class ORIGIN(steps.LogMixin):
                 [o.method_name for o in self.steps.values()])
 
     @classmethod
-    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
+    def init(cls, cube, segmap=None, fieldmap=None, profiles=None, PSF=None,
              FWHM_PSF=None, PSF_size=25, name='origin', path='.',
              loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
@@ -270,8 +263,6 @@ class ORIGIN(steps.LogMixin):
         ----------
         cube : str
             Cube FITS file name
-        segmap : str
-            Segmentation map FITS filename
         fieldmap : str
             FITS file containing the field map (mosaic)
         profiles : str
@@ -297,7 +288,10 @@ class ORIGIN(steps.LogMixin):
             Use color for the logger levels.
 
         """
-        return cls(cube, segmap, path=path, name=name, fieldmap=fieldmap,
+        if segmap is not None:
+            warnings.warn('External segmap is no more needed/used',
+                          UserWarning)
+        return cls(cube, path=path, name=name, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
                    PSF_size=PSF_size, loglevel=loglevel, logcolor=logcolor)
 
@@ -370,10 +364,9 @@ class ORIGIN(steps.LogMixin):
         logcolor = logcolor if logcolor is not None else param['logcolor']
 
         obj = cls(path=path, name=name, param=param,
-                  loglevel=loglevel, logcolor=logcolor,
+                  imawhite=ima_white, loglevel=loglevel, logcolor=logcolor,
                   filename=param['cubename'], fieldmap=wfields,
-                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                  imawhite=ima_white, segmap=param['segmap'])
+                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF)
 
         for step in obj.steps.values():
             step.load(obj.outpath)
