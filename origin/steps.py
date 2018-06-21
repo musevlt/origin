@@ -26,7 +26,7 @@ from .lib_origin import (
     compute_local_max,
     Compute_PCA_threshold,
     compute_segmap_gauss,
-    Compute_threshold_purity,
+    Compute_threshold_purity2,
     Correlation_GLR_test,
     Create_local_max_cat,
     create_masks,
@@ -730,16 +730,19 @@ class ComputePurityThreshold(Step):
             spect_size=10, auto=(5, 15, 0.1), threshlist=None):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
-        threshold, self.Pval = Compute_threshold_purity(
-            purity,
-            orig.cube_local_max._data,
-            orig.cube_local_min._data,
-            orig.segmap._data,
-            spat_size, spect_size,
-            tol_spat, tol_spec,
-            filter_act=True, bkgrd=True,
-            auto=auto, threshlist=threshlist
-        )
+        # threshold, self.Pval = Compute_threshold_purity(
+        #     purity,
+        #     orig.cube_local_max._data,
+        #     orig.cube_local_min._data,
+        #     orig.segmap._data,
+        #     spat_size, spect_size,
+        #     tol_spat, tol_spec,
+        #     filter_act=True, bkgrd=True,
+        #     auto=auto, threshlist=threshlist
+        # )
+        threshold, self.Pval = Compute_threshold_purity2(
+            purity, orig.cube_local_max._data, orig.cube_local_min._data,
+            orig.segmap._data, threshlist=threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
@@ -859,16 +862,9 @@ class DetectionLost(Step):
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, self.Pval_comp = Compute_threshold_purity(
-            purity,
-            cube_local_max_faint_dct,
-            cube_local_min_faint_dct,
-            orig.segmap._data,
-            pur_params['spat_size'], pur_params['spect_size'],
-            pur_params['tol_spat'], pur_params['tol_spec'],
-            filter_act=True, bkgrd=False,
-            auto=auto, threshlist=threshlist
-        )
+        threshold2, self.Pval_comp = Compute_threshold_purity2(
+            purity, cube_local_max_faint_dct, cube_local_min_faint_dct,
+            orig.segmap._data, threshlist=threshlist)
         orig.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ', threshold2)
 

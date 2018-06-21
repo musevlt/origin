@@ -1619,6 +1619,57 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
 
 @timeit
+def Compute_threshold_purity2(purity, cube_local_max, cube_local_min, segmap,
+                              threshlist=None):
+    logger = logging.getLogger(__name__)
+
+    # background only
+    cube_local_min *= (segmap == 0)
+
+    if threshlist is None:
+        threshmax = min(cube_local_min.max(), cube_local_max.max())
+        threshmin = np.median(np.amax(cube_local_max, axis=0)) * 1.1
+        threshlist = np.linspace(threshmin, threshmax, 50)
+    else:
+        threshmin = np.min(threshlist)
+
+    # total number of spaxels
+    L1 = np.prod(cube_local_min.shape)
+    # number of spaxels considered for calibration
+    L0 = np.count_nonzero(segmap == 0) * cube_local_min.shape[0]
+
+    locM = cube_local_max[cube_local_max > threshmin]
+    locm = cube_local_min[cube_local_min > threshmin]
+
+    n0, n1 = [], []
+    for thresh in ProgressBar(threshlist):
+        n1.append(np.count_nonzero(locM > thresh))
+        n0.append(np.count_nonzero(locm > thresh))
+
+    n0 = np.array(n0) * (L1 / L0)
+    n1 = np.array(n1)
+    est_purity = 1 - n0/n1
+    res = Table([threshlist, est_purity, n0.astype(int), n1],
+                names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
+    res['Tval_r'].format = '.2f'
+    res['Pval_r'].format = '.2f'
+    res.sort('Tval_r')
+    logger.info("purity values:\n%s", res)
+
+    if est_purity[-1] < purity:
+        logger.warning('Maximum computed purity %.2f is below %.2f',
+                       est_purity[-1], purity)
+        threshold = np.inf
+    else:
+        threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
+        detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
+        logger.info('Interpolated Threshold %.3f Detection %d for Purity %.2f',
+                    threshold, detect, purity)
+
+    return threshold, res
+
+
+@timeit
 def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
                          spat_size, spect_size, tol_spat, tol_spec,
                          filter_act, profile, wcs, wave):
