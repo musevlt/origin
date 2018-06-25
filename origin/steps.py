@@ -692,21 +692,11 @@ class ComputePurityThreshold(Step):
     Parameters
     ----------
     purity : float
-        purity to automatically compute the threshold
-    tol_spat : int
-        spatial tolerance for the spatial merging (distance in pixels)
-        TODO en fonction du FWHM
-    tol_spec : int
-        spectral tolerance for the spatial merging (distance in pixels)
-    spat_size : int
-        spatiale size of the spatiale filter
-    spect_size : int
-        spectral lenght of the spectral filter
-    auto : tuple (npts1,npts2,pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default: (5, 15, 0.1)
+        Purity to automatically compute the threshold.
     threshlist : list
-        list of thresholds to compute the purity
+        List of thresholds to compute the purity.
+    pfasegfinal : float
+        PFA for the segmentation based on the maxmap.
 
     Returns
     -------
@@ -718,31 +708,32 @@ class ComputePurityThreshold(Step):
         - Tval_r : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
+    self.segmap_purity : `~mpdaf.obj.Image`
+        Segmentation map.
 
     """
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
     Pval = DataObj('table')
+    segmap_purity = DataObj('image')
     require = ('compute_TGLR', )
 
-    def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
-            spect_size=10, auto=(5, 15, 0.1), threshlist=None):
+    def run(self, orig, purity=.9, threshlist=None, pfasegfinal=1e-5):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
-        # threshold, self.Pval = Compute_threshold_purity(
-        #     purity,
-        #     orig.cube_local_max._data,
-        #     orig.cube_local_min._data,
-        #     orig.segmap._data,
-        #     spat_size, spect_size,
-        #     tol_spat, tol_spec,
-        #     filter_act=True, bkgrd=True,
-        #     auto=auto, threshlist=threshlist
-        # )
+
+        # purity sur zone background avec adaptation de mapmerged
+        # je prends la carte des correls max, je fais une approx gaussienne
+        # et je seuille
+        thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
+                                               pfasegfinal, 0)
+        segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap._data > 0))
+        self.store_image('segmap_purity', segmap)
+
         threshold, self.Pval = Compute_threshold_purity2(
             purity, orig.cube_local_max._data, orig.cube_local_min._data,
-            orig.segmap._data, threshlist=threshlist)
+            segmap, threshlist=threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
@@ -754,12 +745,22 @@ class Detection(Step):
     Parameters
     ----------
     threshold : float
-        User threshod if the estimated threshold is not good
+        User threshold if the estimated threshold is not good.
+    tol_spat : int
+        Tolerance for the spatial merging (distance in pixels).
+        TODO en fonction du FWHM
+    tol_spec : int
+        Tolerance for the spectral merging (distance in pixels).
+    spat_size : int
+        Size of the spatial filter.
+    spect_size : int
+        Length of the spectral filter.
 
     Returns
     -------
     self.Cat0 : astropy.Table
-        First catalog. Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+        Catalog with detections. Columns:
+        ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
     self.det_correl_min : (array, array, array)
         3D positions of detections in correl_min
 
@@ -770,17 +771,17 @@ class Detection(Step):
     Cat0 = DataObj('table')
     det_correl_min = DataObj('array')
 
-    def run(self, orig, threshold=None):
+    def run(self, orig, threshold=None, tol_spat=3, tol_spec=5, spat_size=19,
+            spect_size=10):
+
         if threshold is not None:
             orig.param['threshold'] = threshold
 
-        pur_params = orig.param['compute_purity_threshold']['params']
         self.Cat0, self.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
-            orig.cube_local_min._data, orig.segmap._data,
-            pur_params['spat_size'], pur_params['spect_size'],
-            pur_params['tol_spat'], pur_params['tol_spec'],
-            True, orig.cube_profile._data, orig.wcs, orig.wave
+            orig.cube_local_min._data, orig.segmap._data, spat_size,
+            spect_size, tol_spat, tol_spec, True, orig.cube_profile._data,
+            orig.wcs, orig.wave
         )
         _format_cat(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
@@ -845,16 +846,16 @@ class DetectionLost(Step):
             compute_local_max(orig.cube_std.data, orig.cube_std.data,
                               orig.mask, size)
 
-        pur_params = orig.param['compute_purity_threshold']['params']
+        det_params = orig.param['detection']['params']
 
         # complementary catalog
         cube_local_max_faint_dct, cube_local_min_faint_dct = CleanCube(
             cube_local_max_faint_dct, cube_local_min_faint_dct,
             orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
-            pur_params['spat_size'], pur_params['spect_size'])
+            det_params['spat_size'], det_params['spect_size'])
 
         if purity is None:
-            purity = pur_params['purity']
+            purity = orig.param['compute_purity_threshold']['params']['purity']
         orig.param['purity2'] = purity
 
         self._loginfo('Threshold computed with purity = %.1f', purity)
@@ -877,10 +878,10 @@ class DetectionLost(Step):
                                               cube_local_max_faint_dct,
                                               cube_local_min_faint_dct,
                                               orig.segmap._data,
-                                              pur_params['spat_size'],
-                                              pur_params['spect_size'],
-                                              pur_params['tol_spat'],
-                                              pur_params['tol_spec'],
+                                              det_params['spat_size'],
+                                              det_params['spect_size'],
+                                              det_params['tol_spat'],
+                                              det_params['tol_spec'],
                                               True,
                                               orig.cube_profile._data,
                                               orig.wcs, orig.wave)

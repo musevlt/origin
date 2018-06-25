@@ -254,7 +254,7 @@ def dct_residual(w_raw, order, var, approx, mask):
     return np.stack(cont).T.reshape(w_raw.shape)
 
 
-def compute_segmap_gauss(data, pfa, fwhm_fsf):
+def compute_segmap_gauss(data, pfa, fwhm_fsf=0):
     """Compute segmentation map from an image, using gaussian statistics.
 
     Parameters
