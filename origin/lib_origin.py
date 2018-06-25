@@ -1419,104 +1419,28 @@ def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
     return zM, yM, xM, zm, ym, xm
 
 
-def purity_iter(cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=True, bkgrd=True):
-    """Compute the purity values corresponding to a threshold.
-
-    Parameters
-    ----------
-    cube_local_max : array
-        cube of local maxima from maximum correlation
-    cube_local_min : array
-        cube of local maxima from minus minimum correlation
-    thresh : float
-        a threshold value
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    segmap : array
-        labels of source segmentation based on continuum
-    tol_spat : int
-        spatial tolerance for the spatial merging
-    tol_spec : int
-        spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    bkgrd : bool
-        purity computed on the background, default: True
-
-    Returns
-    -------
-    est_purity : float
-        The estimated purity for this threshold
-    det_m : float
-        Number of unique ID (-DATA)
-    det_M : float
-        Number of unique ID (+DATA)
-
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-
-    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
-        cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-        filter_act=filter_act)
-
-    outM = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
-    outm = spatiospectral_merging(zm, ym, xm, segmap, tol_spat, tol_spec)
-
-    if bkgrd:
-        # purity computed on the background (area == 0)
-        outm = outm[outm['area'] == 0]
-        outM = outM[outM['area'] == 0]
-
-    det_m = len(np.unique(outm['imatch']))
-    det_M = len(np.unique(outM['imatch']))
-
-    est_purity = (1 - det_m / det_M) if det_M > 0 else 0
-    return est_purity, det_m, det_M
-
-
 @timeit
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
-                             segmap, spat_size, spect_size,
-                             tol_spat, tol_spec, filter_act=True, bkgrd=True,
-                             auto=(5, 15, 0.1), threshlist=None):
-    """Compute threshold values corresponding to a given purity
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
+                             threshlist=None):
+    """Compute threshold values corresponding to a given purity.
 
     Parameters
     ----------
     purity : float
-        the purity between 0 and 1
+        The target purity between 0 and 1.
     cube_local_max : array
-        cube of local maxima from maximum correlation
+        Cube of local maxima from maximum correlation.
     cube_local_min : array
-        cube of local maxima from minus minimum correlation
+        Cube of local maxima from minus minimum correlation.
     segmap : array
-        segmentation map
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    tol_spat : int
-        spatial tolerance for the spatial merging
-    tol_spec : int
-        spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    bkgrd : bool
-        purity computed on the background, default: True
-    auto : tuple (npts1, npts2, pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default (5,15,0.1)
+        Segmentation map to get the background regions.
     threshlist : list
-        list of thresholds to compute the purity default None
+        List of thresholds to compute the purity (default None).
 
     Returns
     -------
     threshold : float
-        the threshold associated to the purity
+        The estimated threshold associated to the purity.
     res : astropy.table.Table
         Table with the purity results for each threshold:
         - PVal_r : The purity function
@@ -1525,102 +1449,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         - Det_M : Number of detections (+DATA)
 
     """
-    logger = logging.getLogger(__name__)
-    res = []
-
-    if threshlist is None:
-        npts1, npts2, dp = auto
-        thresh_max = min(cube_local_min.max(), cube_local_max.max())
-        thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
-
-        # first exploration, with large steps (auto[0] points)
-        # -----------------------------------------------------
-        index_pval = np.exp(np.linspace(np.log(thresh_min),
-                                        np.log(thresh_max), npts1))
-        # make sure that last point is thresh_max (and not an
-        # approximate value due to linspace)
-        index_pval[-1] = thresh_max
-        n_pval = len(index_pval)
-
-        logger.info('Iter 1 Threshold min %f max %f npts %d',
-                    thresh_min, thresh_max, n_pval)
-        bar = ProgressBar(index_pval[::-1])
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
-            if est_purity == 1:
-                thresh_max = thresh
-            if est_purity < purity - dp:
-                bar.write('estimated purity below the required one, stopping')
-                break
-        thresh_min = thresh
-
-        # 2nd iter, with small steps (auto[1] points)
-        # -----------------------------------------------------
-        index_pval = np.exp(np.linspace(np.log(thresh_min),
-                                        np.log(thresh_max), npts2))
-        # make sure that last point is thresh_max (and not an
-        # approximate value due to linspace)
-        index_pval[-1] = thresh_max
-        n_pval = len(index_pval)
-
-        logger.info('Iter 2 Threshold min %f max %f npts %d',
-                    index_pval[0], index_pval[-1], n_pval)
-        bar = ProgressBar(index_pval)
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
-            if est_purity > purity + dp:
-                bar.write('estimated purity above the required one, stopping')
-                break
-    else:
-        bar = ProgressBar(threshlist)
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, len(threshlist), thresh, det_mit, det_Mit,
-                     est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
-
-    res = Table(rows=res, names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
-    if threshlist is None:
-        res.sort('Tval_r')
-
-    if res['Pval_r'][-1] < purity:
-        logger.warning('Maximum computed purity %.2f is below %.2f',
-                       res['Pval_r'][-1], purity)
-        threshold = np.inf
-    else:
-        threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
-        detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
-        logger.info('Interpolated Threshold %.3f Detection %d for Purity %.2f',
-                    threshold, detect, purity)
-
-    return threshold, res
-
-
-@timeit
-def Compute_threshold_purity2(purity, cube_local_max, cube_local_min, segmap,
-                              threshlist=None):
     logger = logging.getLogger(__name__)
 
     # background only
@@ -1654,7 +1482,7 @@ def Compute_threshold_purity2(purity, cube_local_max, cube_local_min, segmap,
     res['Tval_r'].format = '.2f'
     res['Pval_r'].format = '.2f'
     res.sort('Tval_r')
-    logger.info("purity values:\n%s", res)
+    logger.debug("purity values:\n%s", res)
 
     if est_purity[-1] < purity:
         logger.warning('Maximum computed purity %.2f is below %.2f',

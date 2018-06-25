@@ -26,7 +26,7 @@ from .lib_origin import (
     compute_local_max,
     Compute_PCA_threshold,
     compute_segmap_gauss,
-    Compute_threshold_purity2,
+    Compute_threshold_purity,
     Correlation_GLR_test,
     Create_local_max_cat,
     create_masks,
@@ -731,7 +731,7 @@ class ComputePurityThreshold(Step):
         segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap._data > 0))
         self.store_image('segmap_purity', segmap)
 
-        threshold, self.Pval = Compute_threshold_purity2(
+        threshold, self.Pval = Compute_threshold_purity(
             purity, orig.cube_local_max._data, orig.cube_local_min._data,
             segmap, threshlist=threshlist)
         orig.param['threshold'] = threshold
@@ -863,7 +863,7 @@ class DetectionLost(Step):
         orig.cube_local_max_faint_dct = cube_local_max_faint_dct
         orig.cube_local_min_faint_dct = cube_local_min_faint_dct
 
-        threshold2, self.Pval_comp = Compute_threshold_purity2(
+        threshold2, self.Pval_comp = Compute_threshold_purity(
             purity, cube_local_max_faint_dct, cube_local_min_faint_dct,
             orig.segmap._data, threshlist=threshlist)
         orig.param['threshold2'] = threshold2
