@@ -21,7 +21,6 @@ from .lib_origin import (
     area_segmentation_final,
     area_segmentation_sources_fusion,
     area_segmentation_square_fusion,
-    CleanCube,
     Compute_GreedyPCA_area,
     compute_local_max,
     Compute_PCA_threshold,
@@ -810,9 +809,6 @@ class DetectionLost(Step):
     purity : float
         purity to automatically compute the threshold
         If None, previous purity is used
-    auto : tuple (npts1,npts2,pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default (5,15,0.1)
     threshlist : list
         list of thresholds to compute the purity default None
 
@@ -839,59 +835,44 @@ class DetectionLost(Step):
     Pval_comp = DataObj('table')
     require = ('detection', )
 
-    def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
+    def run(self, orig, purity=None, threshlist=None):
         self._loginfo('Compute local maximum of std cube values')
         size = orig.param['compute_TGLR']['params']['size']
-        cube_local_max_faint_dct, cube_local_min_faint_dct = \
-            compute_local_max(orig.cube_std.data, orig.cube_std.data,
-                              orig.mask, size)
-
-        det_params = orig.param['detection']['params']
-
-        # complementary catalog
-        cube_local_max_faint_dct, cube_local_min_faint_dct = CleanCube(
-            cube_local_max_faint_dct, cube_local_min_faint_dct,
-            orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
-            det_params['spat_size'], det_params['spect_size'])
+        local_max, local_min = compute_local_max(
+            orig.cube_std._data, orig.cube_std._data, orig.mask, size)
 
         if purity is None:
             purity = orig.param['compute_purity_threshold']['params']['purity']
         orig.param['purity2'] = purity
+        self._loginfo('Threshold computed with purity = %.2f', purity)
 
-        self._loginfo('Threshold computed with purity = %.1f', purity)
+        # orig.cube_local_max_faint_dct = local_max
+        # orig.cube_local_min_faint_dct = local_min
 
-        orig.cube_local_max_faint_dct = cube_local_max_faint_dct
-        orig.cube_local_min_faint_dct = cube_local_min_faint_dct
-
+        # FIXME: use segmap or segmap_purity ?
         threshold2, self.Pval_comp = Compute_threshold_purity(
-            purity, cube_local_max_faint_dct, cube_local_min_faint_dct,
-            orig.segmap._data, threshlist=threshlist)
+            purity, local_max, local_min, orig.segmap_purity._data,
+            threshlist=threshlist)
         orig.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ', threshold2)
 
+        Cat1 = orig.Cat0.copy()
+        Cat1['comp'] = 0
+
         if threshold2 == np.inf:
-            Cat1 = orig.Cat0.copy()
-            Cat1['comp'] = 0
             Cat1['STD'] = 0
         else:
-            Catcomp, _ = Create_local_max_cat(threshold2,
-                                              cube_local_max_faint_dct,
-                                              cube_local_min_faint_dct,
-                                              orig.segmap._data,
-                                              det_params['spat_size'],
-                                              det_params['spect_size'],
-                                              det_params['tol_spat'],
-                                              det_params['tol_spec'],
-                                              True,
-                                              orig.cube_profile._data,
-                                              orig.wcs, orig.wave)
+            p = orig.param['detection']['params']
+            Catcomp, _ = Create_local_max_cat(
+                threshold2, local_max, local_min, orig.segmap._data,
+                p['spat_size'], p['spect_size'], p['tol_spat'], p['tol_spec'],
+                True, orig.cube_profile._data, orig.wcs, orig.wave)
             Catcomp.rename_column('T_GLR', 'STD')
+
             # merging
-            Cat0 = orig.Cat0.copy()
-            Cat0['comp'] = 0
             Catcomp['comp'] = 1
-            Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            Catcomp['ID'] += (Cat1['ID'].max() + 1)
+            Cat1 = _format_cat(vstack([Cat1, Catcomp]))
             # vstack creates a masked Table, masking the missing values. But
             # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
             # modified later by Cat2 operations, if it was not dumped before.

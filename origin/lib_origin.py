@@ -1161,20 +1161,6 @@ def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
         data[z1:z2, ksel] &= ksel2
 
 
-def CleanCube(Mdata, mdata, catM, catm, Nz, Nx, Ny, spat_size, spect_size):
-    zM, yM, xM = catM['z0'], catM['y0'], catM['x0']
-    zm, ym, xm = catm
-    spat_rad = int(spat_size / 2)
-    spect_rad = int(spect_size / 2)
-
-    for n, z in enumerate(zm):
-        _mask_circle_region(mdata, xm[n], ym[n], z, spat_rad, spect_rad)
-    for n, z in enumerate(zM):
-        _mask_circle_region(Mdata, xM[n], yM[n], z, spat_rad, spect_rad)
-
-    return Mdata, mdata
-
-
 def compute_local_max(correl, correl_min, mask, size=3):
     """Compute the local maxima of the maximum correlation and local maxima
     of minus the minimum correlation distribution.
@@ -1452,7 +1438,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
     logger = logging.getLogger(__name__)
 
     # background only
-    cube_local_min *= (segmap == 0)
+    cube_local_min = cube_local_min * (segmap == 0)
 
     if threshlist is None:
         threshmax = min(cube_local_min.max(), cube_local_max.max())
@@ -1462,9 +1448,9 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
         threshmin = np.min(threshlist)
 
     # total number of spaxels
-    L1 = np.prod(cube_local_min.shape)
+    L1 = np.prod(cube_local_min.shape[1:])
     # number of spaxels considered for calibration
-    L0 = np.count_nonzero(segmap == 0) * cube_local_min.shape[0]
+    L0 = np.count_nonzero(segmap == 0)
 
     locM = cube_local_max[cube_local_max > threshmin]
     locm = cube_local_min[cube_local_min > threshmin]
