@@ -993,7 +993,7 @@ class CleanResults(Step):
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
         self._loginfo('Save the unique source catalogue in self.Cat3_sources'
-                      ' (%d lines)', len(orig.Cat3_sources))
+                      ' (%d sources)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
         nb_line_merged = np.sum(orig.Cat3_lines['merged_in'] != -9999)
