@@ -750,10 +750,6 @@ class Detection(Step):
         TODO en fonction du FWHM
     tol_spec : int
         Tolerance for the spectral merging (distance in pixels).
-    spat_size : int
-        Size of the spatial filter.
-    spect_size : int
-        Length of the spectral filter.
 
     Returns
     -------
@@ -770,17 +766,15 @@ class Detection(Step):
     Cat0 = DataObj('table')
     det_correl_min = DataObj('array')
 
-    def run(self, orig, threshold=None, tol_spat=3, tol_spec=5, spat_size=19,
-            spect_size=10):
+    def run(self, orig, threshold=None, tol_spat=3, tol_spec=5):
 
         if threshold is not None:
             orig.param['threshold'] = threshold
 
         self.Cat0, self.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
-            orig.cube_local_min._data, orig.segmap._data, spat_size,
-            spect_size, tol_spat, tol_spec, True, orig.cube_profile._data,
-            orig.wcs, orig.wave
+            orig.cube_local_min._data, orig.segmap._data, tol_spat, tol_spec,
+            orig.cube_profile._data, orig.wcs, orig.wave
         )
         _format_cat(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
@@ -865,8 +859,8 @@ class DetectionLost(Step):
             p = orig.param['detection']['params']
             Catcomp, _ = Create_local_max_cat(
                 threshold2, local_max, local_min, orig.segmap._data,
-                p['spat_size'], p['spect_size'], p['tol_spat'], p['tol_spec'],
-                True, orig.cube_profile._data, orig.wcs, orig.wave)
+                p['tol_spat'], p['tol_spec'], orig.cube_profile._data,
+                orig.wcs, orig.wave)
             Catcomp.rename_column('T_GLR', 'STD')
 
             # merging

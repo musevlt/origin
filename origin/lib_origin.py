@@ -1148,19 +1148,6 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     return correl, profile, correl_min
 
 
-def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
-                        thrdata=None, mthrdata=None):
-    y, x = np.mgrid[:data.shape[1], :data.shape[2]]
-    ksel = ((x - x0)**2 + (y - y0)**2) < spat_rad**2
-    z1 = max(0, z0 - spect_rad)
-    z2 = min(data.shape[0], z0 + spect_rad)
-    if thrdata is None or mthrdata is None:
-        data[z1:z2, ksel] = 0
-    else:
-        ksel2 = (thrdata[z1:z2, ksel] > np.max(mthrdata[z1:z2, ksel]))
-        data[z1:z2, ksel] &= ksel2
-
-
 def compute_local_max(correl, correl_min, mask, size=3):
     """Compute the local maxima of the maximum correlation and local maxima
     of minus the minimum correlation distribution.
@@ -1335,76 +1322,6 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     return tbl
 
 
-def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
-                                 spat_size, spect_size, filter_act=True,
-                                 both=True):
-    """Filter the correl>thresh in +DATA by the correl>thresh in -DATA.
-
-    If ``both=True`` do the same in opposite.
-
-    If a line is detected at the z0,y0,x0 in the - data correlation for a
-    threshold, the + data correl are cleaned from this line and vice versa.
-
-    Parameters
-    ----------
-    cube_local_max : array
-        cube of local maxima from maximum correlation
-    cube_local_min : array
-        cube of local maxima from minus minimum correlation
-    thresh : float
-        a threshold value
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    both : bool
-        if true the process is applied in both sense, otherwise it is applied
-        only in detection purpose and not to compute the purity
-
-    Returns
-    -------
-    zM,yM,xM : list of tuple of int
-        The spatio spectral position of the lines in the + data correl
-    zM,yM,xM : (optional) list of tuple of int
-        The spatio spectral position of the lines in the - data correl
-
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-
-    """
-    logger = logging.getLogger(__name__)
-
-    locM = (cube_local_max > thresh)
-    locm = (cube_local_min > thresh)
-    zM, yM, xM = np.where(locM)
-    zm, ym, xm = np.where(locm)
-    logger.debug('Before: %d in -DATA, %d in +DATA', xm.size, xM.size)
-
-    if filter_act:
-        spat_rad = int(spat_size / 2)
-        spect_rad = int(spect_size / 2)
-
-        for x, y, z in zip(xm, ym, zm):
-            _mask_circle_region(locM, x, y, z, spat_rad, spect_rad,
-                                thrdata=cube_local_max,
-                                mthrdata=cube_local_min)
-
-        if both:
-            for x, y, z in zip(xM, yM, zM):
-                _mask_circle_region(locm, x, y, z, spat_rad, spect_rad,
-                                    thrdata=cube_local_min,
-                                    mthrdata=cube_local_max)
-
-        zM, yM, xM = np.where(locM)
-        if both:
-            zm, ym, xm = np.where(locm)
-        logger.debug('After : %d in -DATA, %d in +DATA', xm.size, xM.size)
-
-    return zM, yM, xM, zm, ym, xm
-
-
 @timeit
 def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
                              threshlist=None):
@@ -1485,8 +1402,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
 
 @timeit
 def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
-                         spat_size, spect_size, tol_spat, tol_spec,
-                         filter_act, profile, wcs, wave):
+                         tol_spat, tol_spec, profile, wcs, wave):
     """ Function which extract detection and performs  spatio spectral merging
     at same time for a given purity and segmentation map
 
@@ -1500,16 +1416,10 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
         cube of local maxima from minus minimum correlation
     segmap : array
         map of estimated continuum for segmentation
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
     tol_spat : int
         spatial tolerance for the spatial merging
     tol_spec : int
         spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
     profile : array
         Number of the profile associated to the T_GLR
     wcs : mpdaf.obj.WCS
@@ -1529,9 +1439,9 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
     logger = logging.getLogger(__name__)
 
     logger.info('Thresholding...')
-    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
-        cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-        filter_act=filter_act)
+    zM, yM, xM = np.where(cube_local_max > thresh)
+    zm, ym, xm = np.where(cube_local_min > thresh)
+    logger.info('%d in -DATA, %d in +DATA', xm.size, xM.size)
 
     logger.info('Spatio-spectral merging...')
     cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
