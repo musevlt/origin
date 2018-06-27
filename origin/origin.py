@@ -2,10 +2,13 @@
 ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 ---------------------------------------------------------
 
-This software was initially developped by Carole Clastres, under the
-supervision of David Mary (Lagrange institute, University of Nice), and it was
-ported to Python by Laure Piqueras (CRAL). From November 2016 the software is
-updated by Antony Schutz.
+This software was initially developed by Carole Clastres, under the supervision
+of David Mary (Lagrange institute, University of Nice). It was then ported to
+Python by Laure Piqueras (CRAL). From November 2016 to November 2107 the
+software was developed by Antony Schutz (CRAL/Lagrange) and Laure. Then it was
+developed by Simon Conseil (CRAL), in parallel with an Octave version by David,
+and with contributions from Yannick Roehlly (CRAL). A lot of testing has been
+done also by Roland Bacon (CRAL), which also produced simulated cubes.
 
 The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 
@@ -47,8 +50,6 @@ CURDIR = os.path.dirname(os.path.abspath(__file__))
 class ORIGIN(steps.LogMixin):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
-    Oriented-object interface to run the ORIGIN software.
-
     An Origin object is mainly composed by:
     - cube data (raw data and covariance)
     - 1D dictionary of spectral profiles
@@ -85,14 +86,14 @@ class ORIGIN(steps.LogMixin):
         White image
     segmap : `~mpdaf.obj.Image`
         Segmentation map
-    self.cube_std : `~mpdaf.obj.Cube`
+    cube_std : `~mpdaf.obj.Cube`
         standardized data for PCA. Result of step01.
-    self.cont_dct : `~mpdaf.obj.Cube`
+    cont_dct : `~mpdaf.obj.Cube`
         DCT continuum. Result of step01.
-    self.ima_std : `~mpdaf.obj.Image`
+    ima_std : `~mpdaf.obj.Image`
         Mean of standardized data for PCA along the wavelength axis.
         Result of step01.
-    self.ima_dct : `~mpdaf.obj.Image`
+    ima_dct : `~mpdaf.obj.Image`
         Mean of DCT continuum cube along the wavelength axis.
         Result of step01.
     nbAreas : int

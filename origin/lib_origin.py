@@ -1,34 +1,4 @@
-"""Copyright 2010-2016 CNRS/CRAL
-
-This file is part of MPDAF.
-
-MPDAF is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 3 of the License, or
-(at your option) any later version
-
-MPDAF is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with MPDAF.  If not, see <http://www.gnu.org/licenses/>.
-
-
-ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
-
-This software has been developped by Carole Clastres under the supervision of
-David Mary (Lagrange institute, University of Nice) and ported to python by
-Laure Piqueras (CRAL). From November 2016 the software is updated by Antony
-Schutz under the supervision of David Mary
-
-The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
-Please contact Carole for more info at carole.clastres@univ-lyon1.fr
-Please contact Antony for more info at antonyschutz@gmail.com
-
-lib_origin.py contains the methods that compose the ORIGIN software
-"""
+"""Contains most of the methods that compose the ORIGIN software."""
 
 import logging
 import numpy as np
@@ -310,8 +280,6 @@ def createradvar(cu, ot):
     var : array
         The radial variances
 
-    Date  : Sept,27 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     N = ot.shape[0]
     out = np.zeros(N)
@@ -346,8 +314,6 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
     label :     array
                 The labels of merged areas
 
-    Date  : Sept,27 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     while True:
         indlabl = np.argsort(np.sum(label, axis=(1, 2)))
@@ -428,8 +394,6 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
     label :     array
                 label of the fused square
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     # square area index with borders
     Vert = np.sum(nexpmap, axis=1)
@@ -489,10 +453,7 @@ def area_segmentation_sources_fusion(labsrc, label, pfa, Ny, Nx):
     label_out : array
                 label of the fused square and sources
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
-
     # compute the sources label
     nlab = labsrc.max()
     sources = np.zeros((nlab, Ny, Nx))
@@ -541,8 +502,6 @@ def area_segmentation_convex_fusion(label, src):
     label_out : array
                 label of the convex
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     label_fin = []
     # for each label
@@ -589,10 +548,7 @@ def Convexline(points, snx, sny):
     lab_out :   array
                 The filled convex enveloppe corresponding the sub label
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
-
     # convex enveloppe vertices
     hull = ConvexHull(points)
 
@@ -660,8 +616,6 @@ def area_growing(label, mask):
     label_out : array
                 label of the convex envelop grown to the max number of pixels
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     # start by smaller
     set_ind = np.argsort(np.sum(label, axis=(1, 2)))
@@ -705,8 +659,6 @@ def area_segmentation_final(label, MinS, MaxS):
     sety,setx : array
                 list of index of each label
 
-    Date  : Sept,13 2017
-    Author: Antony Schutz (antonyschutz@gmail.com)
     """
     # if an area is too small
     label = fusion_areas(label, MinS, MaxS, option='var')
@@ -747,8 +699,6 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     cube_faint : array
                 Faint greedy decomposition od STD Cube
 
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
     """
     cube_faint = cube_std.copy()
     mapO2 = np.zeros(cube_std.shape[1:])
@@ -835,8 +785,6 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     nstop   :   int
         Nb of times the iterations have been stopped when > itermax
 
-    Date  : Mar, 28 2017
-    Author: antony schutz (antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
 
@@ -1495,9 +1443,6 @@ def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
     red_wgt : cube of weights_in centered in y,x of size PSF+Max spatial shift
     red_psf : cube of psf_in centered in y,x of size PSF+Max spatial shift
 
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
-
     """
     # size psf
     if weights_in is None:
@@ -1553,8 +1498,6 @@ def LS_deconv_wgt(data_in, var_in, psf_in):
 
     varest_out : estimated theoretic variance
 
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
     """
     # deconvolution
     nl, sizpsf, tmp = psf_in.shape
@@ -1582,8 +1525,7 @@ def conv_wgt(deconv_met, psf_in):
     Returns
     -------
     cube_conv  : Cube, convolution from deconv_met
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
+
     """
     cube_conv = psf_in * deconv_met[:, np.newaxis, np.newaxis]
     cube_conv = cube_conv * (np.abs(psf_in) > 0)
@@ -1626,10 +1568,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     estimated_line : estimated line
     estimated_var  : estimated variance
 
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
     """
-
     nl, sizpsf, tmp = psf_in.shape
 
     # STD
@@ -1743,10 +1682,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     z : int
         re-estimated x position in pixel of the source in the grid
 
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
     """
-
     shape = (1 + 2 * size_grid, 1 + 2 * size_grid)
     zest = np.zeros(shape)
     fest_00 = np.zeros(shape)
@@ -1905,10 +1841,7 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Cat_est_line_std : list of arrays
         Estimated lines in SNR space
 
-    Date  : June, 21 2017
-    Author: Antony Schutz (antony.schutz@gmail.com)
     """
-
     NL, NY, NX = RAW.shape
     res = []
     for src in ProgressBar(Cat1):
