@@ -20,7 +20,6 @@ import os
 import shutil
 import sys
 import warnings
-import yaml
 
 from astropy.io import fits
 from astropy.utils import lazyproperty
@@ -33,6 +32,14 @@ from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from . import steps
 from .lib_origin import timeit
 from .version import __version__
+
+try:
+    # With PyYaml 4.1, load and safe have been renamed to danger_* and
+    # replaced by the safe_* functions. We need the dangerous ones to
+    # be able to dump Python objects, yay!
+    from yaml import danger_load as load_yaml, danger_dump as dump_yaml
+except ImportError:
+    from yaml import load as load_yaml, dump as dump_yaml
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -76,7 +83,7 @@ class ORIGIN(steps.LogMixin):
     wfields : None or list of arrays
         List of weight maps (one per fields in the case of MUSE mosaic)
         None: just one field
-    PSF : array (Nz, Nfsf, Nfsf) or list of arrays
+    PSF : array (Nz, PSF_size, PSF_size) or list of arrays
         MUSE PSF (one per field)
     FWHM_PSF : float or list of float
         Mean of the fwhm of the PSF in pixel (one per field).
@@ -156,11 +163,9 @@ class ORIGIN(steps.LogMixin):
 
     """
 
-    def __init__(self, filename, segmap, name='origin', path='.',
-                 loglevel='DEBUG', logcolor=False, fieldmap=None,
-                 profiles=None, PSF=None, FWHM_PSF=None, param=None,
-                 imawhite=None):
-
+    def __init__(self, filename, name='origin', path='.', loglevel='DEBUG',
+                 logcolor=False, fieldmap=None, profiles=None, PSF=None,
+                 FWHM_PSF=None, PSF_size=25, param=None, imawhite=None):
         self.path = path
         self.name = name
         self.outpath = os.path.join(path, name)
@@ -218,11 +223,6 @@ class ORIGIN(steps.LogMixin):
         # Dimensions
         self.Nz, self.Ny, self.Nx = cub.shape
 
-        # segmap
-        self._loginfo('Read the Segmentation Map %s', segmap)
-        self.param['segmap'] = segmap
-        self.segmap = Image(segmap)
-
         # List of spectral profile
         if profiles is None:
             profiles = os.path.join(CURDIR, 'Dico_FWHM_2_12.fits')
@@ -230,7 +230,9 @@ class ORIGIN(steps.LogMixin):
 
         # FSF
         self.param['fieldmap'] = fieldmap
-        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF)
+        self.param['PSF_size'] = PSF_size
+        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF,
+                       PSF_size=PSF_size)
 
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
@@ -253,8 +255,9 @@ class ORIGIN(steps.LogMixin):
                 [o.method_name for o in self.steps.values()])
 
     @classmethod
-    def init(cls, cube, segmap, fieldmap=None, profiles=None, PSF=None,
-             FWHM_PSF=None, name='origin', loglevel='DEBUG', logcolor=False):
+    def init(cls, cube, segmap=None, fieldmap=None, profiles=None, PSF=None,
+             FWHM_PSF=None, PSF_size=25, name='origin', path='.',
+             loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -267,8 +270,6 @@ class ORIGIN(steps.LogMixin):
         ----------
         cube : str
             Cube FITS file name
-        segmap : str
-            Segmentation map FITS filename
         fieldmap : str
             FITS file containing the field map (mosaic)
         profiles : str
@@ -281,6 +282,8 @@ class ORIGIN(steps.LogMixin):
             lambda1=4750, lambda2=7000)
         FWHM_PSF : array (Nz)
             FWHM of the PSFs in pixels.
+        PSF_size : int
+            Spatial size of the PSF (when reconstructed from the cube header).
         name : str
             Name of this session and basename for the sources.
             ORIGIN.write() method saves the session in a folder that
@@ -292,9 +295,12 @@ class ORIGIN(steps.LogMixin):
             Use color for the logger levels.
 
         """
-        return cls(path='.', name=name, filename=cube, fieldmap=fieldmap,
+        if segmap is not None:
+            warnings.warn('External segmap is no more needed/used',
+                          UserWarning)
+        return cls(cube, path=path, name=name, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   segmap=segmap, loglevel=loglevel, logcolor=logcolor)
+                   PSF_size=PSF_size, loglevel=loglevel, logcolor=logcolor)
 
     @classmethod
     @timeit
@@ -323,7 +329,7 @@ class ORIGIN(steps.LogMixin):
         name = os.path.basename(folder)
 
         with open('%s/%s.yaml' % (folder, name), 'r') as stream:
-            param = yaml.load(stream)
+            param = load_yaml(stream)
 
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -365,10 +371,9 @@ class ORIGIN(steps.LogMixin):
         logcolor = logcolor if logcolor is not None else param['logcolor']
 
         obj = cls(path=path, name=name, param=param,
-                  loglevel=loglevel, logcolor=logcolor,
+                  imawhite=ima_white, loglevel=loglevel, logcolor=logcolor,
                   filename=param['cubename'], fieldmap=wfields,
-                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF,
-                  imawhite=ima_white, segmap=param['segmap'])
+                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF)
 
         for step in obj.steps.values():
             step.load(obj.outpath)
@@ -448,7 +453,7 @@ class ORIGIN(steps.LogMixin):
         with fits.open(self.param['profiles']) as hdul:
             return [hdu.header['FWHM'] for hdu in hdul[1:]]
 
-    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None):
+    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None, PSF_size=25):
         """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
         self.wfields = None
         info = self.logger.info
@@ -458,8 +463,7 @@ class ORIGIN(steps.LogMixin):
                 raise IOError('missing PSF keywords in the cube FITS header')
 
             # FSF created from FSF*** keywords
-            Nfsf = 13
-            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, Nfsf)
+            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, PSF_size)
             self.param['PSF'] = cube.primary_header['FSFMODE']
             nfields = cube.primary_header['NFIELDS']
             if nfields == 1:  # just one FSF
@@ -574,7 +578,7 @@ class ORIGIN(steps.LogMixin):
 
         # parameters in .yaml
         with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
-            yaml.dump(self.param, stream)
+            dump_yaml(self.param, stream)
 
         # step3 - saving this manually for now
         if self.nbAreas is not None:

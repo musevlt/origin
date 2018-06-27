@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
+from scipy import ndimage as ndi
 
 from .lib_origin import (
     area_growing,
@@ -20,10 +21,10 @@ from .lib_origin import (
     area_segmentation_final,
     area_segmentation_sources_fusion,
     area_segmentation_square_fusion,
-    CleanCube,
     Compute_GreedyPCA_area,
     compute_local_max,
     Compute_PCA_threshold,
+    compute_segmap_gauss,
     Compute_threshold_purity,
     Correlation_GLR_test,
     Create_local_max_cat,
@@ -31,6 +32,7 @@ from .lib_origin import (
     dct_residual,
     estimation_line,
     merge_similar_lines,
+    O2test,
     purity_estimation,
     unique_lines,
     unique_sources,
@@ -301,7 +303,7 @@ class Step(LogMixin, metaclass=StepMeta):
 
 
 class Preprocessing(Step):
-    """ Preprocessing of data, dct, standardization and noise compensation
+    """Continuum subtraction, standardization and segmentation.
 
     Parameters
     ----------
@@ -310,6 +312,10 @@ class Preprocessing(Step):
     dct_approx : bool
         if True, the DCT computation does not take the variance into account
         for the computation of the DCT coefficients.
+    pfasegcont : float
+        PFA for the segmentation based on the continuum.
+    pfasegres : float
+        PFA for the segmentation based on the residual.
 
     Returns
     -------
@@ -321,6 +327,8 @@ class Preprocessing(Step):
         Mean of standardized data cube.
     self.ima_dct : `~mpdaf.obj.Image`
         Mean of DCT continuum cube.
+    self.segmap : `~mpdaf.obj.Image`
+        Segmentation map.
 
     """
 
@@ -330,12 +338,14 @@ class Preprocessing(Step):
     cont_dct = DataObj('cube')
     ima_std = DataObj('image')
     ima_dct = DataObj('image')
+    segmap = DataObj('image')
 
-    def run(self, orig, dct_order=10, dct_approx=False):
+    def run(self, orig, dct_order=10, dct_approx=False, pfasegcont=0.01,
+            pfasegres=0.01):
         self._loginfo('DCT computation')
         cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
                                 orig.mask)
-        data = orig.cube_raw - cont_dct
+        data = orig.cube_raw - cont_dct  # compute faint_dct
         data[orig.mask] = np.nan
 
         # compute standardized data
@@ -352,10 +362,32 @@ class Preprocessing(Step):
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.store_cube('cube_std', data)
         self.store_image('ima_std', data.mean(axis=0))
+
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         cont_dct = cont_dct.astype(np.float32)
         self.store_cube('cont_dct', cont_dct)
         self.store_image('ima_dct', cont_dct.mean(axis=0))
+
+        mean_fwhm = int(np.ceil(np.mean(self.orig.FWHM_PSF)))
+
+        self._loginfo('Segmentation based on the continuum')
+        # Test statistic for each spaxels - use log here as it gives a more
+        # gaussian distribution
+        map1 = np.log10(np.sum(cont_dct**2, axis=0))
+        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm)
+        self._loginfo('Found %d regions, threshold=%.2f',
+                      len(np.unique(map_cont)) - 1, thresh)
+
+        self._loginfo('Segmentation based on the residual')
+        map2 = O2test(data)
+        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm)
+        self._loginfo('Found %d regions, threshold=%.2f',
+                      len(np.unique(map_res)) - 1, thresh)
+
+        self._loginfo('Merging both maps')
+        segmap, nlabels = ndi.label((map_cont > 0) | (map_res > 0))
+        self._loginfo('Segmap saved in self.segmap (%d regions)', nlabels)
+        self.store_image('segmap', segmap)
 
 
 class CreateAreas(Step):
@@ -659,21 +691,11 @@ class ComputePurityThreshold(Step):
     Parameters
     ----------
     purity : float
-        purity to automatically compute the threshold
-    tol_spat : int
-        spatial tolerance for the spatial merging (distance in pixels)
-        TODO en fonction du FWHM
-    tol_spec : int
-        spectral tolerance for the spatial merging (distance in pixels)
-    spat_size : int
-        spatiale size of the spatiale filter
-    spect_size : int
-        spectral lenght of the spectral filter
-    auto : tuple (npts1,npts2,pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default: (5, 15, 0.1)
+        Purity to automatically compute the threshold.
     threshlist : list
-        list of thresholds to compute the purity
+        List of thresholds to compute the purity.
+    pfasegfinal : float
+        PFA for the segmentation based on the maxmap.
 
     Returns
     -------
@@ -685,28 +707,32 @@ class ComputePurityThreshold(Step):
         - Tval_r : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
+    self.segmap_purity : `~mpdaf.obj.Image`
+        Segmentation map.
 
     """
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
     Pval = DataObj('table')
+    segmap_purity = DataObj('image')
     require = ('compute_TGLR', )
 
-    def run(self, orig, purity=.9, tol_spat=3, tol_spec=5, spat_size=19,
-            spect_size=10, auto=(5, 15, 0.1), threshlist=None):
+    def run(self, orig, purity=.9, threshlist=None, pfasegfinal=1e-5):
         orig.param['purity'] = purity
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
+
+        # purity sur zone background avec adaptation de mapmerged
+        # je prends la carte des correls max, je fais une approx gaussienne
+        # et je seuille
+        thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
+                                               pfasegfinal, 0)
+        segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap._data > 0))
+        self.store_image('segmap_purity', segmap)
+
         threshold, self.Pval = Compute_threshold_purity(
-            purity,
-            orig.cube_local_max._data,
-            orig.cube_local_min._data,
-            orig.segmap._data,
-            spat_size, spect_size,
-            tol_spat, tol_spec,
-            filter_act=True, bkgrd=True,
-            auto=auto, threshlist=threshlist
-        )
+            purity, orig.cube_local_max._data, orig.cube_local_min._data,
+            segmap, threshlist=threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
@@ -718,12 +744,18 @@ class Detection(Step):
     Parameters
     ----------
     threshold : float
-        User threshod if the estimated threshold is not good
+        User threshold if the estimated threshold is not good.
+    tol_spat : int
+        Tolerance for the spatial merging (distance in pixels).
+        TODO en fonction du FWHM
+    tol_spec : int
+        Tolerance for the spectral merging (distance in pixels).
 
     Returns
     -------
     self.Cat0 : astropy.Table
-        First catalog. Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+        Catalog with detections. Columns:
+        ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
     self.det_correl_min : (array, array, array)
         3D positions of detections in correl_min
 
@@ -734,17 +766,15 @@ class Detection(Step):
     Cat0 = DataObj('table')
     det_correl_min = DataObj('array')
 
-    def run(self, orig, threshold=None):
+    def run(self, orig, threshold=None, tol_spat=3, tol_spec=5):
+
         if threshold is not None:
             orig.param['threshold'] = threshold
 
-        pur_params = orig.param['compute_purity_threshold']['params']
         self.Cat0, self.det_correl_min = Create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
-            orig.cube_local_min._data, orig.segmap._data,
-            pur_params['spat_size'], pur_params['spect_size'],
-            pur_params['tol_spat'], pur_params['tol_spec'],
-            True, orig.cube_profile._data, orig.wcs, orig.wave
+            orig.cube_local_min._data, orig.segmap._data, tol_spat, tol_spec,
+            orig.cube_profile._data, orig.wcs, orig.wave
         )
         _format_cat(self.Cat0)
         self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
@@ -773,9 +803,6 @@ class DetectionLost(Step):
     purity : float
         purity to automatically compute the threshold
         If None, previous purity is used
-    auto : tuple (npts1,npts2,pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default (5,15,0.1)
     threshlist : list
         list of thresholds to compute the purity default None
 
@@ -802,66 +829,44 @@ class DetectionLost(Step):
     Pval_comp = DataObj('table')
     require = ('detection', )
 
-    def run(self, orig, purity=None, auto=(5, 15, 0.1), threshlist=None):
+    def run(self, orig, purity=None, threshlist=None):
         self._loginfo('Compute local maximum of std cube values')
         size = orig.param['compute_TGLR']['params']['size']
-        cube_local_max_faint_dct, cube_local_min_faint_dct = \
-            compute_local_max(orig.cube_std.data, orig.cube_std.data,
-                              orig.mask, size)
-
-        pur_params = orig.param['compute_purity_threshold']['params']
-
-        # complementary catalog
-        cube_local_max_faint_dct, cube_local_min_faint_dct = CleanCube(
-            cube_local_max_faint_dct, cube_local_min_faint_dct,
-            orig.Cat0, orig.det_correl_min, orig.Nz, orig.Nx, orig.Ny,
-            pur_params['spat_size'], pur_params['spect_size'])
+        local_max, local_min = compute_local_max(
+            orig.cube_std._data, orig.cube_std._data, orig.mask, size)
 
         if purity is None:
-            purity = pur_params['purity']
+            purity = orig.param['compute_purity_threshold']['params']['purity']
         orig.param['purity2'] = purity
+        self._loginfo('Threshold computed with purity = %.2f', purity)
 
-        self._loginfo('Threshold computed with purity = %.1f', purity)
+        # orig.cube_local_max_faint_dct = local_max
+        # orig.cube_local_min_faint_dct = local_min
 
-        orig.cube_local_max_faint_dct = cube_local_max_faint_dct
-        orig.cube_local_min_faint_dct = cube_local_min_faint_dct
-
+        # FIXME: use segmap or segmap_purity ?
         threshold2, self.Pval_comp = Compute_threshold_purity(
-            purity,
-            cube_local_max_faint_dct,
-            cube_local_min_faint_dct,
-            orig.segmap._data,
-            pur_params['spat_size'], pur_params['spect_size'],
-            pur_params['tol_spat'], pur_params['tol_spec'],
-            filter_act=True, bkgrd=False,
-            auto=auto, threshlist=threshlist
-        )
+            purity, local_max, local_min, orig.segmap_purity._data,
+            threshlist=threshlist)
         orig.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ', threshold2)
 
+        Cat1 = orig.Cat0.copy()
+        Cat1['comp'] = 0
+
         if threshold2 == np.inf:
-            Cat1 = orig.Cat0.copy()
-            Cat1['comp'] = 0
             Cat1['STD'] = 0
         else:
-            Catcomp, _ = Create_local_max_cat(threshold2,
-                                              cube_local_max_faint_dct,
-                                              cube_local_min_faint_dct,
-                                              orig.segmap._data,
-                                              pur_params['spat_size'],
-                                              pur_params['spect_size'],
-                                              pur_params['tol_spat'],
-                                              pur_params['tol_spec'],
-                                              True,
-                                              orig.cube_profile._data,
-                                              orig.wcs, orig.wave)
+            p = orig.param['detection']['params']
+            Catcomp, _ = Create_local_max_cat(
+                threshold2, local_max, local_min, orig.segmap._data,
+                p['tol_spat'], p['tol_spec'], orig.cube_profile._data,
+                orig.wcs, orig.wave)
             Catcomp.rename_column('T_GLR', 'STD')
+
             # merging
-            Cat0 = orig.Cat0.copy()
-            Cat0['comp'] = 0
             Catcomp['comp'] = 1
-            Catcomp['ID'] += (Cat0['ID'].max() + 1)
-            Cat1 = _format_cat(vstack([Cat0, Catcomp]))
+            Catcomp['ID'] += (Cat1['ID'].max() + 1)
+            Cat1 = _format_cat(vstack([Cat1, Catcomp]))
             # vstack creates a masked Table, masking the missing values. But
             # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
             # modified later by Cat2 operations, if it was not dumped before.
@@ -1115,6 +1120,7 @@ class SaveSources(Step):
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
+            segmap_filename=os.path.join(outpath, 'segmap.fits'),
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),

@@ -20,7 +20,7 @@ def test_origin():
     # Number of subcubes for the spatial segmentation
 
     try:
-        my_origin = ORIGIN.init(MINICUBE, SEGMAP, name='tmp', loglevel='INFO')
+        my_origin = ORIGIN.init(MINICUBE, name='tmp', loglevel='INFO')
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
@@ -57,11 +57,12 @@ def test_origin():
 
         # threshold applied on pvalues
         my_origin = ORIGIN.load('tmp')
-        my_origin.step06_compute_purity_threshold()
+        my_origin.step06_compute_purity_threshold(purity=0.8)
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
-        my_origin.step07_detection()
+        # FIXME: threshold is hardcoded for now
+        my_origin.step07_detection(threshold=9.28)
         my_origin.write()
 
         my_origin = ORIGIN.load('tmp')
@@ -97,7 +98,7 @@ def test_origin():
         my_origin.info()
 
         cat = Catalog.read('tmp2/tmp2.fits')
-        assert len(cat) == 6
+        assert len(cat) == 9
 
         # test returned sources are valid
         src = Source.from_file('./tmp2/sources/source-00001.fits')

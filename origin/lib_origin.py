@@ -90,7 +90,10 @@ def ProgressBar(*args, **kwargs):
 
 
 def orthogonal_projection(a, b):
-    """Compute the orthogonal projection: ``np.dot(np.dot(a, a.T), b)``."""
+    """Compute the orthogonal projection: a.(a^T.a)-1.a^T.b
+    NOTE: does not include the (a^T.a)-1 term as it is often not needed (when
+    a is already normalized).
+    """
     # Using multi_dot which is faster than np.dot(np.dot(a, a.T), b)
     # Another option would be to use einsum, less readable but also very
     # fast with Numpy 1.14+ and optimize=True. This seems to be as fast as
@@ -155,7 +158,7 @@ def DCTMAT(nl, order):
     """
     yy, xx = np.mgrid[:nl, :order + 1]
     D0 = np.sqrt(2 / nl) * np.cos((yy + 0.5) * (np.pi / nl) * xx)
-    D0[:, 0] *= 1/np.sqrt(2)
+    D0[:, 0] *= 1 / np.sqrt(2)
     return D0
 
 
@@ -249,6 +252,44 @@ def dct_residual(w_raw, order, var, approx, mask):
             cont.append(res)
 
     return np.stack(cont).T.reshape(w_raw.shape)
+
+
+def compute_segmap_gauss(data, pfa, fwhm_fsf=0):
+    """Compute segmentation map from an image, using gaussian statistics.
+
+    Parameters
+    ----------
+    data : array
+        Input values, typically from a O2 test.
+    pfa : float
+        Desired false alarm.
+    fwhm : int
+        Width (in integer pixels) of the filter, to convolve with a PSF disc.
+
+    Returns
+    -------
+    float, array
+        threshold, and labeled image.
+
+    """
+    # test threshold : uses a Gaussian approximation of the test statistic
+    # under H0
+    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa)
+
+    # threshold - erosion and dilation to clean ponctual "source"
+    mask = data > gamma
+    mask = binary_erosion(mask, border_value=1, iterations=1)
+    mask = binary_dilation(mask, iterations=1)
+
+    # convolve with PSF
+    if fwhm_fsf > 0:
+        fwhm_pix = int(fwhm_fsf) // 2
+        size = fwhm_pix*2 + 1
+        disc = np.hypot(*list(np.mgrid[:size, :size] - fwhm_pix)) < fwhm_pix
+        mask = fftconvolve(mask, disc, mode='same')
+        mask = mask > 1e-9
+
+    return gamma, ndi_label(mask)[0]
 
 
 def createradvar(cu, ot):
@@ -733,14 +774,14 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     return cube_faint, mapO2, nstop
 
 
-def Compute_PCA_threshold(faint, pfa_test):
+def Compute_PCA_threshold(faint, pfa):
     """Compute threshold for the PCA.
 
     Parameters
     ----------
     faint : array
         Standardized data.
-    pfa_test : float
+    pfa : float
         PFA of the test.
 
     Returns
@@ -752,7 +793,7 @@ def Compute_PCA_threshold(faint, pfa_test):
     test = O2test(faint)
 
     # automatic threshold computation
-    histO2, frecO2, thresO2, mea, std = Compute_thresh_PCA_hist(test, pfa_test)
+    histO2, frecO2, thresO2, mea, std = compute_thresh_gaussfit(test, pfa)
 
     return test, histO2, frecO2, thresO2, mea, std
 
@@ -837,9 +878,6 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
             x_red -= orthogonal_projection(b, x_red)
             x_red /= np.nansum(b**2)
 
-            # remove spectral mean from residual data
-            x_red -= x_red.mean(axis=1)[:, np.newaxis]
-
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
                 break
@@ -891,15 +929,15 @@ def O2test(arr):
     return np.mean(arr**2, axis=0)
 
 
-def Compute_thresh_PCA_hist(test, threshold_test):
-    """Function to compute greedy svd.
+def compute_thresh_gaussfit(data, pfa):
+    """Compute a threshold with a gaussian fit of a distribution.
 
     Parameters
     ----------
-    test : array
+    data : array
         2D data from the O2 test.
-    threshold_test : float
-        the pfa of the test.
+    pfa : float
+        Desired false alarm.
 
     Returns
     -------
@@ -911,16 +949,15 @@ def Compute_thresh_PCA_hist(test, threshold_test):
 
     """
     logger = logging.getLogger(__name__)
-    test_v = np.ravel(test)
-    c = test_v[test_v > 0]
-    histO2, frecO2 = np.histogram(c, bins='fd', density=True)
+    data = data[data > 0]
+    histO2, frecO2 = np.histogram(data, bins='fd', density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
     ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind])**2)
     fwhm = mod - frecO2[ind2]
     sigma = fwhm / np.sqrt(2 * np.log(2))
 
-    coef = stats.norm.ppf(threshold_test)
+    coef = stats.norm.ppf(pfa)
     thresO2 = mod - sigma * coef
     logger.debug('1st estimation mean/std/threshold: %f/%f/%f',
                  mod, sigma, thresO2)
@@ -1061,21 +1098,28 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     # Cut the profiles and subtract the mean, if asked to do so
     prof_cut = []
     for prof in profiles:
+        prof = prof.copy()
         if pcut is not None:
             lmin, lmax = np.where(prof >= pcut)[0][[0, -1]]
-            prof = prof[lmin:lmax+1]
+            prof = prof[lmin:lmax + 1]
+        prof /= np.linalg.norm(prof)
         if pmeansub:
             prof -= prof.mean()
         prof_cut.append(prof)
 
-    # compute the optimal shape for FFTs (on the wavelength axis)
-    s1 = np.array(cube_fsf.shape)
-    s2 = np.array((max(d.shape[0] for d in prof_cut), 1, 1))
-    fftshape = s1 + s2 - 1
-    fshape = [fftpack.helper.next_fast_len(int(d)) for d in fftshape[:1]]
+    # compute the optimal shape for FFTs (on the wavelength axis).
+    # For profiles with different shapes, we need to know the indices to
+    # extract the signal from the inverse fft.
+    s1 = np.array(cube_fsf.shape)                          # cube shape
+    s2 = np.array([(d.shape[0], 1, 1) for d in prof_cut])  # profiles shape
+    fftshape = s1 + s2 - 1                                 # fft shape
+    fshape = [fftpack.helper.next_fast_len(int(d))         # optimal fft shape
+              for d in fftshape.max(axis=0)[:1]]
+
+    # and now computes the indices to extract the cube from the inverse fft.
     startind = (fftshape - s1) // 2
     endind = startind + s1
-    cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
+    cslice = [slice(startind[k, 0], endind[k, 0]) for k in range(len(endind))]
 
     # Compute the FFTs of the cube and norm cube, splitting them on multiple
     # threads if needed
@@ -1100,7 +1144,7 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
         for k in ProgressBar(range(len(prof_cut))):
             cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
                                              fshape, nthreads, parallel)
-            cube_profile = cube_profile[cslice[0]]
+            cube_profile = cube_profile[cslice[k]]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
             np.minimum(correl_min, cube_profile, out=correl_min)
@@ -1109,33 +1153,6 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     correl = correl.reshape(Nz, Ny, Nx)
     correl_min = correl_min.reshape(Nz, Ny, Nx)
     return correl, profile, correl_min
-
-
-def _mask_circle_region(data, x0, y0, z0, spat_rad, spect_rad,
-                        thrdata=None, mthrdata=None):
-    y, x = np.mgrid[:data.shape[1], :data.shape[2]]
-    ksel = ((x - x0)**2 + (y - y0)**2) < spat_rad**2
-    z1 = max(0, z0 - spect_rad)
-    z2 = min(data.shape[0], z0 + spect_rad)
-    if thrdata is None or mthrdata is None:
-        data[z1:z2, ksel] = 0
-    else:
-        ksel2 = (thrdata[z1:z2, ksel] <= np.max(mthrdata[z1:z2, ksel]))
-        data[z1:z2, ksel][ksel2] = 0
-
-
-def CleanCube(Mdata, mdata, CatM, catm, Nz, Nx, Ny, spat_size, spect_size):
-    (zM, yM, xM) = (CatM['z0'], CatM['y0'], CatM['x0'])
-    (zm, ym, xm) = catm
-    spat_rad = int(spat_size / 2)
-    spect_rad = int(spect_size / 2)
-
-    for n, z in enumerate(zm):
-        _mask_circle_region(mdata, xm[n], ym[n], z, spat_rad, spect_rad)
-    for n, z in enumerate(zM):
-        _mask_circle_region(Mdata, xM[n], yM[n], z, spat_rad, spect_rad)
-
-    return Mdata, mdata
 
 
 def compute_local_max(correl, correl_min, mask, size=3):
@@ -1160,17 +1177,19 @@ def compute_local_max(correl, correl_min, mask, size=3):
 
     """
     # local maxima of maximum correlation
-    local_max = maximum_filter(correl, size=(size, size, size))
-    local_max_mask = (correl == local_max)
-    local_max_mask[mask] = 0
-    local_max *= local_max_mask
+    if np.isscalar(size):
+        size = (size, size, size)
+    local_max = maximum_filter(correl, size=size)
+    local_mask = (correl == local_max)
+    local_mask[mask] = False
+    local_max *= local_mask
 
     # local maxima of minus minimum correlation
     minus_correl_min = - correl_min
-    local_min = maximum_filter(minus_correl_min, size=(size, size, size))
-    local_max_mask = (minus_correl_min == local_min)
-    local_max_mask[mask] = 0
-    local_min *= local_max_mask
+    local_min = maximum_filter(minus_correl_min, size=size)
+    local_mask = (minus_correl_min == local_min)
+    local_mask[mask] = False
+    local_min *= local_mask
 
     return local_max, local_min
 
@@ -1312,170 +1331,28 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     return tbl
 
 
-def thresh_max_min_loc_filtering(cube_local_max, cube_local_min, thresh,
-                                 spat_size, spect_size, filter_act=True,
-                                 both=True):
-    """Filter the correl>thresh in +DATA by the correl>thresh in -DATA.
-
-    If ``both=True`` do the same in opposite.
-
-    If a line is detected at the z0,y0,x0 in the - data correlation for a
-    threshold, the + data correl are cleaned from this line and vice versa.
-
-    Parameters
-    ----------
-    cube_local_max : array
-        cube of local maxima from maximum correlation
-    cube_local_min : array
-        cube of local maxima from minus minimum correlation
-    thresh : float
-        a threshold value
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    both : bool
-        if true the process is applied in both sense, otherwise it is applied
-        only in detection purpose and not to compute the purity
-
-    Returns
-    -------
-    zM,yM,xM : list of tuple of int
-        The spatio spectral position of the lines in the + data correl
-    zM,yM,xM : (optional) list of tuple of int
-        The spatio spectral position of the lines in the - data correl
-
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-
-    locM = (cube_local_max > thresh)
-    locm = (cube_local_min > thresh)
-    zM, yM, xM = np.where(locM)
-    zm, ym, xm = np.where(locm)
-
-    if filter_act:
-        spat_rad = int(spat_size / 2)
-        spect_rad = int(spect_size / 2)
-
-        for x, y, z in zip(xm, ym, zm):
-            _mask_circle_region(locM, x, y, z, spat_rad, spect_rad,
-                                thrdata=cube_local_max,
-                                mthrdata=cube_local_min)
-
-        if both:
-            for x, y, z in zip(xM, yM, zM):
-                _mask_circle_region(locm, x, y, z, spat_rad, spect_rad,
-                                    thrdata=cube_local_min,
-                                    mthrdata=cube_local_max)
-
-        zM, yM, xM = np.where(locM)
-        if both:
-            zm, ym, xm = np.where(locm)
-
-    return zM, yM, xM, zm, ym, xm
-
-
-def purity_iter(cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=True, bkgrd=True):
-    """Compute the purity values corresponding to a threshold.
-
-    Parameters
-    ----------
-    cube_local_max : array
-        cube of local maxima from maximum correlation
-    cube_local_min : array
-        cube of local maxima from minus minimum correlation
-    thresh : float
-        a threshold value
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    segmap : array
-        labels of source segmentation based on continuum
-    tol_spat : int
-        spatial tolerance for the spatial merging
-    tol_spec : int
-        spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    bkgrd : bool
-        purity computed on the background, default: True
-
-    Returns
-    -------
-    est_purity : float
-        The estimated purity for this threshold
-    det_m : float
-        Number of unique ID (-DATA)
-    det_M : float
-        Number of unique ID (+DATA)
-
-    Date  : October, 25 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
-    """
-
-    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
-        cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-        filter_act=filter_act)
-
-    outM = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
-    outm = spatiospectral_merging(zm, ym, xm, segmap, tol_spat, tol_spec)
-
-    if bkgrd:
-        # purity computed on the background (area == 0)
-        outm = outm[outm['area'] == 0]
-        outM = outM[outM['area'] == 0]
-
-    det_m = len(np.unique(outm['imatch']))
-    det_M = len(np.unique(outM['imatch']))
-
-    est_purity = (1 - det_m / det_M) if det_M > 0 else 0
-    return est_purity, det_m, det_M
-
-
 @timeit
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
-                             segmap, spat_size, spect_size,
-                             tol_spat, tol_spec, filter_act=True, bkgrd=True,
-                             auto=(5, 15, 0.1), threshlist=None):
-    """Compute threshold values corresponding to a given purity
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
+                             threshlist=None):
+    """Compute threshold values corresponding to a given purity.
 
     Parameters
     ----------
     purity : float
-        the purity between 0 and 1
+        The target purity between 0 and 1.
     cube_local_max : array
-        cube of local maxima from maximum correlation
+        Cube of local maxima from maximum correlation.
     cube_local_min : array
-        cube of local maxima from minus minimum correlation
+        Cube of local maxima from minus minimum correlation.
     segmap : array
-        segmentation map
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
-    tol_spat : int
-        spatial tolerance for the spatial merging
-    tol_spec : int
-        spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
-    bkgrd : bool
-        purity computed on the background, default: True
-    auto : tuple (npts1, npts2, pmargin)
-        nb of threshold sample for iteration 1 and 2, margin in purity
-        default (5,15,0.1)
+        Segmentation map to get the background regions.
     threshlist : list
-        list of thresholds to compute the purity default None
+        List of thresholds to compute the purity (default None).
 
     Returns
     -------
     threshold : float
-        the threshold associated to the purity
+        The estimated threshold associated to the purity.
     res : astropy.table.Table
         Table with the purity results for each threshold:
         - PVal_r : The purity function
@@ -1485,88 +1362,43 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
     """
     logger = logging.getLogger(__name__)
-    res = []
+
+    # background only
+    cube_local_min = cube_local_min * (segmap == 0)
 
     if threshlist is None:
-        npts1, npts2, dp = auto
-        thresh_max = min(cube_local_min.max(), cube_local_max.max())
-        thresh_min = np.median(np.amax(cube_local_max, axis=0)) * 1.1
-
-        # first exploration, with large steps (auto[0] points)
-        # -----------------------------------------------------
-        index_pval = np.exp(np.linspace(np.log(thresh_min),
-                                        np.log(thresh_max), npts1))
-        # make sure that last point is thresh_max (and not an
-        # approximate value due to linspace)
-        index_pval[-1] = thresh_max
-        n_pval = len(index_pval)
-
-        logger.info('Iter 1 Threshold min %f max %f npts %d',
-                    thresh_min, thresh_max, n_pval)
-        bar = ProgressBar(index_pval[::-1])
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
-            if est_purity == 1:
-                thresh_max = thresh
-            if est_purity < purity - dp:
-                bar.write('estimated purity below the required one, stopping')
-                break
-        thresh_min = thresh
-
-        # 2nd iter, with small steps (auto[1] points)
-        # -----------------------------------------------------
-        index_pval = np.exp(np.linspace(np.log(thresh_min),
-                                        np.log(thresh_max), npts2))
-        # make sure that last point is thresh_max (and not an
-        # approximate value due to linspace)
-        index_pval[-1] = thresh_max
-        n_pval = len(index_pval)
-
-        logger.info('Iter 2 Threshold min %f max %f npts %d',
-                     index_pval[0], index_pval[-1], n_pval)
-        bar = ProgressBar(index_pval)
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, n_pval, thresh, det_mit, det_Mit, est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
-            if est_purity > purity + dp:
-                bar.write('estimated purity above the required one, stopping')
-                break
+        threshmax = min(cube_local_min.max(), cube_local_max.max())
+        threshmin = np.median(np.amax(cube_local_max, axis=0)) * 1.1
+        threshlist = np.linspace(threshmin, threshmax, 50)
     else:
-        bar = ProgressBar(threshlist)
-        for k, thresh in enumerate(bar):
-            est_purity, det_mit, det_Mit = purity_iter(
-                cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-                segmap, tol_spat, tol_spec, filter_act=filter_act, bkgrd=bkgrd
-            )
-            if not bar.disable:
-                bar.write(
-                    '- %02d/%02d Threshold %f -data %d +data %d purity %f' %
-                    (k + 1, len(threshlist), thresh, det_mit, det_Mit,
-                     est_purity))
-            res.append((thresh, est_purity, det_mit, det_Mit))
+        threshmin = np.min(threshlist)
 
-    res = Table(rows=res, names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
-    if threshlist is None:
-        res.sort('Tval_r')
+    # total number of spaxels
+    L1 = np.prod(cube_local_min.shape[1:])
+    # number of spaxels considered for calibration
+    L0 = np.count_nonzero(segmap == 0)
 
-    if res['Pval_r'][-1] < purity:
+    locM = cube_local_max[cube_local_max > threshmin]
+    locm = cube_local_min[cube_local_min > threshmin]
+
+    n0, n1 = [], []
+    for thresh in ProgressBar(threshlist):
+        n1.append(np.count_nonzero(locM > thresh))
+        n0.append(np.count_nonzero(locm > thresh))
+
+    n0 = np.array(n0) * (L1 / L0)
+    n1 = np.array(n1)
+    est_purity = 1 - n0/n1
+    res = Table([threshlist, est_purity, n0.astype(int), n1],
+                names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
+    res['Tval_r'].format = '.2f'
+    res['Pval_r'].format = '.2f'
+    res.sort('Tval_r')
+    logger.debug("purity values:\n%s", res)
+
+    if est_purity[-1] < purity:
         logger.warning('Maximum computed purity %.2f is below %.2f',
-                       res['Pval_r'][-1], purity)
+                       est_purity[-1], purity)
         threshold = np.inf
     else:
         threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
@@ -1579,8 +1411,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
 @timeit
 def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
-                         spat_size, spect_size, tol_spat, tol_spec,
-                         filter_act, profile, wcs, wave):
+                         tol_spat, tol_spec, profile, wcs, wave):
     """ Function which extract detection and performs  spatio spectral merging
     at same time for a given purity and segmentation map
 
@@ -1594,16 +1425,10 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
         cube of local maxima from minus minimum correlation
     segmap : array
         map of estimated continuum for segmentation
-    spat_size : int
-        spatial size of the spatial filter
-    spect_size : int
-        spectral length of the spectral filter
     tol_spat : int
         spatial tolerance for the spatial merging
     tol_spec : int
         spectral tolerance for the spectral merging
-    filter_act : bool
-        activate or deactivate the spatio spectral filter, default: True
     profile : array
         Number of the profile associated to the T_GLR
     wcs : mpdaf.obj.WCS
@@ -1623,9 +1448,9 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
     logger = logging.getLogger(__name__)
 
     logger.info('Thresholding...')
-    zM, yM, xM, zm, ym, xm = thresh_max_min_loc_filtering(
-        cube_local_max, cube_local_min, thresh, spat_size, spect_size,
-        filter_act=filter_act)
+    zM, yM, xM = np.where(cube_local_max > thresh)
+    zm, ym, xm = np.where(cube_local_min > thresh)
+    logger.info('%d in -DATA, %d in +DATA', xm.size, xM.size)
 
     logger.info('Spatio-spectral merging...')
     cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
