@@ -1098,21 +1098,28 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     # Cut the profiles and subtract the mean, if asked to do so
     prof_cut = []
     for prof in profiles:
+        prof = prof.copy()
         if pcut is not None:
             lmin, lmax = np.where(prof >= pcut)[0][[0, -1]]
             prof = prof[lmin:lmax + 1]
+        prof /= np.linalg.norm(prof)
         if pmeansub:
             prof -= prof.mean()
         prof_cut.append(prof)
 
-    # compute the optimal shape for FFTs (on the wavelength axis)
-    s1 = np.array(cube_fsf.shape)
-    s2 = np.array((max(d.shape[0] for d in prof_cut), 1, 1))
-    fftshape = s1 + s2 - 1
-    fshape = [fftpack.helper.next_fast_len(int(d)) for d in fftshape[:1]]
+    # compute the optimal shape for FFTs (on the wavelength axis).
+    # For profiles with different shapes, we need to know the indices to
+    # extract the signal from the inverse fft.
+    s1 = np.array(cube_fsf.shape)                          # cube shape
+    s2 = np.array([(d.shape[0], 1, 1) for d in prof_cut])  # profiles shape
+    fftshape = s1 + s2 - 1                                 # fft shape
+    fshape = [fftpack.helper.next_fast_len(int(d))         # optimal fft shape
+              for d in fftshape.max(axis=0)[:1]]
+
+    # and now computes the indices to extract the cube from the inverse fft.
     startind = (fftshape - s1) // 2
     endind = startind + s1
-    cslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
+    cslice = [slice(startind[k, 0], endind[k, 0]) for k in range(len(endind))]
 
     # Compute the FFTs of the cube and norm cube, splitting them on multiple
     # threads if needed
@@ -1137,7 +1144,7 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
         for k in ProgressBar(range(len(prof_cut))):
             cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
                                              fshape, nthreads, parallel)
-            cube_profile = cube_profile[cslice[0]]
+            cube_profile = cube_profile[cslice[k]]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
             np.minimum(correl_min, cube_profile, out=correl_min)
@@ -1170,14 +1177,16 @@ def compute_local_max(correl, correl_min, mask, size=3):
 
     """
     # local maxima of maximum correlation
-    local_max = maximum_filter(correl, size=(size, size, size))
+    if np.isscalar(size):
+        size = (size, size, size)
+    local_max = maximum_filter(correl, size=size)
     local_mask = (correl == local_max)
     local_mask[mask] = False
     local_max *= local_mask
 
     # local maxima of minus minimum correlation
     minus_correl_min = - correl_min
-    local_min = maximum_filter(minus_correl_min, size=(size, size, size))
+    local_min = maximum_filter(minus_correl_min, size=size)
     local_mask = (minus_correl_min == local_min)
     local_mask[mask] = False
     local_min *= local_mask
