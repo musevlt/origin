@@ -777,7 +777,7 @@ class Detection(Step):
             orig.cube_profile._data, orig.wcs, orig.wave
         )
         _format_cat(self.Cat0)
-        self._loginfo('Save the catalogue in self.Cat0 (%d sources %d lines)',
+        self._loginfo('Save the catalog in self.Cat0 (%d sources %d lines)',
                       len(np.unique(self.Cat0['ID'])), len(self.Cat0))
 
     def load(self, outpath):
@@ -878,7 +878,7 @@ class DetectionLost(Step):
         nl = len(Cat1)
         dl = nl - len(orig.Cat0)
         self.Cat1 = Cat1
-        self._loginfo('Save the catalogue in self.Cat1'
+        self._loginfo('Save the catalog in self.Cat1'
                       ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
 
 
@@ -903,9 +903,8 @@ class ComputeSpectra(Step):
     Returns
     -------
     self.Cat2 : astropy.Table
-        Catalogue of parameters of detected emission lines.
-        Columns: ra dec lbda x0 x y0 y z0 z T_GLR profile
-        residual flux num_line purity
+        Catalog of parameters of detected emission lines.  Columns:
+        ra dec lbda x0 x y0 y z0 z T_GLR profile residual flux num_line purity
     self.spectra : list of `~mpdaf.obj.Spectrum`
         Estimated lines
 
@@ -935,7 +934,7 @@ class ComputeSpectra(Step):
 
         _format_cat(self.Cat2)
 
-        self._loginfo('Save the updated catalogue in self.Cat2 (%d lines)',
+        self._loginfo('Save the updated catalog in self.Cat2 (%d lines)',
                       len(orig.Cat2))
         nb_duplicated = len(tmp_Cat2) - len(orig.Cat2)
         if nb_duplicated:
@@ -992,13 +991,13 @@ class CleanResults(Step):
             orig.Cat2, z_pix_threshold=merge_lines_z_threshold)
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
 
-        self._loginfo('Save the unique source catalogue in self.Cat3_sources'
+        self._loginfo('Save the unique source catalog in self.Cat3_sources'
                       ' (%d sources)', len(orig.Cat3_sources))
         self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
                       len(orig.Cat3_lines))
         nb_line_merged = np.sum(orig.Cat3_lines['merged_in'] != -9999)
         if nb_line_merged:
-            self._loginfo('%d lines were merged in nearby lines.',
+            self._loginfo('%d lines were merged in nearby lines',
                           nb_line_merged)
 
 

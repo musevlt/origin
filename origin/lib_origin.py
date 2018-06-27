@@ -1438,9 +1438,9 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
 
     Returns
     -------
-    Cat_ref : astropy.Table
-        Catalogue of the referent voxels coordinates for each group
-        Columns of Cat_ref : ID ra dec lba x0 y0 z0 profile seglabel T_GLR
+    cat : astropy.table.Table
+        Catalog of the referent voxels coordinates for each group
+        Columns: ID ra dec lba x0 y0 z0 profile seglabel T_GLR
 
     Date  : June, 19 2017
     Author: Antony Schutz(antonyschutz@gmail.com)
@@ -1466,13 +1466,13 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
     idmap = np.zeros(oldIDs.max() + 1, dtype=int)
     idmap[oldIDs] = np.arange(len(oldIDs))
 
-    # Catalogue of referent pixels
-    Cat_ref = Table([idmap[cat['imatch']], ra, dec, lbda, cat['x'], cat['y'],
-                     cat['z'], profile_max, cat['area'], correl_max],
-                    names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
-                           'profile', 'seg_label', 'T_GLR'))
-    Cat_ref.sort('ID')
-    return Cat_ref, (zm, ym, xm)
+    # Catalog of referent pixels
+    cat = Table([idmap[cat['imatch']], ra, dec, lbda, cat['x'], cat['y'],
+                 cat['z'], profile_max, cat['area'], correl_max],
+                names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
+                       'profile', 'seg_label', 'T_GLR'))
+    cat.sort('ID')
+    return cat, (zm, ym, xm)
 
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
@@ -1876,9 +1876,8 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Parameters
     ----------
     Cat1_T : astropy.Table
-        Catalogue of parameters of detected emission lines selected
-        with a narrow band test.  Columns of the Catalogue Cat1_T:
-        ra dec lbda x0 y0 z0 T_GLR profile
+        Catalog of parameters of detected emission lines selected
+        with a narrow band test. Columns: ra dec lbda x0 y0 z0 T_GLR profile
     DATA : array
         RAW data
     VAR : array
@@ -1906,9 +1905,8 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Returns
     -------
     Cat2 : astropy.Table
-        Catalogue of parameters of detected emission lines.
-        Columns of the Catalogue Cat2: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
-        profile residual flux num_line
+        Catalog of parameters of detected emission lines.  Columns:
+        ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual flux num_line
     Cat_est_line_raw : list of arrays
         Estimated lines in data space
     Cat_est_line_std : list of arrays
@@ -1958,7 +1956,7 @@ def purity_estimation(cat, Pval, Pval_comp):
     Parameters
     ----------
     cat : astropy.Table
-        Catalogue of parameters of detected emission lines selected
+        Catalog of parameters of detected emission lines selected
         with a narrow band test.
     Pval : astropy.table.Table
         Table with the purity results for each threshold
@@ -1968,8 +1966,8 @@ def purity_estimation(cat, Pval, Pval_comp):
     Returns
     -------
     astropy.Table
-        Catalogue of parameters of detected emission lines.
-        Columns of the Catalogue Cat2: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
+        Catalog of parameters of detected emission lines.
+        Columns: ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR
         profile residual flux num_line purity
 
     """
