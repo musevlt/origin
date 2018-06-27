@@ -20,7 +20,6 @@ import os
 import shutil
 import sys
 import warnings
-import yaml
 
 from astropy.io import fits
 from astropy.utils import lazyproperty
@@ -33,6 +32,14 @@ from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
 from . import steps
 from .lib_origin import timeit
 from .version import __version__
+
+try:
+    # With PyYaml 4.1, load and safe have been renamed to danger_* and
+    # replaced by the safe_* functions. We need the dangerous ones to
+    # be able to dump Python objects, yay!
+    from yaml import danger_load as load_yaml, danger_dump as dump_yaml
+except ImportError:
+    from yaml import load as load_yaml, dump as dump_yaml
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -322,7 +329,7 @@ class ORIGIN(steps.LogMixin):
         name = os.path.basename(folder)
 
         with open('%s/%s.yaml' % (folder, name), 'r') as stream:
-            param = yaml.load(stream)
+            param = load_yaml(stream)
 
         if 'FWHM PSF' in param:
             FWHM_PSF = np.asarray(param['FWHM PSF'])
@@ -571,7 +578,7 @@ class ORIGIN(steps.LogMixin):
 
         # parameters in .yaml
         with open('%s/%s.yaml' % (self.outpath, self.name), 'w') as stream:
-            yaml.dump(self.param, stream)
+            dump_yaml(self.param, stream)
 
         # step3 - saving this manually for now
         if self.nbAreas is not None:
