@@ -112,15 +112,11 @@ def create_source(source_id, source_table, line_table, origin_params,
         "compute_TGLR": {
             "OR_NG": ("size", "OR input, connectivity size"),
         },
-        "compute_purity_threshold": {
+        "detection": {
             "OR_DXY": ("tol_spat",
                        "OR input, spatial tolerance for merging (pix)"),
             "OR_DZ": ("tol_spec",
                       "OR input, spectral tolerance for merging (pix)"),
-            "OR_SXY": ("spat_size",
-                       "OR input, spatial size of the spatial filter"),
-            "OR_SZ": ("spect_size",
-                      "OR input, spectral length of the spect. filter"),
         },
         "compute_spectra": {
             "OR_NXZ": ("grid_dxy", "OR input, grid Nxy")},
