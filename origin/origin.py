@@ -388,6 +388,18 @@ class ORIGIN(steps.LogMixin):
 
         return obj
 
+    def info(self):
+        """Prints the processing log."""
+        with open(self.logfile) as f:
+            for line in f:
+                if line.find('Done') == -1:
+                    print(line, end='')
+
+    def status(self):
+        """Prints the processing status."""
+        for name, step in self.steps.items():
+            print('- {:02d}, {}: {}'.format(step.idx, name, step.status.name))
+
     def _setup_logfile(self, logger):
         if self.file_handler is not None:
             # Remove the handlers before adding a new one
@@ -691,7 +703,8 @@ class ORIGIN(steps.LogMixin):
             fig.subplots_adjust(hspace=0)
 
     def plot_step03_PCA_stat(self, cutoff=5, ax=None):
-        """ Plot the thrashold value according to the area.
+        """ Plot the threshold value according to the area.
+
         Median Absolute Deviation is used to find outliers.
 
         Parameters
@@ -841,67 +854,8 @@ class ORIGIN(steps.LogMixin):
         if ax is None:
             ax = plt.gca()
 
-        if 'cmap' not in kwargs:
-            kwargs['cmap'] = 'jet'
-
+        kwargs.setdefault('cmap', 'jet')
         themap.plot(title=title, colorbar='v', ax=ax, **kwargs)
-
-#    def plot_segmentation(self, pfa=5e-2, step=6, maxmap=True, ax=None, **kwargs):
-#        """ Plot the 2D segmentation map associated to a PFA
-#        This function draw the labels of the segmentation map which is computed,
-#        not with the same pfa, in :
-#            - the step02 to compute the automatic areas splitting for
-#            the PCA
-#            - the step06 to compute the threshold of the local maxima
-#
-#        Parameters
-#        ----------
-#        pfa : float
-#               Pvalue for the test which performs segmentation
-#        step : int
-#               The Segmentation map as used in this step: (2/6)
-#        maxmap : bool
-#                 If true, segmentation map is plotted as contours on the maxmap
-#        ax : matplotlib.Axes
-#               The Axes instance in which the image is drawn
-#        kwargs : matplotlib.artist.Artist
-#                 Optional extra keyword/value arguments to be passed to
-#                 the ``ax.imshow()`` function
-#        """
-#        if self.cont_dct is None:
-#            raise IOError('Run the step 01 to initialize self.cont_dct')
-#        if maxmap and self.maxmap is None:
-#            raise IOError('Run the step 05 to initialize self.maxmap')
-#
-#        if ax is None:
-#            ax = plt.gca()
-#
-#        if step == 2:
-#            radius = 2
-#            dxy = 2 * radius
-#            x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-#            y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
-#            xv, yv = np.meshgrid(x, y)
-#            r = np.sqrt(xv**2 + yv**2)
-#            disk = (np.abs(r) <= radius)
-#            mask = disk
-#        elif step == 6:
-#            mask = None
-#        else:
-#            raise IOError('sept must be equal to 2 or 6')
-#
-#        map_in = Segmentation(self.segmentation_test.data, pfa, mask=mask)
-#
-#        if maxmap:
-#            self.maxmap[self.maxmap._data == 0] = np.ma.masked
-#            self.maxmap.plot(ax=ax, **kwargs)
-#            ax.contour(map_in, [0], origin='lower', cmap='Greys')
-#        else:
-#            ima = Image(data=map_in, wcs=self.wcs)
-#            if 'cmap' not in kwargs:
-#                kwargs['cmap'] = 'jet'
-#            ima.plot(title='Labels of segmentation, pfa: %f' % (pfa), ax=ax,
-#                     **kwargs)
 
     def plot_purity(self, comp=False, ax=None, log10=False, legend=True):
         """Draw number of sources per threshold computed in step06/step08
@@ -1054,11 +1008,9 @@ class ORIGIN(steps.LogMixin):
         Parameters
         ----------
         x : array
-            Coordinates along the x-axis of the estimated lines
-            in pixels (column).
+            Coordinates along the x-axis of the estimated lines in pixels.
         y : array
-            Coordinates along the y-axis of the estimated lines
-            in pixels (column).
+            Coordinates along the y-axis of the estimated lines in pixels.
         circle : bool
             If true, plot circles with a diameter equal to the
             mean of the fwhm of the PSF.
@@ -1071,34 +1023,18 @@ class ORIGIN(steps.LogMixin):
         ax : matplotlib.Axes
             the Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
-            Optional extra keyword/value arguments to be passed to
-            the ``ax.imshow()`` function.
+            Optional arguments passed to ``ax.imshow()``.
 
         """
-        if self.wfields is None:
-            fwhm = self.FWHM_PSF
-        else:
-            fwhm = np.max(np.array(self.FWHM_PSF))
-
         if ax is None:
             ax = plt.gca()
-
-        ax.plot(x, y, 'k+')
-        if circle:
-            for px, py in zip(x, y):
-                c = plt.Circle((px, py), np.round(fwhm / 2), color='k',
-                               fill=False)
-                ax.add_artist(c)
         self.maxmap.plot(vmin=vmin, vmax=vmax, title=title, ax=ax, **kwargs)
 
-    def info(self):
-        """Prints the processing log."""
-        with open(self.logfile) as f:
-            for line in f:
-                if line.find('Done') == -1:
-                    print(line, end='')
-
-    def status(self):
-        """Prints the processing status."""
-        for name, step in self.steps.items():
-            print('- {:02d}, {}: {}'.format(step.idx, name, step.status.name))
+        if circle:
+            fwhm = (self.FWHM_PSF if self.wfields is None
+                    else np.max(np.array(self.FWHM_PSF)))
+            radius = np.round(fwhm / 2)
+            for pos in zip(x, y):
+                ax.add_artist(plt.Circle(pos, radius, color='k', fill=False))
+        else:
+            ax.plot(x, y, 'k+')
