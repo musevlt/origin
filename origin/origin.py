@@ -243,7 +243,7 @@ class ORIGIN(steps.LogMixin):
             raise AttributeError
 
     def __dir__(self):
-        return (list(self._dataobjs.keys()) +
+        return (super().__dir__() + list(self._dataobjs.keys()) +
                 [o.method_name for o in self.steps.values()])
 
     @classmethod
