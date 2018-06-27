@@ -27,7 +27,7 @@ from .lib_origin import (
     compute_segmap_gauss,
     Compute_threshold_purity,
     Correlation_GLR_test,
-    Create_local_max_cat,
+    create_local_max_cat,
     create_masks,
     dct_residual,
     estimation_line,
@@ -756,41 +756,31 @@ class Detection(Step):
     self.Cat0 : astropy.Table
         Catalog with detections. Columns:
         ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
-    self.det_correl_min : (array, array, array)
-        3D positions of detections in correl_min
 
     """
 
     name = 'detection'
     desc = 'Thresholding and spatio-spectral merging'
     Cat0 = DataObj('table')
-    det_correl_min = DataObj('array')
+
+    def det_correl_min(self, thresh=None):
+        """3D positions of detections in correl_min."""
+        thresh = thresh or self.orig.param['threshold']
+        zm, ym, xm = np.where(self.orig.cube_local_min._data > thresh)
+        return zm, ym, xm
 
     def run(self, orig, threshold=None, tol_spat=3, tol_spec=5):
 
         if threshold is not None:
             orig.param['threshold'] = threshold
 
-        self.Cat0, self.det_correl_min = Create_local_max_cat(
+        self.Cat0 = create_local_max_cat(
             orig.param['threshold'], orig.cube_local_max._data,
-            orig.cube_local_min._data, orig.segmap._data, tol_spat, tol_spec,
-            orig.cube_profile._data, orig.wcs, orig.wave
-        )
+            orig.segmap._data, tol_spat, tol_spec, orig.cube_profile._data,
+            orig.wcs, orig.wave)
         _format_cat(self.Cat0)
         self._loginfo('Save the catalog in self.Cat0 (%d sources %d lines)',
                       len(np.unique(self.Cat0['ID'])), len(self.Cat0))
-
-    def load(self, outpath):
-        if self.status is not Status.DUMPED:
-            # If the step was not dumped previously, there is nothing to load
-            return
-
-        super().load(outpath)
-
-        if self.det_correl_min is not None:
-            self.det_correl_min = self.det_correl_min.astype(int)
-            if self.det_correl_min.shape == (3,):
-                self.det_correl_min = self.det_correl_min.reshape(3, 1)
 
 
 class DetectionLost(Step):
@@ -857,10 +847,9 @@ class DetectionLost(Step):
             Cat1['STD'] = 0
         else:
             p = orig.param['detection']['params']
-            Catcomp, _ = Create_local_max_cat(
-                threshold2, local_max, local_min, orig.segmap._data,
-                p['tol_spat'], p['tol_spec'], orig.cube_profile._data,
-                orig.wcs, orig.wave)
+            Catcomp = create_local_max_cat(
+                threshold2, local_max, orig.segmap._data, p['tol_spat'],
+                p['tol_spec'], orig.cube_profile._data, orig.wcs, orig.wave)
             Catcomp.rename_column('T_GLR', 'STD')
 
             # merging

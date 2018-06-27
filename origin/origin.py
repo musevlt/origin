@@ -66,12 +66,6 @@ class ORIGIN(steps.LogMixin):
         Raw data.
     var : array (Nz, Ny, Nx)
         Variance.
-    Nx : int
-        Number of columns
-    Ny : int
-        Number of rows
-    Nz : int
-        Number of spectral channels
     wcs : `mpdaf.obj.WCS`
         RA-DEC coordinates.
     wave : `mpdaf.obj.WaveCoord`
@@ -146,8 +140,6 @@ class ORIGIN(steps.LogMixin):
         - Det_M : Number of detections (+DATA)
     Cat0 : astropy.Table
         Catalog returned by step07
-    det_correl_min : array
-        Detections from min correlation (step07)
     Pval_comp : astropy.table.Table
         Table with the purity results for each threshold in compl (step08):
         - PVal_r : The purity function
@@ -212,6 +204,7 @@ class ORIGIN(steps.LogMixin):
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
         self.mask = cub._mask
+        self.shape = cub.shape
 
         # variance - set to Inf the Nan
         self.var = cub.var.filled(np.inf)
@@ -220,8 +213,6 @@ class ORIGIN(steps.LogMixin):
         self.wcs = cub.wcs
         # spectral coordinates
         self.wave = cub.wave
-        # Dimensions
-        self.Nz, self.Ny, self.Nx = cub.shape
 
         # List of spectral profile
         if profiles is None:
@@ -500,7 +491,7 @@ class ORIGIN(steps.LogMixin):
                     raise IOError('PSF must be a square image.')
                 if not cubePSF.shape[1] % 2:
                     raise IOError('The spatial size of the PSF must be odd.')
-                if cubePSF.shape[0] != self.Nz:
+                if cubePSF.shape[0] != self.shape[0]:
                     raise IOError('PSF and data cube have not the same' +
                                   'dimensions along the spectral axis.')
                 self.PSF = cubePSF._data
@@ -1023,7 +1014,8 @@ class ORIGIN(steps.LogMixin):
             intz2c = intz2 - nb_ranges * long0
         cube_controle_plot = self.cube_raw[intz1c:intz2c, y01:y02, x01:x02]
         # (1/sqrt(2)) * difference of the 2 sububes
-        diff_cube_plot = (1. / np.sqrt(2)) * (cube_test_plot - cube_controle_plot)
+        diff_cube_plot = ((1 / np.sqrt(2)) *
+                          (cube_test_plot - cube_controle_plot))
 
         if ax1 is not None:
             ax1.plot(x00, y00, 'm+')
@@ -1036,7 +1028,8 @@ class ORIGIN(steps.LogMixin):
 
         if ax2 is not None:
             ax2.plot(x00, y00, 'm+')
-            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0), wcs=wcs)
+            ima_controle_plot = Image(data=cube_controle_plot.sum(axis=0),
+                                      wcs=wcs)
             title = 'check - (%d,%d)\n' % (x0, y0) + \
                 'int=[%d,%d[' % (intz1c, intz2c)
             ima_controle_plot.plot(colorbar='v', title=title, ax=ax2)

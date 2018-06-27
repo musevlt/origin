@@ -1410,25 +1410,22 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
 
 
 @timeit
-def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
-                         tol_spat, tol_spec, profile, wcs, wave):
-    """ Function which extract detection and performs  spatio spectral merging
-    at same time for a given purity and segmentation map
+def create_local_max_cat(thresh, cube_local_max, segmap, tol_spat, tol_spec,
+                         profile, wcs, wave):
+    """Extract detections and performs spatio spectral merging.
 
     Parameters
     ----------
     thresh : float
-        the threshold for correl
+        Threshold.
     cube_local_max : array
-        cube of local maxima from maximum correlation
-    cube_local_min : array
-        cube of local maxima from minus minimum correlation
+        Cube of local maxima from maximum correlation.
     segmap : array
-        map of estimated continuum for segmentation
+        Segmentation map.
     tol_spat : int
-        spatial tolerance for the spatial merging
+        Spatial tolerance for the spatial merging
     tol_spec : int
-        spectral tolerance for the spectral merging
+        Spectral tolerance for the spectral merging
     profile : array
         Number of the profile associated to the T_GLR
     wcs : mpdaf.obj.WCS
@@ -1439,18 +1436,14 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
     Returns
     -------
     cat : astropy.table.Table
-        Catalog of the referent voxels coordinates for each group
-        Columns: ID ra dec lba x0 y0 z0 profile seglabel T_GLR
+        Catalog of detections. Columns:
+        ID ra dec lba x0 y0 z0 profile seglabel T_GLR
 
-    Date  : June, 19 2017
-    Author: Antony Schutz(antonyschutz@gmail.com)
     """
     logger = logging.getLogger(__name__)
-
     logger.info('Thresholding...')
     zM, yM, xM = np.where(cube_local_max > thresh)
-    zm, ym, xm = np.where(cube_local_min > thresh)
-    logger.info('%d in -DATA, %d in +DATA', xm.size, xM.size)
+    logger.info('%d detected lines', xM.size)
 
     logger.info('Spatio-spectral merging...')
     cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
@@ -1472,7 +1465,7 @@ def Create_local_max_cat(thresh, cube_local_max, cube_local_min, segmap,
                 names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
                        'profile', 'seg_label', 'T_GLR'))
     cat.sort('ID')
-    return cat, (zm, ym, xm)
+    return cat
 
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
