@@ -1485,49 +1485,50 @@ def LS_deconv_wgt(data_in, var_in, psf_in):
 
     Parameters
     ----------
-    data_in    : array
-                 input data
-    var_in     : array
-                 input variance
-    psf_in     : array
-                 weighted MUSE PSF
+    data_in : array
+        input data
+    var_in : array
+        input variance
+    psf_in : array
+        weighted MUSE PSF
 
     Returns
     -------
-    deconv_out : LS Deconvolved spectrum
-
-    varest_out : estimated theoretic variance
+    deconv_out : array
+        LS Deconvolved spectrum
+    varest_out : array
+        estimated theoretic variance
 
     """
     # deconvolution
-    nl, sizpsf, tmp = psf_in.shape
-    v = np.reshape(var_in, (nl, sizpsf * sizpsf))
-    p = np.reshape(psf_in, (nl, sizpsf * sizpsf))
-    s = np.reshape(data_in, (nl, sizpsf * sizpsf))
-    varest_out = 1 / np.sum(p * p / v, axis=1)
-    deconv_out = np.sum(p * s / np.sqrt(v), axis=1) * varest_out
+    nl = psf_in.shape[0]
+    var = var_in.reshape(nl, -1)
+    psf = psf_in.reshape(nl, -1)
+    data = data_in.reshape(nl, -1)
+    varest_out = 1 / np.sum(psf * psf / var, axis=1)
+    deconv_out = np.sum(psf * data / np.sqrt(var), axis=1) * varest_out
 
     return deconv_out, varest_out
 
 
 def conv_wgt(deconv_met, psf_in):
-    """Function to compute the convolution of a spectrum. output is a cube of
-    the good size for rest of algorithm
+    """Compute the convolution of a spectrum. output is a cube.
 
     Parameters
     ----------
-    deconv_met : LS Deconvolved spectrum
-                 input data
-
-    psf_in     : array
-                 weighted MUSE PSF
+    deconv_met : array
+        LS Deconvolved spectrum
+    psf_in : array
+        weighted MUSE PSF
 
     Returns
     -------
-    cube_conv  : Cube, convolution from deconv_met
+    cube_conv : array
+        Cube, convolution from deconv_met
 
     """
     cube_conv = psf_in * deconv_met[:, np.newaxis, np.newaxis]
+    # FIXME: how the following can be useful ?
     cube_conv = cube_conv * (np.abs(psf_in) > 0)
     return cube_conv
 
@@ -1569,25 +1570,22 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     estimated_var  : estimated variance
 
     """
-    nl, sizpsf, tmp = psf_in.shape
 
     # STD
+    nl = psf_in.shape[0]
     data_std = data_in / np.sqrt(var_in)
-    data_st_pca = np.reshape(data_std, (nl, sizpsf * sizpsf))
+    data_st_pca = data_std.reshape(nl, -1)
 
     # PCA
-    mean_in_pca = np.mean(data_st_pca, axis=1)
-    data_in_pca = data_st_pca - np.repeat(mean_in_pca[:, np.newaxis],
-                                          sizpsf * sizpsf, axis=1)
-
+    data_in_pca = data_st_pca - data_st_pca.mean(axis=1)[:, np.newaxis]
     U, s, V = svds(data_in_pca, k=1)
 
     # orthogonal projection
     xest = orthogonal_projection(U, data_in_pca)
-    residual = data_std - np.reshape(xest, (nl, sizpsf, sizpsf))
+    residual = data_std - np.reshape(xest, psf_in.shape)
 
     # LS deconv
-    deconv_out, varest_out = LS_deconv_wgt(residual, var_in, psf_in)
+    deconv_out, _ = LS_deconv_wgt(residual, var_in, psf_in)
 
     # PSF convolution
     conv_out = conv_wgt(deconv_out, psf_in)
@@ -1596,10 +1594,8 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     data_clean = (data_in - conv_out) / np.sqrt(var_in)
 
     # 2nd PCA
-    data_in_pca = np.reshape(data_clean, (nl, sizpsf * sizpsf))
-    mean_in_pca = np.mean(data_in_pca, axis=1)
-    data_in_pca -= np.repeat(mean_in_pca[:, np.newaxis], sizpsf * sizpsf, axis=1)
-
+    data_in_pca = data_clean.reshape(nl, -1)
+    data_in_pca -= data_in_pca.mean(axis=1)[:, np.newaxis]
     U, s, V = svds(data_in_pca, k=1)
 
     if order_dct is not None:
@@ -1609,14 +1605,15 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
 
     # orthogonal projection
     xest = orthogonal_projection(U, data_st_pca)
-    cont = np.reshape(xest, (nl, sizpsf, sizpsf))
+    cont = np.reshape(xest, psf_in.shape)
     residual = data_std - cont
 
     # LS deconvolution of the line
     estimated_line, estimated_var = LS_deconv_wgt(residual, var_in, psf_in)
 
     # PSF convolution of estimated line
-    conv_out = conv_wgt(estimated_line, psf_in)
+    # FIXME: any reason to compute this ??
+    # conv_out = conv_wgt(estimated_line, psf_in)
 
     return estimated_line, estimated_var
 
@@ -1624,7 +1621,7 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
 def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
                  size_grid, y0, x0, z0, NY, NX, horiz_psf,
                  criteria, order_dct):
-    """Function to compute the estimated emission line and the optimal
+    """Compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
     Parameters
@@ -1683,24 +1680,30 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
         re-estimated x position in pixel of the source in the grid
 
     """
+    if criteria not in ('flux', 'mse'):
+        raise ValueError('Bad criteria: (flux) or (mse)')
+
     shape = (1 + 2 * size_grid, 1 + 2 * size_grid)
     zest = np.zeros(shape)
-    fest_00 = np.zeros(shape)
+    if criteria == 'flux':
+        fest_00 = np.zeros(shape)
+    if criteria == 'mse':
+        mse = np.full(shape, np.inf)
+
     fest_05 = np.zeros(shape)
-    mse = np.full(shape, np.inf)
     mse_5 = np.full(shape, np.inf)
 
     nl = data_in.shape[0]
-    ind_max = slice(max(0, z0 - 5), min(nl, z0 + 5))
+    ind_max = slice(max(0, z0 - 5), min(nl, z0 + 6))
     if weight_in is None:
-        nl, sizpsf, tmp = psf.shape
+        nl, sizpsf, _ = psf.shape
     else:
-        nl, sizpsf, tmp = psf[0].shape
+        nl, sizpsf, _ = psf[0].shape
 
     lin_est = np.zeros((nl, ) + shape)
     var_est = np.zeros((nl, ) + shape)
     # half size psf
-    longxy = int(sizpsf // 2)
+    longxy = sizpsf // 2
     inds = slice(longxy - horiz_psf, longxy + 1 + horiz_psf)
     for dx in range(0, 1 + 2 * size_grid):
         if (x0 - size_grid + dx >= 0) and (x0 - size_grid + dx < NX):
@@ -1719,32 +1722,35 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
                     deconv_met, varest_met = method_PCA_wgt(r1, var, psf,
                                                             order_dct)
 
-                    z_est = peakdet(deconv_met[ind_max], 3)
+                    z_est = peakdet(deconv_met[ind_max])
                     if z_est == 0:
                         break
 
                     maxz = z0 - 5 + z_est
                     zest[dy, dx] = maxz
-                    ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 5, nl))
                     # ind_z10 = np.arange(maxz-10,maxz+10)
-                    ind_hrz = slice(maxz - horiz, maxz + horiz)
 
                     lin_est[:, dy, dx] = deconv_met
                     var_est[:, dy, dx] = varest_met
 
                     # compute MSE
-                    LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz, :, :])
-                    LCred = LC[:, inds, inds]
-                    r1red = r1[ind_hrz, inds, inds]
-                    mse[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+                    ind_hrz = slice(maxz - horiz, maxz + horiz + 1)
+                    if criteria == 'mse':
+                        LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz])
+                        LCred = LC[:, inds, inds]
+                        r1red = r1[ind_hrz, inds, inds]
+                        mse[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
 
+                    # FIXME: if horiz=5, this is the same as above...
+                    ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 6, nl))
                     LC = conv_wgt(deconv_met[ind_z5], psf[ind_z5, :, :])
                     LCred = LC[:, inds, inds]
                     r1red = r1[ind_z5, inds, inds]
                     mse_5[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
 
                     # compute flux
-                    fest_00[dy, dx] = np.sum(deconv_met[ind_hrz])
+                    if criteria == 'flux':
+                        fest_00[dy, dx] = np.sum(deconv_met[ind_hrz])
                     fest_05[dy, dx] = np.sum(deconv_met[ind_z5])
                     # fest_10[dy,dx] = np.sum(deconv_met[ind_z10])
 
@@ -1752,8 +1758,7 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
         wy, wx = np.where(fest_00 == fest_00.max())
     elif criteria == 'mse':
         wy, wx = np.where(mse == mse.min())
-    else:
-        raise IOError('Bad criteria: (flux) or (mse)')
+
     y = y0 - size_grid + wy
     x = x0 - size_grid + wx
     z = zest[wy, wx]
@@ -1769,30 +1774,15 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
             estimated_variance.ravel(), int(y), int(x), int(z))
 
 
-def peakdet(v, delta):
+def peakdet(v):
+    # find all local maxima: x>x-1 & x>x+1
+    ind = np.where((v[1:-1] > v[:-2]) & (v[1:-1] > v[2:]))[0] + 1
 
-    v = np.array(v)
-    nv = len(v)
-    mv = np.zeros(nv + 2 * delta)
-    mv[:delta] = np.Inf
-    mv[delta:-delta] = v
-    mv[-delta:] = np.Inf
-    ind = []
-
-    # find all local maxima
-    ind = [n - delta for n in range(delta, nv + delta)
-           if mv[n] > mv[n - 1] and mv[n] > mv[n + 1]]
-
-    # take the maximum and closest from original estimation
-    indi = np.array(ind, dtype=int)
-
-    sol = int(nv / 2)
-    if len(indi) > 0:
-        # methode : closest from initial estimate
-        out = indi[np.argmin((indi - sol)**2)]
-    else:
-        out = sol
-    return out
+    # take the maximum and closest from the center
+    imax = v.size // 2
+    if len(ind) > 0:
+        imax = ind[np.argmin((ind - imax)**2)]
+    return imax
 
 
 @timeit
@@ -1836,9 +1826,9 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
     Cat2 : astropy.Table
         Catalog of parameters of detected emission lines.  Columns:
         ra dec lbda x0 x1 y0 y1 z0 z1 T_GLR profile residual flux num_line
-    Cat_est_line_raw : list of arrays
+    lin_est : list of arrays
         Estimated lines in data space
-    Cat_est_line_std : list of arrays
+    var_est : list of arrays
         Estimated lines in SNR space
 
     """

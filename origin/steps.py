@@ -874,12 +874,12 @@ class DetectionLost(Step):
 class ComputeSpectra(Step):
     """Compute the estimated emission line and the optimal coordinates
 
-    for each detected lines in a spatio-spectral grid (each emission line
-    is estimated with the deconvolution model ::
+    For each detected line in a spatio-spectral grid, the line
+    is estimated with the deconvolution model::
 
         subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
 
-    Via PCA LS or denoised PCA LS Method
+    Via PCA LS or denoised PCA LS Method.
 
     Parameters
     ----------
@@ -906,7 +906,7 @@ class ComputeSpectra(Step):
     require = ('detection_lost', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
-        self.Cat2, Cat_est_line_raw_T, Cat_est_line_var_T = estimation_line(
+        self.Cat2, line_est, line_var = estimation_line(
             orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
             criteria='flux', order_dct=30, horiz_psf=1, horiz=5
@@ -918,8 +918,8 @@ class ComputeSpectra(Step):
         # Remove duplicated lines
         unique_idx = unique_lines(tmp_Cat2)
         self.Cat2 = tmp_Cat2[unique_idx]
-        Cat_est_line_raw_T = np.array(Cat_est_line_raw_T)[unique_idx]
-        Cat_est_line_var_T = np.array(Cat_est_line_var_T)[unique_idx]
+        line_est = np.array(line_est)[unique_idx]
+        line_var = np.array(line_var)[unique_idx]
 
         _format_cat(self.Cat2)
 
@@ -935,8 +935,7 @@ class ComputeSpectra(Step):
                          / 2).astype(int)
 
         self.spectra = OrderedDict()
-        for line_idx, (data, vari) in enumerate(zip(Cat_est_line_raw_T,
-                                                    Cat_est_line_var_T)):
+        for line_idx, (data, vari) in enumerate(zip(line_est, line_var)):
             profile, z, num_line = self.Cat2[line_idx]['profile', 'z',
                                                        'num_line']
             line_z_min = z - radius[profile]
