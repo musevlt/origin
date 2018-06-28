@@ -617,7 +617,7 @@ class ORIGIN(steps.LogMixin):
         if ax is None:
             ax = plt.gca()
 
-        self.segmap.plot(ax=ax)
+        self.segmap.plot(ax=ax, title='areamap')
 
         kwargs.setdefault('cmap', 'jet')
         kwargs.setdefault('alpha', 0.7)
@@ -638,9 +638,6 @@ class ORIGIN(steps.LogMixin):
             plt.colorbar(cax, cax=cax2, cmap=kwargs['cmap'], norm=norm,
                          spacing='proportional', ticks=bounds + 0.5,
                          boundaries=bounds, format='%1i')
-            ax.set_title('continuum test with areas')
-        else:
-            ax.set_title('continuum test (1 area)')
 
     def plot_step03_PCA_threshold(self, log10=False, ncol=3, legend=True,
                                   xlim=None, fig=None, **fig_kw):
@@ -840,9 +837,7 @@ class ORIGIN(steps.LogMixin):
         title = 'Number of times the spaxel got cleaned by the PCA'
         if iteration is not None:
             title += '\n%d iterations' % iteration
-        if area is None:
-            title += ' (Full map)'
-        else:
+        if area is not None:
             mask = np.ones_like(self.mapO2._data, dtype=np.bool)
             mask[self.areamap._data == area] = False
             themap._mask = mask
@@ -1038,3 +1033,31 @@ class ORIGIN(steps.LogMixin):
                 ax.add_artist(plt.Circle(pos, radius, color='k', fill=False))
         else:
             ax.plot(x, y, 'k+')
+
+    def plot_segmaps(self, axes=None):
+        segmaps = [self.segmap]
+        if getattr(self, 'segmap_purity'):
+            segmaps.append(self.segmap_purity)
+
+        try:
+            from photutils.utils.colormaps import random_cmap
+        except ImportError:
+            self.logger.error('photutils is needed for this')
+            cmap = 'jet'
+        else:
+            cmap = random_cmap(ncolors=len(np.unique(segmaps[-1]._data)))
+            cmap.colors[0] = (0.0, 0.0, 0.0)
+
+        nseg = len(segmaps)
+        if axes is None:
+            fig, axes = plt.subplots(1, nseg, figsize=(6 * nseg,6),
+                                     sharex=True, sharey=True)
+        if nseg == 1:
+            ax1 = axes
+        else:
+            ax1, ax2 = axes
+
+        segmaps[0].plot(ax=ax1, cmap=cmap, title='segmap', colorbar='v')
+        if nseg == 2:
+            segmaps[1].plot(ax=ax2, cmap=cmap, title='segmap avec mask maxmap',
+                            colorbar='v')
