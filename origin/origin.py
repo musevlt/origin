@@ -205,7 +205,7 @@ class ORIGIN(steps.LogMixin):
         # Flux - set to 0 the Nan
         self.cube_raw = cub.data.filled(fill_value=0)
         self.mask = cub._mask
-        self.shape = cub.shape
+        self.Nz, self.Ny, self.Nx = self.shape = cub.shape
 
         # variance - set to Inf the Nan
         self.var = cub.var.filled(np.inf)
