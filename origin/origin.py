@@ -1050,7 +1050,7 @@ class ORIGIN(steps.LogMixin):
 
         nseg = len(segmaps)
         if axes is None:
-            fig, axes = plt.subplots(1, nseg, figsize=(6 * nseg,6),
+            fig, axes = plt.subplots(1, nseg, figsize=(6 * nseg, 6),
                                      sharex=True, sharey=True)
         if nseg == 1:
             ax1 = axes
@@ -1061,3 +1061,39 @@ class ORIGIN(steps.LogMixin):
         if nseg == 2:
             segmaps[1].plot(ax=ax2, cmap=cmap, title='segmap avec mask maxmap',
                             colorbar='v')
+
+    def plot_min_max_hist(self, ax=None, comp=False):
+        if comp:
+            # FIXME: these cubes are not save currently, not sure if it is
+            # useful, but at least we could give a better error if they are not
+            # available
+            cube_local_max = self.cube_std_local_max
+            cube_local_min = self.cube_std_local_min
+        else:
+            cube_local_max = self.cube_local_max._data
+            cube_local_min = self.cube_local_min._data
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+        ax.set_yscale('log')
+        ax.grid(which='major', linewidth=1)
+        ax.grid(which='minor', linewidth=1, linestyle=':')
+
+        maxloc = cube_local_max[cube_local_max > 0]
+        bins = np.arange((maxloc.max() + 1) * 2) / 2
+        ax.hist(maxloc, bins=bins, histtype='step', label='max', linewidth=2,
+                cumulative=-1)
+
+        minloc = cube_local_min[cube_local_min > 0]
+        bins = np.arange((minloc.max() + 1) * 2) / 2
+        ax.hist(minloc, bins=bins, histtype='step', label='min', linewidth=2,
+                cumulative=-1)
+
+        minloc2 = cube_local_min[:, self.segmap_purity._data == 0]
+        minloc2 = minloc2[minloc2 > 0]
+        ax.hist(minloc2, bins=bins, histtype='step', label='min filt',
+                linewidth=2, cumulative=-1)
+
+        ax.legend()
+        ax.set_title('Cumulative histogram of min/max loc')

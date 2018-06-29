@@ -824,14 +824,13 @@ class DetectionLost(Step):
         size = orig.param['compute_TGLR']['params']['size']
         local_max, local_min = compute_local_max(
             orig.cube_std._data, orig.cube_std._data, orig.mask, size)
+        orig.cube_std_local_max = local_max
+        orig.cube_std_local_min = local_min
 
         if purity is None:
             purity = orig.param['compute_purity_threshold']['params']['purity']
         orig.param['purity2'] = purity
         self._loginfo('Threshold computed with purity = %.2f', purity)
-
-        # orig.cube_local_max_faint_dct = local_max
-        # orig.cube_local_min_faint_dct = local_min
 
         # FIXME: use segmap or segmap_purity ?
         threshold2, self.Pval_comp = Compute_threshold_purity(
