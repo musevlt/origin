@@ -141,7 +141,7 @@ def create_source(source_id, source_table, line_table, origin_params,
 
     source.header["COMP_CAT"] = source_info['comp']
     if source.COMP_CAT:
-        threshold_keyword, purity_keyword = "threshold2", "purity2"
+        threshold_keyword, purity_keyword = "threshold_std", "purity_std"
     else:
         threshold_keyword, purity_keyword = "threshold", "purity"
     source.header["OR_TH"] = (

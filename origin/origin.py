@@ -431,11 +431,19 @@ class ORIGIN(steps.LogMixin):
         correl"""
         return self.param.get('threshold')
 
+    @threshold_correl.setter
+    def threshold_correl(self, value):
+        self.param['threshold'] = value
+
     @property
     def threshold_std(self):
         """Estimated threshold used to detect complementary lines on local
         maxima of std cube"""
-        return self.param.get('threshold2')
+        return self.param.get('threshold_std')
+
+    @threshold_std.setter
+    def threshold_std(self, value):
+        self.param['threshold_std'] = value
 
     @lazyproperty
     def profiles(self):
@@ -871,11 +879,11 @@ class ORIGIN(steps.LogMixin):
             ax = plt.gca()
 
         if comp:
-            threshold = self.param['threshold2']
-            purity = self.param['purity2']
+            threshold = self.threshold_std
+            purity = self.param['purity_std']
             Pval = self.Pval_comp
         else:
-            threshold = self.param['threshold']
+            threshold = self.threshold_correl
             purity = self.param['purity']
             Pval = self.Pval
 
@@ -1064,11 +1072,8 @@ class ORIGIN(steps.LogMixin):
 
     def plot_min_max_hist(self, ax=None, comp=False):
         if comp:
-            # FIXME: these cubes are not save currently, not sure if it is
-            # useful, but at least we could give a better error if they are not
-            # available
-            cube_local_max = self.cube_std_local_max
-            cube_local_min = self.cube_std_local_min
+            cube_local_max = self.cube_std_local_max._data
+            cube_local_min = self.cube_std_local_min._data
         else:
             cube_local_max = self.cube_local_max._data
             cube_local_min = self.cube_local_min._data

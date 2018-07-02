@@ -1394,7 +1394,6 @@ def create_local_max_cat(thresh, cube_local_max, segmap, tol_spat, tol_spec,
 
     """
     logger = logging.getLogger(__name__)
-    logger.info('Thresholding...')
     zM, yM, xM = np.where(cube_local_max > thresh)
     logger.info('%d detected lines', xM.size)
 

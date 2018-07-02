@@ -316,6 +316,8 @@ class Preprocessing(Step):
         PFA for the segmentation based on the continuum.
     pfasegres : float
         PFA for the segmentation based on the residual.
+    local_max_size : int
+        Connectivity of contiguous voxels per axis, for the maximum filter.
 
     Returns
     -------
@@ -327,6 +329,10 @@ class Preprocessing(Step):
         Mean of standardized data cube.
     self.ima_dct : `~mpdaf.obj.Image`
         Mean of DCT continuum cube.
+    self.cube_std_local_max : `~mpdaf.obj.Cube`
+        Local maxima from cube_std
+    self.cube_std_local_min : `~mpdaf.obj.Cube`
+        Local maxima from minus cube_std
     self.segmap : `~mpdaf.obj.Image`
         Segmentation map.
 
@@ -339,9 +345,11 @@ class Preprocessing(Step):
     ima_std = DataObj('image')
     ima_dct = DataObj('image')
     segmap = DataObj('image')
+    cube_std_local_min = DataObj('cube')
+    cube_std_local_max = DataObj('cube')
 
     def run(self, orig, dct_order=10, dct_approx=False, pfasegcont=0.01,
-            pfasegres=0.01):
+            pfasegres=0.01, local_max_size=3):
         self._loginfo('DCT computation')
         cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
                                 orig.mask)
@@ -362,6 +370,14 @@ class Preprocessing(Step):
         self._loginfo('Std signal saved in self.cube_std and self.ima_std')
         self.store_cube('cube_std', data)
         self.store_image('ima_std', data.mean(axis=0))
+
+        self._loginfo('Compute local maximum of std cube values')
+        cube_local_max, cube_local_min = compute_local_max(
+            data, data, orig.mask, local_max_size)
+        self._loginfo('Save self.cube_local_max/self.cube_local_min from '
+                      'max/min correlations')
+        self.store_cube('cube_std_local_max', cube_local_max)
+        self.store_cube('cube_std_local_min', cube_local_min)
 
         self._loginfo('DCT continuum saved in self.cont_dct and self.ima_dct')
         cont_dct = cont_dct.astype(np.float32)
@@ -692,6 +708,9 @@ class ComputePurityThreshold(Step):
     ----------
     purity : float
         Purity to automatically compute the threshold.
+    purity_std : float
+        Purity to automatically compute the threshold on the cube_std.
+        If None, previous purity is used
     threshlist : list
         List of thresholds to compute the purity.
     pfasegfinal : float
@@ -700,51 +719,68 @@ class ComputePurityThreshold(Step):
     Returns
     -------
     self.threshold_correl : float
-        Estimated threshold
+        Estimated threshold used to detect on the correl.
+    self.threshold_std : float
+        Estimated threshold used to detect complementary lines on std cube.
+    self.segmap_purity : `~mpdaf.obj.Image`
+        Combines self.segmap and a segmentation on the maxmap.
     self.Pval : astropy.table.Table
         Table with the purity results for each threshold:
         - Pval_r : The purity function
         - Tval_r : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
-    self.segmap_purity : `~mpdaf.obj.Image`
-        Segmentation map.
+    self.Pval_comp : astropy.table.Table
+        Table with the purity results on cube_std, same columns as Pval.
 
     """
 
     name = 'compute_purity_threshold'
     desc = 'Compute Purity threshold'
     Pval = DataObj('table')
+    Pval_comp = DataObj('table')
     segmap_purity = DataObj('image')
     require = ('compute_TGLR', )
 
-    def run(self, orig, purity=.9, threshlist=None, pfasegfinal=1e-5):
-        orig.param['purity'] = purity
-        self._loginfo('Estimation of threshold with purity = %.2f', purity)
+    def run(self, orig, purity=.9, purity_std=None, threshlist=None,
+            pfasegfinal=1e-5):
+        if purity_std is None:
+            purity_std = purity
+        orig.param.update(dict(purity=purity, purity_std=purity_std))
 
-        # purity sur zone background avec adaptation de mapmerged
-        # je prends la carte des correls max, je fais une approx gaussienne
-        # et je seuille
+        # compute another segmap on the maxmap and merge with self.segmap
         thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
                                                pfasegfinal, 0)
         segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap._data > 0))
         self.store_image('segmap_purity', segmap)
 
+        self._loginfo('Estimation of threshold with purity = %.2f', purity)
+        # purity computed on the background area using the segmap
         threshold, self.Pval = Compute_threshold_purity(
             purity, orig.cube_local_max._data, orig.cube_local_min._data,
             segmap, threshlist=threshlist)
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
+        self._loginfo('Estimation of threshold std with purity = %.2f',
+                      purity_std)
+        threshold_std, self.Pval_comp = Compute_threshold_purity(
+            purity_std, orig.cube_std_local_max._data,
+            orig.cube_std_local_min._data, threshlist=threshlist)
+        orig.param['threshold_std'] = threshold_std
+        self._loginfo('Threshold: %.2f ', threshold_std)
+
 
 class Detection(Step):
-    """Detections on local maxima from max correlation + spatia-spectral
-    merging in order to create the first catalog.
+    """Detections on local maxima from correlation and std cube, and
+    spatia-spectral merging in order to create the first catalog.
 
     Parameters
     ----------
     threshold : float
         User threshold if the estimated threshold is not good.
+    threshold_std : float
+        User threshold if the estimated cube_std threshold is not good.
     tol_spat : int
         Tolerance for the spatial merging (distance in pixels).
         TODO en fonction du FWHM
@@ -762,6 +798,7 @@ class Detection(Step):
     name = 'detection'
     desc = 'Thresholding and spatio-spectral merging'
     Cat0 = DataObj('table')
+    Cat1 = DataObj('table')
 
     def det_correl_min(self, thresh=None):
         """3D positions of detections in correl_min."""
@@ -769,85 +806,33 @@ class Detection(Step):
         zm, ym, xm = np.where(self.orig.cube_local_min._data > thresh)
         return zm, ym, xm
 
-    def run(self, orig, threshold=None, tol_spat=3, tol_spec=5):
-
+    def run(self, orig, threshold=None, threshold_std=None, tol_spat=3,
+            tol_spec=5):
         if threshold is not None:
-            orig.param['threshold'] = threshold
+            orig.threshold_correl = threshold
+        if threshold_std is not None:
+            orig.threshold_std = threshold_std
 
+        segmap = orig.segmap._data
+        profile = orig.cube_profile._data
+        self.logger.info('Thresholding correl (>%.2f)', orig.threshold_correl)
         self.Cat0 = create_local_max_cat(
-            orig.param['threshold'], orig.cube_local_max._data,
-            orig.segmap._data, tol_spat, tol_spec, orig.cube_profile._data,
-            orig.wcs, orig.wave)
+            orig.threshold_correl, orig.cube_local_max._data, segmap,
+            tol_spat, tol_spec, profile, orig.wcs, orig.wave)
         _format_cat(self.Cat0)
         self._loginfo('Save the catalog in self.Cat0 (%d sources %d lines)',
                       len(np.unique(self.Cat0['ID'])), len(self.Cat0))
 
-
-class DetectionLost(Step):
-    """Detections on local maxima of std cube + spatia-spectral
-    merging in order to create an complementary catalog. This catalog is
-    merged with the catalog Cat0 in order to create the catalog Cat1
-
-    Parameters
-    ----------
-    purity : float
-        purity to automatically compute the threshold
-        If None, previous purity is used
-    threshlist : list
-        list of thresholds to compute the purity default None
-
-    Returns
-    -------
-    self.threshold_correl : float
-        Estimated threshold used to detect complementary
-        lines on local maxima of std cube
-    self.Pval_comp : astropy.table.Table
-        Table with the purity results for each threshold:
-        - Pval_r : The purity function
-        - Tval_r : index value to plot
-        - Det_m : Number of detections (-DATA)
-        - Det_M : Number of detections (+DATA)
-    self.Cat1 : astropy.Table
-        New catalog.
-        Columns: ID ra dec lbda x0 y0 z0 profile seg_label T_GLR STD comp
-
-    """
-
-    name = 'detection_lost'
-    desc = 'Thresholding and spatio-spectral merging'
-    Cat1 = DataObj('table')
-    Pval_comp = DataObj('table')
-    require = ('detection', )
-
-    def run(self, orig, purity=None, threshlist=None):
-        self._loginfo('Compute local maximum of std cube values')
-        size = orig.param['compute_TGLR']['params']['size']
-        local_max, local_min = compute_local_max(
-            orig.cube_std._data, orig.cube_std._data, orig.mask, size)
-        orig.cube_std_local_max = local_max
-        orig.cube_std_local_min = local_min
-
-        if purity is None:
-            purity = orig.param['compute_purity_threshold']['params']['purity']
-        orig.param['purity2'] = purity
-        self._loginfo('Threshold computed with purity = %.2f', purity)
-
-        # FIXME: use segmap or segmap_purity ?
-        threshold2, self.Pval_comp = Compute_threshold_purity(
-            purity, local_max, local_min, threshlist=threshlist)
-        orig.param['threshold2'] = threshold2
-        self._loginfo('Threshold: %.2f ', threshold2)
-
-        Cat1 = orig.Cat0.copy()
+        Cat1 = self.Cat0.copy()
         Cat1['comp'] = 0
 
-        if threshold2 == np.inf:
+        if orig.threshold_std == np.inf:
             Cat1['STD'] = 0
         else:
-            p = orig.param['detection']['params']
+            self.logger.info('Thresholding std (>%.2f)', orig.threshold_std)
             Catcomp = create_local_max_cat(
-                threshold2, local_max, orig.segmap._data, p['tol_spat'],
-                p['tol_spec'], orig.cube_profile._data, orig.wcs, orig.wave)
+                orig.threshold_std, orig.cube_std_local_max._data, segmap,
+                tol_spat, tol_spec, profile, orig.wcs, orig.wave)
             Catcomp.rename_column('T_GLR', 'STD')
 
             # merging
@@ -861,9 +846,9 @@ class DetectionLost(Step):
             Cat1 = Cat1.filled()
 
         ns = len(np.unique(Cat1['ID']))
-        ds = ns - len(np.unique(orig.Cat0['ID']))
+        ds = ns - len(np.unique(self.Cat0['ID']))
         nl = len(Cat1)
-        dl = nl - len(orig.Cat0)
+        dl = nl - len(self.Cat0)
         self.Cat1 = Cat1
         self._loginfo('Save the catalog in self.Cat1'
                       ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
@@ -901,7 +886,7 @@ class ComputeSpectra(Step):
     desc = 'Lines estimation'
     Cat2 = DataObj('table')
     spectra = DataObj('spectra')
-    require = ('detection_lost', )
+    require = ('detection', )
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
         self.Cat2, line_est, line_var = estimation_line(
@@ -1131,7 +1116,6 @@ STEPS = [
     ComputeTGLR,
     ComputePurityThreshold,
     Detection,
-    DetectionLost,
     ComputeSpectra,
     CleanResults,
     CreateMasks,

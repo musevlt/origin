@@ -23,8 +23,8 @@ def test_origin():
         my_origin = ORIGIN.init(MINICUBE, name='tmp', loglevel='INFO')
         my_origin.write()
 
-        my_origin = ORIGIN.load('tmp')
         # test that log level is correctly reloaded, then change it
+        my_origin = ORIGIN.load('tmp')
         assert my_origin.logger.handlers[0].level == 20
         my_origin.set_loglevel('DEBUG')
         assert my_origin.logger.handlers[0].level == 10
@@ -43,33 +43,20 @@ def test_origin():
         my_origin = ORIGIN.load('tmp')
         assert my_origin.param['nbareas'] == 1
         my_origin.step03_compute_PCA_threshold()
-        my_origin.write()
-
-        my_origin = ORIGIN.load('tmp')
         my_origin.step04_compute_greedy_PCA()
-        my_origin.write()
 
         # TGLR computing (normalized correlations)
-        my_origin = ORIGIN.load('tmp')
         my_origin.step05_compute_TGLR(ncpu=1)
         # my_origin.step05_compute_TGLR(ncpu=1, NbSubcube=2)
-        my_origin.write()
 
         # threshold applied on pvalues
-        my_origin = ORIGIN.load('tmp')
         my_origin.step06_compute_purity_threshold(purity=0.8)
-        my_origin.write()
 
-        my_origin = ORIGIN.load('tmp')
         # FIXME: threshold is hardcoded for now
         my_origin.step07_detection(threshold=9.28)
-        my_origin.write()
-
-        my_origin = ORIGIN.load('tmp')
-        my_origin.step08_detection_lost()
 
         # estimation
-        my_origin.step09_compute_spectra()
+        my_origin.step08_compute_spectra()
         my_origin.write()
 
         cat = Catalog.read('tmp/Cat1.fits')
@@ -82,23 +69,23 @@ def test_origin():
 
         # cleaned results
         my_origin = ORIGIN.load('tmp', newname='tmp2')
-        my_origin.step10_clean_results()
+        my_origin.step09_clean_results()
         my_origin.write()
 
         # create masks
         my_origin = ORIGIN.load('tmp2')
-        my_origin.step11_create_masks()
+        my_origin.step10_create_masks()
         my_origin.write()
 
         # list of source objects
         my_origin = ORIGIN.load('tmp2')
-        my_origin.step12_save_sources("0.1")
-        my_origin.step12_save_sources("0.1", n_jobs=2, overwrite=True)
+        my_origin.step11_save_sources("0.1")
+        my_origin.step11_save_sources("0.1", n_jobs=2, overwrite=True)
 
         my_origin.info()
 
         cat = Catalog.read('tmp2/tmp2.fits')
-        assert len(cat) == 9
+        assert len(cat) == 10
 
         # test returned sources are valid
         src = Source.from_file('./tmp2/sources/source-00001.fits')
