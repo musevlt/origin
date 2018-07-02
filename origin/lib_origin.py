@@ -1280,8 +1280,8 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
 
 
 @timeit
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
-                             threshlist=None):
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
+                             segmap=None, threshlist=None):
     """Compute threshold values corresponding to a given purity.
 
     Parameters
@@ -1311,8 +1311,18 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
     """
     logger = logging.getLogger(__name__)
 
+    # total number of spaxels
+    L1 = np.prod(cube_local_min.shape[1:])
+
     # background only
-    cube_local_min = cube_local_min * (segmap == 0)
+    if segmap is not None:
+        segmask = segmap == 0
+        cube_local_min = cube_local_min * segmask
+        # number of spaxels considered for calibration
+        L0 = np.count_nonzero(segmask)
+        logger.info('using only background pixels (%.1f%%)', L0 / L1 * 100)
+    else:
+        L0 = L1
 
     if threshlist is None:
         threshmax = min(cube_local_min.max(), cube_local_max.max())
@@ -1320,11 +1330,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
         threshlist = np.linspace(threshmin, threshmax, 50)
     else:
         threshmin = np.min(threshlist)
-
-    # total number of spaxels
-    L1 = np.prod(cube_local_min.shape[1:])
-    # number of spaxels considered for calibration
-    L0 = np.count_nonzero(segmap == 0)
 
     locM = cube_local_max[cube_local_max > threshmin]
     locm = cube_local_min[cube_local_min > threshmin]
@@ -1351,7 +1356,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
     else:
         threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
         detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
-        logger.info('Interpolated Threshold %.3f Detection %d for Purity %.2f',
+        logger.info('Interpolated Threshold %.2f Detection %d for Purity %.2f',
                     threshold, detect, purity)
 
     return threshold, res

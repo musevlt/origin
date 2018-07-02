@@ -834,8 +834,7 @@ class DetectionLost(Step):
 
         # FIXME: use segmap or segmap_purity ?
         threshold2, self.Pval_comp = Compute_threshold_purity(
-            purity, local_max, local_min, orig.segmap_purity._data,
-            threshlist=threshlist)
+            purity, local_max, local_min, threshlist=threshlist)
         orig.param['threshold2'] = threshold2
         self._loginfo('Threshold: %.2f ', threshold2)
 
