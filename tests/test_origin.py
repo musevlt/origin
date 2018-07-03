@@ -86,7 +86,7 @@ def test_origin():
         my_origin.info()
 
         cat = Catalog.read('tmp2/tmp2.fits')
-        assert len(cat) == 10
+        assert len(cat) == 8
 
         # test returned sources are valid
         src = Source.from_file('./tmp2/sources/source-00001.fits')

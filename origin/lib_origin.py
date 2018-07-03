@@ -1229,9 +1229,6 @@ def spatiospectral_merging(tbl, tol_spat, tol_spec):
         imatch2 is the ID after spatial merging only.
 
     """
-    logger = logging.getLogger(__name__)
-    logger.info('Spatio-spectral merging...')
-
     Nz = len(tbl)
     tbl['_id'] = np.arange(Nz)                 # id of the detection
     tbl['matched'] = np.zeros(Nz, dtype=bool)  # is the detection matched ?

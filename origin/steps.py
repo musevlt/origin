@@ -859,6 +859,7 @@ class Detection(Step):
         cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = orig.segmap._data[cat['y0'], cat['x0']]
 
+        self.logger.info('Spatio-spectral merging...')
         cat = spatiospectral_merging(cat, tol_spat, tol_spec)
 
         # add real coordinates and other useful info
