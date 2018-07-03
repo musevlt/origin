@@ -1195,7 +1195,7 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
         if not matched[indn]:
             if cu_spat[indn] > tol_spat * np.sqrt(2):
                 # check spectral content
-                dz = np.sqrt((cat['z'][indn] - cat['z'][id_cu])**2)
+                dz = np.sqrt((cat['z0'][indn] - cat['z0'][id_cu])**2)
                 if dz < tol_spec:
                     cat[indn]['matched'] = True
                     cat[indn]['imatch'] = id_cu

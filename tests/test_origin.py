@@ -5,6 +5,7 @@ import os
 import shutil
 
 from astropy.io import fits
+from astropy.table import Table
 from mpdaf.sdetect import Source, Catalog
 from origin import ORIGIN
 from origin.lib_origin import spatiospectral_merging
@@ -107,7 +108,7 @@ def test_origin():
 
 def test_merging():
     segmap = fits.getdata(SEGMAP)
-    inputs = np.array([
+    inputs = Table(rows=[
         # First source
         (72, 49, 545),
         (71, 49, 549),
@@ -127,12 +128,12 @@ def test_merging():
         (24, 15, 736),
         (29, 11, 740),
         (20, 10, 749)
-    ], dtype=[('x', int), ('y', int), ('z', int)])
+    ], names=['x0', 'y0', 'z0'])
+    inputs['area'] = segmap[inputs['y0'], inputs['x0']]
 
-    out = spatiospectral_merging(inputs['z'], inputs['y'], inputs['x'],
-                                 segmap, tol_spat=3, tol_spec=5)
+    out = spatiospectral_merging(inputs, tol_spat=3, tol_spec=5)
 
-    dt = [('x', int), ('y', int), ('z', int),
+    dt = [('x0', int), ('y0', int), ('z0', int),
           ('area', int), ('imatch', int), ('imatch2', int)]
     expected = np.array([
         (72, 49, 545, 0, 0, 0),
