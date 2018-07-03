@@ -1,4 +1,5 @@
 import inspect
+import itertools
 import logging
 import numpy as np
 import os
@@ -834,35 +835,31 @@ class Detection(Step):
         cat_std['comp'] = 1
         cat_std['STD'] = orig.cube_std_local_max._data[z, y, x]
         cat_std['T_GLR'] = np.nan
-        cat['profile'] = -1
+        cat_std['profile'] = 0
         self._loginfo('%d detected lines', len(cat_std))
 
+        # Store the raw detection catalog in Cat0
         # Merge tables.  vstack creates a masked Table, masking the missing
         # values. But a bug with Astropy/Numpy 1.14 is causing the Cat1 table
         # to be modified later by Cat2 operations, if it was not dumped before.
         # So for now we transform the table to a non-masked one.
-        self.Cat0 = cat = _format_cat(vstack([cat, cat_std]).filled())
+        self.Cat0 = _format_cat(vstack([cat, cat_std]).filled())
+
+        # merging: remove detections in std close to the ones in correl
+        kdt_cor = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
+        kdt_std = cKDTree(np.array([cat_std['x0'], cat_std['y0'],
+                                    cat_std['z0']]).T)
+        # find matches in std that are close to correl detections
+        matched = set(itertools.chain.from_iterable(
+            kdt_cor.query_ball_tree(kdt_std, maxdist_lines)))
+        unmatched = list(set(range(len(cat_std))) - matched)
+
+        cat_std = cat_std[unmatched]
+        self._loginfo('kept %d lines from std after filtering', len(unmatched))
+
+        cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = orig.segmap._data[cat['y0'], cat['x0']]
         cat.add_column(Column(name='id', data=np.arange(len(cat))), index=0)
-
-        # Cat0 remains as the raw detection catalog. Now starts the merging.
-
-        # Find position of first unique (x, y, z)
-        kdt = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
-        iprev = -1
-        idx = []
-        for ind in sorted((kdt.query_ball_tree(kdt, maxdist_lines))):
-            if ind[0] == iprev:
-                continue
-            else:
-                idx.append(ind[0])
-            iprev = ind[0]
-
-        cat = cat[idx]
-        cat.sort('id')
-        cat.remove_column('id')
-        if len(cat) < len(self.Cat0):
-            self._loginfo('removed %d duplicates', len(self.Cat0) - len(cat))
 
         cat = spatiospectral_merging(cat, tol_spat, tol_spec)
 
