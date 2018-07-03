@@ -240,7 +240,7 @@ class ORIGIN(steps.LogMixin):
         if name in self._dataobjs:
             return getattr(self._dataobjs[name], name)
         else:
-            raise AttributeError
+            raise AttributeError('unknown attribute {}'.format(name))
 
     def __dir__(self):
         return (super().__dir__() + list(self._dataobjs.keys()) +
