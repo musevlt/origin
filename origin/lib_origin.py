@@ -1,6 +1,8 @@
 """Contains most of the methods that compose the ORIGIN software."""
 
+import itertools
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
 
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -16,7 +18,7 @@ from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import label as ndi_label, maximum_filter
 from scipy.ndimage import binary_erosion, binary_dilation
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, cKDTree
 from scipy.sparse.linalg import svds
 from scipy.interpolate import interp1d
 from time import time
@@ -1177,10 +1179,12 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
     #   spatiospectral_merging), while n is the detection currently processed
     #   in the recursive call
     matched = cat['matched']
-    spatdist = np.hypot(cat['x'][n] - cat['x'], cat['y'][n] - cat['y'])
+    spatdist = np.hypot(cat['x0'][n] - cat['x0'],
+                        cat['y0'][n] - cat['y0'])
     spatdist[matched] = np.inf
 
-    cu_spat = np.hypot(cat['x'][id_cu] - cat['x'], cat['y'][id_cu] - cat['y'])
+    cu_spat = np.hypot(cat['x0'][id_cu] - cat['x0'],
+                       cat['y0'][id_cu] - cat['y0'])
     cu_spat[matched] = np.inf
 
     ind = np.where(spatdist < tol_spat)[0]
@@ -1191,7 +1195,7 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
         if not matched[indn]:
             if cu_spat[indn] > tol_spat * np.sqrt(2):
                 # check spectral content
-                dz = np.sqrt((cat['z'][indn] - cat['z'][id_cu])**2)
+                dz = np.sqrt((cat['z0'][indn] - cat['z0'][id_cu])**2)
                 if dz < tol_spec:
                     cat[indn]['matched'] = True
                     cat[indn]['imatch'] = id_cu
@@ -1202,7 +1206,7 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
                 itersrc(cat, tol_spat, tol_spec, indn, id_cu)
 
 
-def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
+def spatiospectral_merging(tbl, tol_spat, tol_spec):
     """Perform the spatial and spatio spectral merging.
 
     The spectral merging give the same ID if several group of lines (from
@@ -1210,10 +1214,8 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
 
     Parameters
     ----------
-    z,y,x : array
-        the 3D position of the estimated lines
-    segmap : array
-        Segmentation map
+    tbl : `astropy.table.Table`
+        ID,x,y,z,...
     tol_spat : int
         spatial tolerance for the spatial merging
     tol_spec : int
@@ -1227,19 +1229,15 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
         imatch2 is the ID after spatial merging only.
 
     """
-    Nz = len(z)
-    tbl = Table({
-        'id': np.arange(Nz),                  # id of the detection
-        'x': x, 'y': y, 'z': z,               # position
-        'area': segmap[y, x],                 # region of the detection
-        'matched': np.zeros(Nz, dtype=bool),  # is the detection matched ?
-        'imatch': np.arange(Nz),              # id of the matched detection
-    })
+    Nz = len(tbl)
+    tbl['_id'] = np.arange(Nz)                 # id of the detection
+    tbl['matched'] = np.zeros(Nz, dtype=bool)  # is the detection matched ?
+    tbl['imatch'] = np.arange(Nz)              # id of the matched detection
 
     for row in tbl:
         if not row['matched']:
             row['matched'] = True
-            itersrc(tbl, tol_spat, tol_spec, row['id'], row['id'])
+            itersrc(tbl, tol_spat, tol_spec, row['_id'], row['_id'])
 
     # renumber output IDs
     for n, imatch in enumerate(np.unique(tbl['imatch'])):
@@ -1254,7 +1252,7 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     # spectral lines
     tbl['imatch2'] = tbl['imatch']  # store result before spectral merging
     iout = tbl['imatch']
-    zout = tbl['z']
+    zout = tbl['z0']
     for n, area_cu in enumerate(np.unique(tbl['area'])):
         if area_cu > 0:
             # take all detections inside a segmap region
@@ -1275,13 +1273,13 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
                                 # tol_spec, then merge the sources
                                 iout[iout == otg] = cu
 
-    tbl.remove_columns(('id', 'matched'))
+    tbl.remove_columns(('_id', 'matched'))
     return tbl
 
 
 @timeit
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
-                             threshlist=None):
+def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
+                             segmap=None, threshlist=None):
     """Compute threshold values corresponding to a given purity.
 
     Parameters
@@ -1311,8 +1309,18 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
     """
     logger = logging.getLogger(__name__)
 
+    # total number of spaxels
+    L1 = np.prod(cube_local_min.shape[1:])
+
     # background only
-    cube_local_min = cube_local_min * (segmap == 0)
+    if segmap is not None:
+        segmask = segmap == 0
+        cube_local_min = cube_local_min * segmask
+        # number of spaxels considered for calibration
+        L0 = np.count_nonzero(segmask)
+        logger.info('using only background pixels (%.1f%%)', L0 / L1 * 100)
+    else:
+        L0 = L1
 
     if threshlist is None:
         threshmax = min(cube_local_min.max(), cube_local_max.max())
@@ -1320,11 +1328,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
         threshlist = np.linspace(threshmin, threshmax, 50)
     else:
         threshmin = np.min(threshlist)
-
-    # total number of spaxels
-    L1 = np.prod(cube_local_min.shape[1:])
-    # number of spaxels considered for calibration
-    L0 = np.count_nonzero(segmap == 0)
 
     locM = cube_local_max[cube_local_max > threshmin]
     locm = cube_local_min[cube_local_min > threshmin]
@@ -1351,69 +1354,10 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min, segmap,
     else:
         threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
         detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
-        logger.info('Interpolated Threshold %.3f Detection %d for Purity %.2f',
+        logger.info('Interpolated Threshold %.2f Detection %d for Purity %.2f',
                     threshold, detect, purity)
 
     return threshold, res
-
-
-@timeit
-def create_local_max_cat(thresh, cube_local_max, segmap, tol_spat, tol_spec,
-                         profile, wcs, wave):
-    """Extract detections and performs spatio spectral merging.
-
-    Parameters
-    ----------
-    thresh : float
-        Threshold.
-    cube_local_max : array
-        Cube of local maxima from maximum correlation.
-    segmap : array
-        Segmentation map.
-    tol_spat : int
-        Spatial tolerance for the spatial merging
-    tol_spec : int
-        Spectral tolerance for the spectral merging
-    profile : array
-        Number of the profile associated to the T_GLR
-    wcs : mpdaf.obj.WCS
-        WCS object
-    wave : mpdaf.obj.Wave
-        Wave object
-
-    Returns
-    -------
-    cat : astropy.table.Table
-        Catalog of detections. Columns:
-        ID ra dec lba x0 y0 z0 profile seglabel T_GLR
-
-    """
-    logger = logging.getLogger(__name__)
-    logger.info('Thresholding...')
-    zM, yM, xM = np.where(cube_local_max > thresh)
-    logger.info('%d detected lines', xM.size)
-
-    logger.info('Spatio-spectral merging...')
-    cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
-    correl_max = cube_local_max[cat['z'], cat['y'], cat['x']]
-    profile_max = profile[cat['z'], cat['y'], cat['x']]
-
-    # add real coordinates
-    dec, ra = wcs.pix2sky(np.stack((cat['y'], cat['x'])).T).T
-    lbda = wave.coord(cat['z'])
-
-    # Relabel IDs sequentially
-    oldIDs = np.unique(cat['imatch'])
-    idmap = np.zeros(oldIDs.max() + 1, dtype=int)
-    idmap[oldIDs] = np.arange(len(oldIDs))
-
-    # Catalog of referent pixels
-    cat = Table([idmap[cat['imatch']], ra, dec, lbda, cat['x'], cat['y'],
-                 cat['z'], profile_max, cat['area'], correl_max],
-                names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
-                       'profile', 'seg_label', 'T_GLR'))
-    cat.sort('ID')
-    return cat
 
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
@@ -1832,17 +1776,15 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
         Estimated lines in SNR space
 
     """
-    NL, NY, NX = RAW.shape
+    ny, nx = RAW.shape[1:]
     res = []
     for src in ProgressBar(Cat1):
         z0, y0, x0 = tuple(src[['z0', 'y0', 'x0']])
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
-        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(
-            red_dat, red_var, red_psf, red_wgt, horiz,
-            size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria, order_dct
-        )
-        res.append((f5, m5, lin_est, var_est, y, x, z))
+        rg = GridAnalysis(red_dat, red_var, red_psf, red_wgt, horiz, size_grid,
+                          y0, x0, z0, ny, nx, horiz_psf, criteria, order_dct)
+        res.append(rg)
 
     flux5, res_min5, lin_est, var_est, y_grid, x_grid, z_grid = zip(*res)
 
@@ -1887,7 +1829,6 @@ def purity_estimation(cat, Pval, Pval_comp):
         profile residual flux num_line purity
 
     """
-    cat = cat.copy()
     # set to 0 if only 1 purity meaurement
     purity = np.zeros(len(cat))
 
@@ -1983,48 +1924,6 @@ def unique_sources(table):
     return Table(rows=result_rows, names=["ID", "ra", "dec", "x", "y",
                                           "n_lines", "seg_label", "comp",
                                           "line_merged_flag"])
-
-
-def unique_lines(table):
-    """Return indices of unique (non duplicated) lines.
-
-    ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
-    set to the very same (x, y, z) position when computing the optimal
-    position.
-
-    Given a line table, this function returns the indices of unique lines,
-    keeping only the purest one when there are duplicates. The indices are
-    sorted by ID and z position in the line table.
-
-    Parameters
-    ----------
-    table: astropy.table.Table
-        A table of lines from ORIGIN. The table must contain the columns ID, x,
-        y, z, and purity.
-
-    Returns
-    -------
-    idx: numpy.array of int
-        Indices of unique lines.
-
-    """
-    table = table.copy()
-
-    # We add a column with the original indices because we will sort the table
-    # by ID and z.
-    table['original_idx'] = np.arange(len(table), dtype=int)
-
-    # Sort by decreasing purity
-    table.sort('purity')
-    table.reverse()
-
-    # Find position of first unique (x, y, z)
-    _, idx = np.unique(table['x', 'y', 'z'], axis=0, return_index=True)
-
-    table = table[idx]
-    table.sort(['ID', 'z'])
-
-    return table['original_idx'].data
 
 
 def merge_similar_lines(table, *, z_pix_threshold=5):
@@ -2210,3 +2109,65 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                     threshold=threshold, cont_sky=skymap, out_dir=out_dir,
                     mask_size=mask_size, verbose=True
                 )
+
+
+def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
+                        threshmax=7, plot=False, Pval=None):
+    """Compute the true purity using a reference catalog."""
+
+    ref = Table.read(refcat)
+    reflines = ref[ref['TYPE'] == 6]
+    zref = cube_local_max.wave.pixel(reflines['LOBS'])
+    kdref = cKDTree(np.array([reflines['Q'], reflines['P'], zref]).T)
+    nref = len(ref)
+
+    zM, yM, xM = np.where(cube_local_max._data > threshmin)
+    cat0 = Table([xM, yM, zM], names=('x0', 'y0', 'z0'))
+    cat0['T_GLR'] = cube_local_max._data[zM, yM, xM]
+
+    thresh = np.arange(threshmin, threshmax, 0.1)
+    res = []
+
+    for thr in thresh:
+        cat = cat0[cat0['T_GLR'] > thr]
+        ndetect = len(cat)
+        kdt = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
+        true = [x for x in kdt.query_ball_tree(kdref, maxdist) if x]
+        ntrue = len(true)
+        nmiss = nref - len(set(itertools.chain.from_iterable(true)))
+        res.append((thr, ndetect, ntrue, ndetect - ntrue, nmiss))
+
+    tbl = Table(rows=res, names=['thresh', 'ndetect', 'ntrue', 'nfalse',
+                                 'nmiss'])
+    tbl['purity'] = 1 - tbl['nfalse']/tbl['ndetect']
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(7, 7))
+        ax.plot(tbl['thresh'], tbl['purity'], drawstyle='steps-mid',
+                label='true purity')
+
+        if Pval is None:
+            print('a Pval table is required to plot the estimated purity')
+        else:
+            ind = (Pval['Tval_r'] >= threshmin) & (Pval['Tval_r'] <= threshmax)
+            ax.plot(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
+                    drawstyle='steps-mid', label='estimated purity')
+            # err_est_purity = (np.sqrt(Pval['Det_m']) / Pval['Det_m'] +
+            #                   np.sqrt(Pval['Det_M']) / Pval['Det_m']**2)
+            # ax.errorbar(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
+            #             err_est_purity[ind], fmt='o', label='Estimated Purity')
+
+        ax.plot(tbl['thresh'], 1 - tbl['nmiss']/nref, drawstyle='steps-mid',
+                label='completeness')
+        ax.set_ylim((0, 1))
+        ax.set_ylabel('purity / completeness')
+
+        ax3 = ax.twinx()
+        ax3.plot(tbl['thresh'], tbl['ntrue'], '-.', color='gray',
+                 drawstyle='steps-mid')
+        ax3.plot(tbl['thresh'], tbl['nfalse'], '--', color='gray',
+                 drawstyle='steps-mid')
+        ax3.set_yscale('log')
+        fig.legend(ncol=2, loc='upper center')
+
+    return tbl
