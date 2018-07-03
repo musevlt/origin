@@ -1,6 +1,8 @@
 """Contains most of the methods that compose the ORIGIN software."""
 
+import itertools
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
 
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -16,7 +18,7 @@ from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import label as ndi_label, maximum_filter
 from scipy.ndimage import binary_erosion, binary_dilation
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, cKDTree
 from scipy.sparse.linalg import svds
 from scipy.interpolate import interp1d
 from time import time
@@ -2155,3 +2157,65 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                     threshold=threshold, cont_sky=skymap, out_dir=out_dir,
                     mask_size=mask_size, verbose=True
                 )
+
+
+def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
+                        threshmax=7, plot=False, Pval=None):
+    """Compute the true purity using a reference catalog."""
+
+    ref = Table.read(refcat)
+    reflines = ref[ref['TYPE'] == 6]
+    zref = cube_local_max.wave.pixel(reflines['LOBS'])
+    kdref = cKDTree(np.array([reflines['Q'], reflines['P'], zref]).T)
+    nref = len(ref)
+
+    zM, yM, xM = np.where(cube_local_max._data > threshmin)
+    cat0 = Table([xM, yM, zM], names=('x0', 'y0', 'z0'))
+    cat0['T_GLR'] = cube_local_max._data[zM, yM, xM]
+
+    thresh = np.arange(threshmin, threshmax, 0.1)
+    res = []
+
+    for thr in thresh:
+        cat = cat0[cat0['T_GLR'] > thr]
+        ndetect = len(cat)
+        kdt = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
+        true = [x for x in kdt.query_ball_tree(kdref, maxdist) if x]
+        ntrue = len(true)
+        nmiss = nref - len(set(itertools.chain.from_iterable(true)))
+        res.append((thr, ndetect, ntrue, ndetect - ntrue, nmiss))
+
+    tbl = Table(rows=res, names=['thresh', 'ndetect', 'ntrue', 'nfalse',
+                                 'nmiss'])
+    tbl['purity'] = 1 - tbl['nfalse']/tbl['ndetect']
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(7, 7))
+        ax.plot(tbl['thresh'], tbl['purity'], drawstyle='steps-mid',
+                label='true purity')
+
+        if Pval is None:
+            print('a Pval table is required to plot the estimated purity')
+        else:
+            ind = (Pval['Tval_r'] >= threshmin) & (Pval['Tval_r'] <= threshmax)
+            ax.plot(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
+                    drawstyle='steps-mid', label='estimated purity')
+            # err_est_purity = (np.sqrt(Pval['Det_m']) / Pval['Det_m'] +
+            #                   np.sqrt(Pval['Det_M']) / Pval['Det_m']**2)
+            # ax.errorbar(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
+            #             err_est_purity[ind], fmt='o', label='Estimated Purity')
+
+        ax.plot(tbl['thresh'], 1 - tbl['nmiss']/nref, drawstyle='steps-mid',
+                label='completeness')
+        ax.set_ylim((0, 1))
+        ax.set_ylabel('purity / completeness')
+
+        ax3 = ax.twinx()
+        ax3.plot(tbl['thresh'], tbl['ntrue'], '-.', color='gray',
+                 drawstyle='steps-mid')
+        ax3.plot(tbl['thresh'], tbl['nfalse'], '--', color='gray',
+                 drawstyle='steps-mid')
+        ax3.set_yscale('log')
+        fig.legend(ncol=2, loc='upper center')
+
+    return tbl
