@@ -7,13 +7,14 @@ import time
 import warnings
 
 from astropy.io import fits
-from astropy.table import vstack, Table
+from astropy.table import vstack, Table, Column
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
+from scipy.spatial import cKDTree
 
 from .lib_origin import (
     area_growing,
@@ -27,13 +28,13 @@ from .lib_origin import (
     compute_segmap_gauss,
     Compute_threshold_purity,
     Correlation_GLR_test,
-    create_local_max_cat,
     create_masks,
     dct_residual,
     estimation_line,
     merge_similar_lines,
     O2test,
     purity_estimation,
+    spatiospectral_merging,
     unique_lines,
     unique_sources,
 )
@@ -790,7 +791,10 @@ class Detection(Step):
     Returns
     -------
     self.Cat0 : astropy.Table
-        Catalog with detections. Columns:
+        Catalog with all detections (correl and comp). Columns:
+        ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+    self.Cat0 : astropy.Table
+        Catalog with filtered detections. Columns:
         ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
 
     """
@@ -807,51 +811,83 @@ class Detection(Step):
         return zm, ym, xm
 
     def run(self, orig, threshold=None, threshold_std=None, tol_spat=3,
-            tol_spec=5):
+            tol_spec=5, maxdist_lines=2.5):
         if threshold is not None:
             orig.threshold_correl = threshold
         if threshold_std is not None:
             orig.threshold_std = threshold_std
 
-        segmap = orig.segmap._data
-        profile = orig.cube_profile._data
-        self.logger.info('Thresholding correl (>%.2f)', orig.threshold_correl)
-        self.Cat0 = create_local_max_cat(
-            orig.threshold_correl, orig.cube_local_max._data, segmap,
-            tol_spat, tol_spec, profile, orig.wcs, orig.wave)
-        _format_cat(self.Cat0)
-        self._loginfo('Save the catalog in self.Cat0 (%d sources %d lines)',
-                      len(np.unique(self.Cat0['ID'])), len(self.Cat0))
+        # detection on the correl cube
+        self._loginfo('Thresholding correl (>%.2f)', orig.threshold_correl)
+        z, y, x = np.where(orig.cube_local_max._data > orig.threshold_correl)
+        cat = Table([x, y, z], names=('x0', 'y0', 'z0'))
+        cat['comp'] = 0
+        cat['STD'] = np.nan
+        cat['T_GLR'] = orig.cube_local_max._data[z, y, x]
+        cat['profile'] = orig.cube_profile._data[z, y, x]
+        self._loginfo('%d detected lines', len(cat))
 
-        Cat1 = self.Cat0.copy()
-        Cat1['comp'] = 0
+        # detection on the std cube
+        self._loginfo('Thresholding std (>%.2f)', orig.threshold_std)
+        z, y, x = np.where(orig.cube_std_local_max._data > orig.threshold_std)
+        cat_std = Table([x, y, z], names=('x0', 'y0', 'z0'))
+        cat_std['comp'] = 1
+        cat_std['STD'] = orig.cube_std_local_max._data[z, y, x]
+        cat_std['T_GLR'] = np.nan
+        cat['profile'] = -1
+        self._loginfo('%d detected lines', len(cat_std))
 
-        if orig.threshold_std == np.inf:
-            Cat1['STD'] = 0
-        else:
-            self.logger.info('Thresholding std (>%.2f)', orig.threshold_std)
-            Catcomp = create_local_max_cat(
-                orig.threshold_std, orig.cube_std_local_max._data, segmap,
-                tol_spat, tol_spec, profile, orig.wcs, orig.wave)
-            Catcomp.rename_column('T_GLR', 'STD')
+        # Merge tables.  vstack creates a masked Table, masking the missing
+        # values. But a bug with Astropy/Numpy 1.14 is causing the Cat1 table
+        # to be modified later by Cat2 operations, if it was not dumped before.
+        # So for now we transform the table to a non-masked one.
+        self.Cat0 = cat = _format_cat(vstack([cat, cat_std]).filled())
+        cat['area'] = orig.segmap._data[cat['y0'], cat['x0']]
+        cat.add_column(Column(name='id', data=np.arange(len(cat))), index=0)
 
-            # merging
-            Catcomp['comp'] = 1
-            Catcomp['ID'] += (Cat1['ID'].max() + 1)
-            Cat1 = _format_cat(vstack([Cat1, Catcomp]))
-            # vstack creates a masked Table, masking the missing values. But
-            # a bug with Astropy/Numpy 1.14 is causing the Cat1 table to be
-            # modified later by Cat2 operations, if it was not dumped before.
-            # So for now we transform the table to a non-masked one.
-            Cat1 = Cat1.filled()
+        # Cat0 remains as the raw detection catalog. Now starts the merging.
 
-        ns = len(np.unique(Cat1['ID']))
-        ds = ns - len(np.unique(self.Cat0['ID']))
-        nl = len(Cat1)
-        dl = nl - len(self.Cat0)
-        self.Cat1 = Cat1
+        # Find position of first unique (x, y, z)
+        kdt = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
+        iprev = -1
+        idx = []
+        for ind in sorted((kdt.query_ball_tree(kdt, maxdist_lines))):
+            if ind[0] == iprev:
+                continue
+            else:
+                idx.append(ind[0])
+            iprev = ind[0]
+
+        cat = cat[idx]
+        cat.sort('id')
+        cat.remove_column('id')
+        if len(cat) < len(self.Cat0):
+            self._loginfo('removed %d duplicates', len(self.Cat0) - len(cat))
+
+        cat = spatiospectral_merging(cat, tol_spat, tol_spec)
+
+        # add real coordinates and other useful info
+        z, y, x = cat['z0'].data, cat['y0'].data, cat['x0'].data
+        dec, ra = orig.wcs.pix2sky(np.stack((y, x)).T).T
+        cat['ra'], cat['dec'] = ra, dec
+        cat['lbda'] = orig.wave.coord(z)
+        cat.rename_column('area', 'seg_label')
+
+        # Relabel IDs sequentially
+        oldIDs = np.unique(cat['imatch'])
+        idmap = np.zeros(oldIDs.max() + 1, dtype=int)
+        idmap[oldIDs] = np.arange(len(oldIDs))
+        cat.add_column(Column(name='ID', data=idmap[cat['imatch']]), index=0)
+        cat.sort('ID')
+
+        cat_comp = cat[cat['comp'] == 1]
+        ns = len(set(cat['ID']))
+        ds = len(set(cat_comp['ID']) - set(cat['ID']))
+        nl = len(cat)
+        dl = len(cat_comp)
+        self.Cat1 = cat
         self._loginfo('Save the catalog in self.Cat1'
-                      ' (%d [+%s] sources %d [+%d] lines)', ns, ds, nl, dl)
+                      ' (%d [+%s] sources, %d [+%d] lines)', ns, ds, nl, dl)
 
 
 class ComputeSpectra(Step):

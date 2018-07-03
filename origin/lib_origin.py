@@ -1177,10 +1177,12 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
     #   spatiospectral_merging), while n is the detection currently processed
     #   in the recursive call
     matched = cat['matched']
-    spatdist = np.hypot(cat['x'][n] - cat['x'], cat['y'][n] - cat['y'])
+    spatdist = np.hypot(cat['x0'][n] - cat['x0'],
+                        cat['y0'][n] - cat['y0'])
     spatdist[matched] = np.inf
 
-    cu_spat = np.hypot(cat['x'][id_cu] - cat['x'], cat['y'][id_cu] - cat['y'])
+    cu_spat = np.hypot(cat['x0'][id_cu] - cat['x0'],
+                       cat['y0'][id_cu] - cat['y0'])
     cu_spat[matched] = np.inf
 
     ind = np.where(spatdist < tol_spat)[0]
@@ -1202,7 +1204,7 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
                 itersrc(cat, tol_spat, tol_spec, indn, id_cu)
 
 
-def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
+def spatiospectral_merging(tbl, tol_spat, tol_spec):
     """Perform the spatial and spatio spectral merging.
 
     The spectral merging give the same ID if several group of lines (from
@@ -1210,10 +1212,8 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
 
     Parameters
     ----------
-    z,y,x : array
-        the 3D position of the estimated lines
-    segmap : array
-        Segmentation map
+    tbl : `astropy.table.Table`
+        ID,x,y,z,...
     tol_spat : int
         spatial tolerance for the spatial merging
     tol_spec : int
@@ -1227,19 +1227,18 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
         imatch2 is the ID after spatial merging only.
 
     """
-    Nz = len(z)
-    tbl = Table({
-        'id': np.arange(Nz),                  # id of the detection
-        'x': x, 'y': y, 'z': z,               # position
-        'area': segmap[y, x],                 # region of the detection
-        'matched': np.zeros(Nz, dtype=bool),  # is the detection matched ?
-        'imatch': np.arange(Nz),              # id of the matched detection
-    })
+    logger = logging.getLogger(__name__)
+    logger.info('Spatio-spectral merging...')
+
+    Nz = len(tbl)
+    tbl['_id'] = np.arange(Nz)                 # id of the detection
+    tbl['matched'] = np.zeros(Nz, dtype=bool)  # is the detection matched ?
+    tbl['imatch'] = np.arange(Nz)              # id of the matched detection
 
     for row in tbl:
         if not row['matched']:
             row['matched'] = True
-            itersrc(tbl, tol_spat, tol_spec, row['id'], row['id'])
+            itersrc(tbl, tol_spat, tol_spec, row['_id'], row['_id'])
 
     # renumber output IDs
     for n, imatch in enumerate(np.unique(tbl['imatch'])):
@@ -1254,7 +1253,7 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
     # spectral lines
     tbl['imatch2'] = tbl['imatch']  # store result before spectral merging
     iout = tbl['imatch']
-    zout = tbl['z']
+    zout = tbl['z0']
     for n, area_cu in enumerate(np.unique(tbl['area'])):
         if area_cu > 0:
             # take all detections inside a segmap region
@@ -1275,7 +1274,7 @@ def spatiospectral_merging(z, y, x, segmap, tol_spat, tol_spec):
                                 # tol_spec, then merge the sources
                                 iout[iout == otg] = cu
 
-    tbl.remove_columns(('id', 'matched'))
+    tbl.remove_columns(('_id', 'matched'))
     return tbl
 
 
@@ -1360,64 +1359,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
                     threshold, detect, purity)
 
     return threshold, res
-
-
-@timeit
-def create_local_max_cat(thresh, cube_local_max, segmap, tol_spat, tol_spec,
-                         profile, wcs, wave):
-    """Extract detections and performs spatio spectral merging.
-
-    Parameters
-    ----------
-    thresh : float
-        Threshold.
-    cube_local_max : array
-        Cube of local maxima from maximum correlation.
-    segmap : array
-        Segmentation map.
-    tol_spat : int
-        Spatial tolerance for the spatial merging
-    tol_spec : int
-        Spectral tolerance for the spectral merging
-    profile : array
-        Number of the profile associated to the T_GLR
-    wcs : mpdaf.obj.WCS
-        WCS object
-    wave : mpdaf.obj.Wave
-        Wave object
-
-    Returns
-    -------
-    cat : astropy.table.Table
-        Catalog of detections. Columns:
-        ID ra dec lba x0 y0 z0 profile seglabel T_GLR
-
-    """
-    logger = logging.getLogger(__name__)
-    zM, yM, xM = np.where(cube_local_max > thresh)
-    logger.info('%d detected lines', xM.size)
-
-    logger.info('Spatio-spectral merging...')
-    cat = spatiospectral_merging(zM, yM, xM, segmap, tol_spat, tol_spec)
-    correl_max = cube_local_max[cat['z'], cat['y'], cat['x']]
-    profile_max = profile[cat['z'], cat['y'], cat['x']]
-
-    # add real coordinates
-    dec, ra = wcs.pix2sky(np.stack((cat['y'], cat['x'])).T).T
-    lbda = wave.coord(cat['z'])
-
-    # Relabel IDs sequentially
-    oldIDs = np.unique(cat['imatch'])
-    idmap = np.zeros(oldIDs.max() + 1, dtype=int)
-    idmap[oldIDs] = np.arange(len(oldIDs))
-
-    # Catalog of referent pixels
-    cat = Table([idmap[cat['imatch']], ra, dec, lbda, cat['x'], cat['y'],
-                 cat['z'], profile_max, cat['area'], correl_max],
-                names=('ID', 'ra', 'dec', 'lbda', 'x0', 'y0', 'z0',
-                       'profile', 'seg_label', 'T_GLR'))
-    cat.sort('ID')
-    return cat
 
 
 def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
