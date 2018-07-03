@@ -1779,17 +1779,15 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
         Estimated lines in SNR space
 
     """
-    NL, NY, NX = RAW.shape
+    ny, nx = RAW.shape[1:]
     res = []
     for src in ProgressBar(Cat1):
         z0, y0, x0 = tuple(src[['z0', 'y0', 'x0']])
         red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
                                                           y0, x0, size_grid)
-        f5, m5, lin_est, var_est, y, x, z = GridAnalysis(
-            red_dat, red_var, red_psf, red_wgt, horiz,
-            size_grid, y0, x0, z0, NY, NX, horiz_psf, criteria, order_dct
-        )
-        res.append((f5, m5, lin_est, var_est, y, x, z))
+        rg = GridAnalysis(red_dat, red_var, red_psf, red_wgt, horiz, size_grid,
+                          y0, x0, z0, ny, nx, horiz_psf, criteria, order_dct)
+        res.append(rg)
 
     flux5, res_min5, lin_est, var_est, y_grid, x_grid, z_grid = zip(*res)
 
@@ -1834,7 +1832,6 @@ def purity_estimation(cat, Pval, Pval_comp):
         profile residual flux num_line purity
 
     """
-    cat = cat.copy()
     # set to 0 if only 1 purity meaurement
     purity = np.zeros(len(cat))
 
@@ -1930,48 +1927,6 @@ def unique_sources(table):
     return Table(rows=result_rows, names=["ID", "ra", "dec", "x", "y",
                                           "n_lines", "seg_label", "comp",
                                           "line_merged_flag"])
-
-
-def unique_lines(table):
-    """Return indices of unique (non duplicated) lines.
-
-    ORIGIN may find lines at slightly different (x0, y0, z0) positions that are
-    set to the very same (x, y, z) position when computing the optimal
-    position.
-
-    Given a line table, this function returns the indices of unique lines,
-    keeping only the purest one when there are duplicates. The indices are
-    sorted by ID and z position in the line table.
-
-    Parameters
-    ----------
-    table: astropy.table.Table
-        A table of lines from ORIGIN. The table must contain the columns ID, x,
-        y, z, and purity.
-
-    Returns
-    -------
-    idx: numpy.array of int
-        Indices of unique lines.
-
-    """
-    table = table.copy()
-
-    # We add a column with the original indices because we will sort the table
-    # by ID and z.
-    table['original_idx'] = np.arange(len(table), dtype=int)
-
-    # Sort by decreasing purity
-    table.sort('purity')
-    table.reverse()
-
-    # Find position of first unique (x, y, z)
-    _, idx = np.unique(table['x', 'y', 'z'], axis=0, return_index=True)
-
-    table = table[idx]
-    table.sort(['ID', 'z'])
-
-    return table['original_idx'].data
 
 
 def merge_similar_lines(table, *, z_pix_threshold=5):

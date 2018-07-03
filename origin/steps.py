@@ -36,7 +36,6 @@ from .lib_origin import (
     O2test,
     purity_estimation,
     spatiospectral_merging,
-    unique_lines,
     unique_sources,
 )
 
@@ -791,12 +790,12 @@ class Detection(Step):
 
     Returns
     -------
-    self.Cat0 : astropy.Table
+    self.Cat0 : `astropy.table.Table`
         Catalog with all detections (correl and comp). Columns:
-        ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
-    self.Cat0 : astropy.Table
-        Catalog with filtered detections. Columns:
-        ID ra dec lbda x0 y0 z0 profile seg_label T_GLR
+        x0 y0 z0 comp STD T_GLR profile
+    self.Cat1 : `astropy.table.Table`
+        Catalog with filtered and matched detections. Columns:
+        ID ra dec lbda x0 y0 z0 comp STD T_GLR profile seg_label
 
     """
 
@@ -859,15 +858,15 @@ class Detection(Step):
 
         cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = orig.segmap._data[cat['y0'], cat['x0']]
-        cat.add_column(Column(name='id', data=np.arange(len(cat))), index=0)
 
         cat = spatiospectral_merging(cat, tol_spat, tol_spec)
 
         # add real coordinates and other useful info
         z, y, x = cat['z0'].data, cat['y0'].data, cat['x0'].data
         dec, ra = orig.wcs.pix2sky(np.stack((y, x)).T).T
-        cat['ra'], cat['dec'] = ra, dec
-        cat['lbda'] = orig.wave.coord(z)
+        cat.add_column(Column(name='ra', data=ra), index=1)
+        cat.add_column(Column(name='dec', data=dec), index=2)
+        cat.add_column(Column(name='lbda', data=orig.wave.coord(z)), index=3)
         cat.rename_column('area', 'seg_label')
 
         # Relabel IDs sequentially
@@ -876,6 +875,9 @@ class Detection(Step):
         idmap[oldIDs] = np.arange(len(oldIDs))
         cat.add_column(Column(name='ID', data=idmap[cat['imatch']]), index=0)
         cat.sort('ID')
+
+        self._loginfo('Purity estimation')
+        cat = purity_estimation(cat, orig.Pval, orig.Pval_comp)
 
         cat_comp = cat[cat['comp'] == 1]
         ns = len(set(cat['ID']))
@@ -907,7 +909,7 @@ class ComputeSpectra(Step):
 
     Returns
     -------
-    self.Cat2 : astropy.Table
+    self.Cat2 : `astropy.table.Table`
         Catalog of parameters of detected emission lines.  Columns:
         ra dec lbda x0 x y0 y z0 z T_GLR profile residual flux num_line purity
     self.spectra : list of `~mpdaf.obj.Spectrum`
@@ -927,38 +929,23 @@ class ComputeSpectra(Step):
             orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
             criteria='flux', order_dct=30, horiz_psf=1, horiz=5
         )
-
-        self._loginfo('Purity estimation')
-        tmp_Cat2 = purity_estimation(self.Cat2, orig.Pval, orig.Pval_comp)
-
-        # Remove duplicated lines
-        unique_idx = unique_lines(tmp_Cat2)
-        self.Cat2 = tmp_Cat2[unique_idx]
-        line_est = np.array(line_est)[unique_idx]
-        line_var = np.array(line_var)[unique_idx]
-
         _format_cat(self.Cat2)
 
         self._loginfo('Save the updated catalog in self.Cat2 (%d lines)',
-                      len(orig.Cat2))
-        nb_duplicated = len(tmp_Cat2) - len(orig.Cat2)
-        if nb_duplicated:
-            self._loginfo('%d lines were removed for being duplicates.',
-                          nb_duplicated)
+                      len(self.Cat2))
 
         # Radius for spectrum trimming
         radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
                          / 2).astype(int)
 
         self.spectra = OrderedDict()
-        for line_idx, (data, vari) in enumerate(zip(line_est, line_var)):
-            profile, z, num_line = self.Cat2[line_idx]['profile', 'z',
-                                                       'num_line']
-            line_z_min = z - radius[profile]
-            line_z_max = z + radius[profile]
-            self.spectra[num_line] = Spectrum(
-                data=data, var=vari, wave=orig.wave, mask=np.ma.nomask
-            ).subspec(line_z_min, line_z_max, unit=None)
+        for row, data, vari in zip(self.Cat2, line_est, line_var):
+            profile, z, num_line = row['profile', 'z', 'num_line']
+            z_min = z - radius[profile]
+            z_max = z + radius[profile]
+            sp = Spectrum(data=data, var=vari, wave=orig.wave,
+                          mask=np.ma.nomask, copy=False)
+            self.spectra[num_line] = sp.subspec(z_min, z_max, unit=None)
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
 
