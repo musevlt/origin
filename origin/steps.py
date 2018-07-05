@@ -865,15 +865,19 @@ class Detection(Step):
         # add real coordinates and other useful info
         z, y, x = cat['z0'].data, cat['y0'].data, cat['x0'].data
         dec, ra = orig.wcs.pix2sky(np.stack((y, x)).T).T
-        cat.add_column(Column(name='ra', data=ra), index=1)
-        cat.add_column(Column(name='dec', data=dec), index=2)
-        cat.add_column(Column(name='lbda', data=orig.wave.coord(z)), index=3)
+        cat.add_column(Column(name='ra', data=ra), index=0)
+        cat.add_column(Column(name='dec', data=dec), index=1)
+        cat.add_column(Column(name='lbda', data=orig.wave.coord(z)), index=2)
         cat.rename_column('area', 'seg_label')
+
+        # Start ID numbering at 1
+        cat['imatch'] += 1
+        cat['imatch2'] += 1
 
         # Relabel IDs sequentially
         oldIDs = np.unique(cat['imatch'])
         idmap = np.zeros(oldIDs.max() + 1, dtype=int)
-        idmap[oldIDs] = np.arange(len(oldIDs))
+        idmap[oldIDs] = np.arange(1, len(oldIDs) + 1)
         cat.add_column(Column(name='ID', data=idmap[cat['imatch']]), index=0)
         cat.sort('ID')
 

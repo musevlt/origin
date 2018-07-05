@@ -1797,7 +1797,7 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
 
     col_flux = Column(name='flux', data=flux5)
     col_res = Column(name='residual', data=res_min5)
-    col_num = Column(name='num_line', data=np.arange(len(Cat2)))
+    col_num = Column(name='num_line', data=np.arange(1, len(Cat2) + 1))
     col_x = Column(name='x', data=x_grid)
     col_y = Column(name='y', data=y_grid)
     col_z = Column(name='z', data=z_grid)
@@ -1834,23 +1834,24 @@ def purity_estimation(cat, Pval, Pval_comp):
 
     # Comp=0
     ksel = cat['comp'] == 0
-    if np.count_nonzero(ksel) > 1:
+    if np.count_nonzero(ksel) > 0:
         tglr = cat['T_GLR'][ksel]
         f = interp1d(Pval['Tval_r'], Pval['Pval_r'],
                      bounds_error=False, fill_value="extrapolate")
-        purity[ksel] = f(tglr.data.data)
+        purity[ksel] = f(tglr.data)
 
     # comp=1
     ksel = cat['comp'] == 1
-    if np.count_nonzero(ksel) > 1:
+    if np.count_nonzero(ksel) > 0:
         tglr = cat['STD'][ksel]
         f = interp1d(Pval_comp['Tval_r'], Pval_comp['Pval_r'],
                      bounds_error=False, fill_value="extrapolate")
-        purity[ksel] = f(tglr.data.data)
+        purity[ksel] = f(tglr.data)
 
     # The purity by definition cannot be > 1 and < 0, if the interpolation
     # gives a value outside these limits, replace by 1 or 0
     cat['purity'] = np.clip(purity, 0, 1)
+    cat['purity'].format = '.3f'
 
     return cat
 
@@ -1910,11 +1911,7 @@ def unique_sources(table):
         n_lines = len(group[group['merged_in'] != -9999])
 
         seg_label = group['seg_label'][0]
-        comp = group['comp'][0]
-        # TODO: seg_label and comp should be the same for all the lines
-        # associated to the source, shall we nevertheless check this is the
-        # case?
-
+        comp = group['comp'][0]  # FIXME: not necessarily true
         line_merged_flag = np.any(group["line_merged_flag"])
 
         result_rows.append([group_id, ra_waverage, dec_waverage, x_waverage,
@@ -1968,10 +1965,12 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     # index of the row that have been merged with this line.
     merge_dict = {}
     # Column containing the row indexes to access them while in groups.
-    table.add_column(Column(data=np.arange(len(table), dtype=int),
-                            name="_idx"))
+    table.add_column(Column(data=np.arange(len(table)), name="_idx"))
 
     for group in ProgressBar(table.group_by('ID').groups):
+        if len(group) == 1:
+            continue
+
         # TODO: If astropy guaranties that grouping retains the row order, it
         # is faster to sort by z before grouping (and before adding _idx).
         group.sort('z')
