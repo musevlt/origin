@@ -1360,70 +1360,6 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     return threshold, res
 
 
-def extract_grid(raw_in, var_in, psf_in, weights_in, y, x, size_grid):
-    """Function to extract data from an estimated source in catalog.
-
-    Parameters
-    ----------
-    raw_in : array
-        RAW data
-    var_in : array
-        MUSE covariance
-    psf_in : array
-        MUSE PSF
-    weights_in : array
-        PSF weights
-    y : int
-        y position in pixek estimated in previous catalog
-    x : int
-        x position in pixek estimated in previous catalog
-    size_grid : int
-        Maximum spatial shift for the grid
-
-    Returns
-    -------
-    red_dat : cube of raw_in centered in y,x of size PSF+Max spatial shift
-    red_var : cube of var_in centered in y,x of size PSF+Max spatial shift
-    red_wgt : cube of weights_in centered in y,x of size PSF+Max spatial shift
-    red_psf : cube of psf_in centered in y,x of size PSF+Max spatial shift
-
-    """
-    # size psf
-    if weights_in is None:
-        psf_shape = psf_in.shape[1:]
-    else:
-        psf_shape = psf_in[0].shape[1:]
-
-    # desired shape
-    margin = 2 * size_grid
-    shape = (psf_shape[0] + margin, psf_shape[1] + margin)
-    cshape = (raw_in.shape[0], ) + shape
-
-    (psy, psx), (psy2, psx2) = overlap_slices(raw_in.shape[1:], shape, (y, x))
-
-    # create weight, data with bordure
-    red_dat = np.zeros(cshape)
-    red_dat[:, psy2, psx2] = raw_in[:, psy, psx]
-
-    red_var = np.full(cshape, np.inf)
-    red_var[:, psy2, psx2] = var_in[:, psy, psx]
-
-    if weights_in is None:
-        red_wgt = None
-        red_psf = psf_in
-    else:
-        red_wgt = []
-        red_psf = []
-        for n, w in enumerate(weights_in):
-            if np.sum(w[psy, psx]) > 0:
-                w_tmp = np.zeros(shape)
-                w_tmp[psy2, psx2] = w[psy, psx]
-                red_wgt.append(w_tmp)
-                red_psf.append(psf_in[n])
-
-    return red_dat, red_var, red_wgt, red_psf
-
-
 def LS_deconv_wgt(data_in, var_in, psf_in):
     """Function to compute the Least Square estimation of a ponctual source.
 
@@ -1562,38 +1498,29 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     return estimated_line, estimated_var
 
 
-def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
-                 size_grid, y0, x0, z0, NY, NX, horiz_psf,
-                 criteria, order_dct):
+def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
+                 horiz_psf, criteria, order_dct):
     """Compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
     Parameters
     ----------
-    data_in : array
+    data : array
         RAW data minicube
-    var_in : array
+    var : array
         MUSE covariance minicube
     psf : array
         MUSE PSF minicube
-    weight_in : array
+    weight : array
         PSF weights minicube
     horiz : int
         Maximum spectral shift to compute the criteria for gridding
     size_grid : int
         Maximum spatial shift for the grid
-    y0 : int
-        y position in pixel from catalog
-    x0 : int
-        x position in pixel from catalog
-    z0 : int
-        z position in pixel from catalog
-    NY : int
-        Number of y-pixels from Full data Cube
-    NX : int
-        Number of x-pixels from Full data Cube
-    y0 : int
-        y position in pixel from catalog
+    y0, x0, z0 : int
+        y, x, z position in pixel from catalog
+    ny, nx : int
+        Shape from the full data Cube.
     horiz_psf : int
         Maximum spatial shift in size of PSF to compute the MSE
     criteria : string
@@ -1606,22 +1533,14 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     -------
     flux_est_5 : float
         Estimated flux +/- 5
-    flux_est_10 : float
-        Estimated flux +/- 10
     MSE_5 : float
         Mean square error +/- 5
-    MSE_10 : float
-        Mean square error +/- 10
     estimated_line : array
         Estimated lines in data space
     estimated_variance : array
         Estimated variance in data space
-    y : int
-        re-estimated x position in pixel of the source in the grid
-    x : int
-        re-estimated x position in pixel of the source in the grid
-    z : int
-        re-estimated x position in pixel of the source in the grid
+    y, z, x : int
+        re-estimated y, x, z position in pixel of the source in the grid
 
     """
     if criteria not in ('flux', 'mse'):
@@ -1637,66 +1556,66 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     fest_05 = np.zeros(shape)
     mse_5 = np.full(shape, np.inf)
 
-    nl = data_in.shape[0]
+    nl = data.shape[0]
     ind_max = slice(max(0, z0 - 5), min(nl, z0 + 6))
-    if weight_in is None:
-        nl, sizpsf, _ = psf.shape
-    else:
-        nl, sizpsf, _ = psf[0].shape
+    sizpsf = psf.shape[1] if weight is None else psf[0].shape[1]
 
     lin_est = np.zeros((nl, ) + shape)
     var_est = np.zeros((nl, ) + shape)
     # half size psf
     longxy = sizpsf // 2
     inds = slice(longxy - horiz_psf, longxy + 1 + horiz_psf)
-    for dx in range(0, 1 + 2 * size_grid):
-        if (x0 - size_grid + dx >= 0) and (x0 - size_grid + dx < NX):
-            for dy in range(0, 1 + 2 * size_grid):
-                if (y0 - size_grid + dy >= 0) and (y0 - size_grid + dy < NY):
 
-                    # extract data
-                    r1 = data_in[:, dy:sizpsf + dy, dx:sizpsf + dx]
-                    var = var_in[:, dy:sizpsf + dy, dx:sizpsf + dx]
-                    if weight_in is not None:
-                        wgt = np.array(weight_in)[:, dy:sizpsf + dy, dx:sizpsf + dx]
-                        psf = np.sum(np.repeat(wgt[:, np.newaxis, :, :], nl,
-                                               axis=1) * psf, axis=0)
+    # compute valid offsets
+    dxl = np.arange(1 + 2 * size_grid)
+    dyl = np.arange(1 + 2 * size_grid)
+    dxl = dxl[(x0 + dxl - size_grid >= 0) & (x0 + dxl - size_grid < nx)]
+    dyl = dyl[(y0 + dyl - size_grid >= 0) & (y0 + dyl - size_grid < ny)]
 
-                    # estimate Full Line and theoretic variance
-                    deconv_met, varest_met = method_PCA_wgt(r1, var, psf,
-                                                            order_dct)
+    for dx in dxl:
+        for dy in dyl:
+            # extract data
+            r1 = data[:, dy:dy + sizpsf, dx:dx + sizpsf]
+            v1 = var[:, dy:dy + sizpsf, dx:dx + sizpsf]
+            if weight is not None:
+                wgt = np.array(weight)[:, dy:sizpsf + dy, dx:sizpsf + dx]
+                psf = np.sum(np.repeat(wgt[:, np.newaxis, :, :], nl,
+                                       axis=1) * psf, axis=0)
 
-                    z_est = peakdet(deconv_met[ind_max])
-                    if z_est == 0:
-                        break
+            # estimate Full Line and theoretic variance
+            deconv_met, varest_met = method_PCA_wgt(r1, v1, psf, order_dct)
 
-                    maxz = z0 - 5 + z_est
-                    zest[dy, dx] = maxz
-                    # ind_z10 = np.arange(maxz-10,maxz+10)
+            z_est = peakdet(deconv_met[ind_max])
+            if z_est == 0:
+                break
 
-                    lin_est[:, dy, dx] = deconv_met
-                    var_est[:, dy, dx] = varest_met
+            maxz = z0 - 5 + z_est
+            zest[dy, dx] = maxz
+            # ind_z10 = np.arange(maxz-10,maxz+10)
 
-                    # compute MSE
-                    ind_hrz = slice(maxz - horiz, maxz + horiz + 1)
-                    if criteria == 'mse':
-                        LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz])
-                        LCred = LC[:, inds, inds]
-                        r1red = r1[ind_hrz, inds, inds]
-                        mse[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+            lin_est[:, dy, dx] = deconv_met
+            var_est[:, dy, dx] = varest_met
 
-                    # FIXME: if horiz=5, this is the same as above...
-                    ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 6, nl))
-                    LC = conv_wgt(deconv_met[ind_z5], psf[ind_z5, :, :])
-                    LCred = LC[:, inds, inds]
-                    r1red = r1[ind_z5, inds, inds]
-                    mse_5[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+            # compute MSE
+            ind_hrz = slice(maxz - horiz, maxz + horiz + 1)
+            if criteria == 'mse':
+                LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz])
+                LCred = LC[:, inds, inds]
+                r1red = r1[ind_hrz, inds, inds]
+                mse[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
 
-                    # compute flux
-                    if criteria == 'flux':
-                        fest_00[dy, dx] = np.sum(deconv_met[ind_hrz])
-                    fest_05[dy, dx] = np.sum(deconv_met[ind_z5])
-                    # fest_10[dy,dx] = np.sum(deconv_met[ind_z10])
+            # FIXME: if horiz=5, this is the same as above...
+            ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 6, nl))
+            LC = conv_wgt(deconv_met[ind_z5], psf[ind_z5, :, :])
+            LCred = LC[:, inds, inds]
+            r1red = r1[ind_z5, inds, inds]
+            mse_5[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+
+            # compute flux
+            if criteria == 'flux':
+                fest_00[dy, dx] = np.sum(deconv_met[ind_hrz])
+            fest_05[dy, dx] = np.sum(deconv_met[ind_z5])
+            # fest_10[dy,dx] = np.sum(deconv_met[ind_z10])
 
     if criteria == 'flux':
         wy, wx = np.where(fest_00 == fest_00.max())
@@ -1708,8 +1627,8 @@ def GridAnalysis(data_in, var_in, psf, weight_in, horiz,
     z = zest[wy, wx]
 
     flux_est_5 = float(fest_05[wy, wx])
-    # flux_est_10 = float( fest_10[wy,wx] )
     MSE_5 = float(mse_5[wy, wx])
+    # flux_est_10 = float( fest_10[wy,wx] )
     # MSE_10 = float( mse_10[wy,wx] )
     estimated_line = lin_est[:, wy, wx]
     estimated_variance = var_est[:, wy, wx]
@@ -1730,25 +1649,28 @@ def peakdet(v):
 
 
 @timeit
-def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
-                    criteria='flux', order_dct=30, horiz_psf=1,
-                    horiz=5):
-    """Function to compute the estimated emission line and the optimal
+def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
+                    criteria='flux', order_dct=30, horiz_psf=1, horiz=5):
+    """Compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
     Parameters
     ----------
-    Cat1_T : astropy.Table
+    Cat1 : astropy.Table
         Catalog of parameters of detected emission lines selected
         with a narrow band test. Columns: ra dec lbda x0 y0 z0 T_GLR profile
-    DATA : array
-        RAW data
-    VAR : array
-        MUSE covariance
-    PSF : array
+    data : array
+        raw data
+    var : array
+        MUSE variance
+    psf : array
         MUSE PSF
-    WGT : array
+    wght : array
         PSF weights
+    wcs : `mpdaf.obj.WCS`
+        RA-DEC coordinates.
+    wave : `mpdaf.obj.WaveCoord`
+        Spectral coordinates.
     size_grid : int
         Maximum spatial shift for the grid
     criteria : string
@@ -1760,10 +1682,6 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
         Maximum spatial shift in size of PSF to compute the MSE
     horiz : int
         Maximum spectral shift to compute the criteria
-    wcs : `mpdaf.obj.WCS`
-        RA-DEC coordinates.
-    wave : `mpdaf.obj.WaveCoord`
-        Spectral coordinates.
 
     Returns
     -------
@@ -1776,14 +1694,46 @@ def estimation_line(Cat1, RAW, VAR, PSF, WGT, wcs, wave, size_grid=1,
         Estimated lines in SNR space
 
     """
-    ny, nx = RAW.shape[1:]
+    ny, nx = raw.shape[1:]
+
+    # psf shape
+    if wght is None:
+        psf_shape = psf.shape[1:]
+        red_wgt = None
+        red_psf = psf
+    else:
+        psf_shape = psf[0].shape[1:]
+
+    # desired shape
+    margin = 2 * size_grid
+    shape = (psf_shape[0] + margin, psf_shape[1] + margin)
+    cshape = (raw.shape[0], ) + shape
+
     res = []
     for src in ProgressBar(Cat1):
-        z0, y0, x0 = tuple(src[['z0', 'y0', 'x0']])
-        red_dat, red_var, red_wgt, red_psf = extract_grid(RAW, VAR, PSF, WGT,
-                                                          y0, x0, size_grid)
+        z, y, x = tuple(src[['z0', 'y0', 'x0']])
+
+        # extract data around the current position, with margin
+        (psy, psx), (psy2, psx2) = overlap_slices(raw.shape[1:], shape, (y, x))
+
+        red_dat = np.zeros(cshape)
+        red_dat[:, psy2, psx2] = raw[:, psy, psx]
+
+        red_var = np.full(cshape, np.inf)
+        red_var[:, psy2, psx2] = var[:, psy, psx]
+
+        if wght is not None:
+            red_wgt = []
+            red_psf = []
+            for n, w in enumerate(wght):
+                if np.sum(w[psy, psx]) > 0:
+                    w_tmp = np.zeros(shape)
+                    w_tmp[psy2, psx2] = w[psy, psx]
+                    red_wgt.append(w_tmp)
+                    red_psf.append(psf[n])
+
         rg = GridAnalysis(red_dat, red_var, red_psf, red_wgt, horiz, size_grid,
-                          y0, x0, z0, ny, nx, horiz_psf, criteria, order_dct)
+                          y, x, z, ny, nx, horiz_psf, criteria, order_dct)
         res.append(rg)
 
     flux5, res_min5, lin_est, var_est, y_grid, x_grid, z_grid = zip(*res)
