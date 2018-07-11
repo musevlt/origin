@@ -1050,8 +1050,9 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
     for prof in profiles:
         prof = prof.copy()
         if pcut is not None:
-            lmin, lmax = np.where(prof >= pcut)[0][[0, -1]]
-            prof = prof[lmin:lmax + 1]
+            lpeak = prof.argmax()
+            lw = np.max(np.abs(np.where(prof >= pcut)[0][[0, -1]] - lpeak))
+            prof = prof[lpeak - lw:lpeak + lw + 1]
         prof /= np.linalg.norm(prof)
         if pmeansub:
             prof -= prof.mean()
