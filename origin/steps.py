@@ -675,8 +675,8 @@ class ComputeTGLR(Step):
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         correl, profile, correl_min = Correlation_GLR_test(
-            orig.cube_faint._data, orig.var, orig.PSF, orig.wfields,
-            orig.profiles, nthreads=ncpu, pcut=pcut, pmeansub=pmeansub)
+            orig.cube_faint._data, orig.PSF, orig.wfields, orig.profiles,
+            nthreads=ncpu, pcut=pcut, pmeansub=pmeansub)
 
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0
