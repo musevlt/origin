@@ -54,7 +54,7 @@ def test_origin():
         my_origin.step06_compute_purity_threshold(purity=0.8)
 
         # FIXME: threshold is hardcoded for now
-        my_origin.step07_detection(threshold=9.28)
+        my_origin.step07_detection(threshold=9.28, segmap=SEGMAP)
 
         # estimation
         my_origin.step08_compute_spectra()

@@ -334,8 +334,11 @@ class Preprocessing(Step):
         Local maxima from cube_std
     self.cube_std_local_min : `~mpdaf.obj.Cube`
         Local maxima from minus cube_std
-    self.segmap : `~mpdaf.obj.Image`
-        Segmentation map.
+    self.segmap_cont : `~mpdaf.obj.Image`
+        Segmentation map computed on the white-light image.
+    self.segmap_merged : `~mpdaf.obj.Image`
+        Segmentation map merged with the cont one and another computed on the
+        residual.
 
     """
 
@@ -345,7 +348,8 @@ class Preprocessing(Step):
     cont_dct = DataObj('cube')
     ima_std = DataObj('image')
     ima_dct = DataObj('image')
-    segmap = DataObj('image')
+    segmap_cont = DataObj('image')
+    segmap_merged = DataObj('image')
     cube_std_local_min = DataObj('cube')
     cube_std_local_max = DataObj('cube')
 
@@ -394,6 +398,7 @@ class Preprocessing(Step):
         thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm)
         self._loginfo('Found %d regions, threshold=%.2f',
                       len(np.unique(map_cont)) - 1, thresh)
+        self.store_image('segmap_cont', map_cont)
 
         self._loginfo('Segmentation based on the residual')
         map2 = O2test(data)
@@ -403,8 +408,9 @@ class Preprocessing(Step):
 
         self._loginfo('Merging both maps')
         segmap, nlabels = ndi.label((map_cont > 0) | (map_res > 0))
-        self._loginfo('Segmap saved in self.segmap (%d regions)', nlabels)
-        self.store_image('segmap', segmap)
+        self._loginfo('Segmap saved in self.segmap_merged (%d regions)',
+                      nlabels)
+        self.store_image('segmap_merged', segmap)
 
 
 class CreateAreas(Step):
@@ -452,7 +458,8 @@ class CreateAreas(Step):
 
             self._logdebug('Sources fusion')
             square_src_fus, src = area_segmentation_sources_fusion(
-                orig.segmap._data, square_cut_fus, pfa, orig.Ny, orig.Nx)
+                orig.segmap_merged._data, square_cut_fus, pfa, orig.Ny, orig.Nx
+            )
 
             self._logdebug('Convex envelope')
             convex_lab = area_segmentation_convex_fusion(square_src_fus, src)
@@ -752,7 +759,8 @@ class ComputePurityThreshold(Step):
         # compute another segmap on the maxmap and merge with self.segmap
         thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
                                                pfasegfinal, 0)
-        segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap._data > 0))
+        segmap, nlabels = ndi.label((map_res > 0) |
+                                    (orig.segmap_merged._data > 0))
         self.store_image('segmap_purity', segmap)
 
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
@@ -787,6 +795,9 @@ class Detection(Step):
         TODO en fonction du FWHM
     tol_spec : int
         Tolerance for the spectral merging (distance in pixels).
+    segmap : str
+        Optional segmap to use instead of the one computed automatically on the
+        continuum image.
 
     Returns
     -------
@@ -796,6 +807,9 @@ class Detection(Step):
     self.Cat1 : `astropy.table.Table`
         Catalog with filtered and matched detections. Columns:
         ID ra dec lbda x0 y0 z0 comp STD T_GLR profile seg_label
+    self.segmap_label : `~mpdaf.obj.Image`
+        Segmentation map used for the catalog, either the one given as input,
+        otherwise self.segmap_cont.
 
     """
 
@@ -803,6 +817,7 @@ class Detection(Step):
     desc = 'Thresholding and spatio-spectral merging'
     Cat0 = DataObj('table')
     Cat1 = DataObj('table')
+    segmap_label = DataObj('image')
 
     def det_correl_min(self, thresh=None):
         """3D positions of detections in correl_min."""
@@ -811,7 +826,7 @@ class Detection(Step):
         return zm, ym, xm
 
     def run(self, orig, threshold=None, threshold_std=None, tol_spat=3,
-            tol_spec=5, maxdist_lines=2.5):
+            tol_spec=5, maxdist_lines=2.5, segmap=None):
         if threshold is not None:
             orig.threshold_correl = threshold
         if threshold_std is not None:
@@ -856,8 +871,17 @@ class Detection(Step):
         cat_std = cat_std[unmatched]
         self._loginfo('kept %d lines from std after filtering', len(unmatched))
 
+        if segmap is not None:
+            self.segmap_label = Image(segmap)
+            if self.segmap_label.shape != orig.shape[1:]:
+                raise ValueError('segmap does not have the same shape as the '
+                                 'processed cube')
+            self.logger.info('Overriding segmap_cont with the given one')
+        else:
+            self.segmap_label = orig.segmap_cont
+
         cat = _format_cat(vstack([cat, cat_std]).filled())
-        cat['area'] = orig.segmap._data[cat['y0'], cat['x0']]
+        cat['area'] = self.segmap_label._data[cat['y0'], cat['x0']]
 
         self.logger.info('Spatio-spectral merging...')
         cat = spatiospectral_merging(cat, tol_spat, tol_spec)
@@ -1050,7 +1074,7 @@ class CreateMasks(Step):
             threshold_correl=orig.threshold_correl,
             cube_std=orig.cube_std,
             threshold_std=orig.threshold_std,
-            segmap=orig.segmap,
+            segmap=orig.segmap_label,
             out_dir=out_dir,
             mask_size=mask_size,
             seg_thres_factor=seg_thres_factor,
@@ -1115,7 +1139,7 @@ class SaveSources(Step):
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
-            segmap_filename=os.path.join(outpath, 'segmap.fits'),
+            segmap_filename=os.path.join(outpath, 'segmap_label.fits'),
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),
