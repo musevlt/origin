@@ -924,25 +924,21 @@ def compute_thresh_gaussfit(data, pfa):
     return histO2, frecO2, thresO2, mea, std
 
 
-def _convolve_fsf(psf, cube, sigma, weights=None):
-    # Inverse of the MUSE covariance
-    inv_var = 1. / sigma
-    # data cube weighted by the MUSE covariance
-    cube_var = cube * np.sqrt(inv_var)
-
+def _convolve_fsf(psf, cube, weights=None):
+    ones = np.ones_like(cube)
     if weights is not None:
-        cube_var *= weights
-        inv_var *= weights
+        cube *= weights
+        ones *= weights
 
     psf = np.ascontiguousarray(psf[::-1, ::-1])
     psf -= psf.mean()
 
     # build a weighting map per PSF and convolve
-    cube_fsf = fftconvolve(cube_var, psf, mode='same')
+    cube_fsf = fftconvolve(cube, psf, mode='same')
 
     # Spatial part of the norm of the 3D atom
     psf **= 2
-    norm_fsf = fftconvolve(inv_var, psf, mode='same')
+    norm_fsf = fftconvolve(ones, psf, mode='same')
 
     return cube_fsf, norm_fsf
 
@@ -969,17 +965,15 @@ def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
 
 
 @timeit
-def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
+def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
                          pcut=None, pmeansub=True):
-    """Function to compute the cube of GLR test values obtained with the given
-    PSF and dictionary of spectral profile.
+    """Compute the cube of GLR test values with the given PSF and
+    dictionary of spectral profiles.
 
     Parameters
     ----------
     cube : array
         data cube
-    sigma : array
-        variance cube
     fsf : list of arrays
         FSF for each field of this data cube
     weights : list of array
@@ -1023,14 +1017,13 @@ def Correlation_GLR_test(cube, sigma, fsf, weights, profiles, nthreads=1,
         # copy the arrays because otherwise joblib's memmap handling fails
         # (maybe because of astropy.io.fits doing weird things with the memap?)
         cube = np.array(cube)
-        sigma = np.array(sigma)
 
     with Parallel(n_jobs=nthreads) as parallel:
         for nf in fields:
             # convolve spatially each spectral channel by the FSF, and do the
             # same for the norm (inverse variance)
             res = parallel(ProgressBar([
-                delayed(_convolve_fsf)(fsf[nf][i], cube[i], sigma[i],
+                delayed(_convolve_fsf)(fsf[nf][i], cube[i],
                                        weights=weights[nf])
                 for i in range(Nz)]))
             res = [np.stack(arr) for arr in zip(*res)]
