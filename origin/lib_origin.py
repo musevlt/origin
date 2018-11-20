@@ -927,7 +927,7 @@ def compute_thresh_gaussfit(data, pfa):
 def _convolve_fsf(psf, cube, weights=None):
     ones = np.ones_like(cube)
     if weights is not None:
-        cube *= weights
+        cube = cube * weights
         ones *= weights
 
     psf = np.ascontiguousarray(psf[::-1, ::-1])
