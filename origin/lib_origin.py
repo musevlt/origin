@@ -226,7 +226,7 @@ def dct_residual(w_raw, order, var, approx, mask):
     return np.stack(cont).T.reshape(w_raw.shape)
 
 
-def compute_segmap_gauss(data, pfa, fwhm_fsf=0):
+def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
     """Compute segmentation map from an image, using gaussian statistics.
 
     Parameters
@@ -237,6 +237,8 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0):
         Desired false alarm.
     fwhm : int
         Width (in integer pixels) of the filter, to convolve with a PSF disc.
+    bins : str
+        Method for computings bins (see numpy.histogram_bin_edges).
 
     Returns
     -------
@@ -246,7 +248,8 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0):
     """
     # test threshold : uses a Gaussian approximation of the test statistic
     # under H0
-    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa)
+    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa,
+                                                              bins=bins)
 
     # threshold - erosion and dilation to clean ponctual "source"
     mask = data > gamma
@@ -879,7 +882,7 @@ def O2test(arr):
     return np.mean(arr**2, axis=0)
 
 
-def compute_thresh_gaussfit(data, pfa):
+def compute_thresh_gaussfit(data, pfa, bins='fd'):
     """Compute a threshold with a gaussian fit of a distribution.
 
     Parameters
@@ -888,6 +891,8 @@ def compute_thresh_gaussfit(data, pfa):
         2D data from the O2 test.
     pfa : float
         Desired false alarm.
+    bins : str
+        Method for computings bins (see numpy.histogram_bin_edges).
 
     Returns
     -------
@@ -900,7 +905,7 @@ def compute_thresh_gaussfit(data, pfa):
     """
     logger = logging.getLogger(__name__)
     data = data[data > 0]
-    histO2, frecO2 = np.histogram(data, bins='fd', density=True)
+    histO2, frecO2 = np.histogram(data, bins=bins, density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
     ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind])**2)

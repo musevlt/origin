@@ -723,6 +723,9 @@ class ComputePurityThreshold(Step):
         List of thresholds to compute the purity.
     pfasegfinal : float
         PFA for the segmentation based on the maxmap.
+    bins : str
+        Method for computings bins for the maxmap segmap
+        (see numpy.histogram_bin_edges).
 
     Returns
     -------
@@ -751,14 +754,14 @@ class ComputePurityThreshold(Step):
     require = ('compute_TGLR', )
 
     def run(self, orig, purity=.9, purity_std=None, threshlist=None,
-            pfasegfinal=1e-5):
+            pfasegfinal=1e-5, bins='fd'):
         if purity_std is None:
             purity_std = purity
         orig.param.update(dict(purity=purity, purity_std=purity_std))
 
         # compute another segmap on the maxmap and merge with self.segmap
         thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
-                                               pfasegfinal, 0)
+                                               pfasegfinal, 0, bins=bins)
         segmap, nlabels = ndi.label((map_res > 0) |
                                     (orig.segmap_merged._data > 0))
         self.store_image('segmap_purity', segmap)

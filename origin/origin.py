@@ -625,7 +625,7 @@ class ORIGIN(steps.LogMixin):
         if ax is None:
             ax = plt.gca()
 
-        self.segmap.plot(ax=ax, title='areamap')
+        # self.segmap.plot(ax=ax, title='areamap')
 
         kwargs.setdefault('cmap', 'jet')
         kwargs.setdefault('alpha', 0.7)
