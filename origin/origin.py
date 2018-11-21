@@ -158,7 +158,8 @@ class ORIGIN(steps.LogMixin):
 
     def __init__(self, filename, name='origin', path='.', loglevel='DEBUG',
                  logcolor=False, fieldmap=None, profiles=None, PSF=None,
-                 FWHM_PSF=None, PSF_size=25, param=None, imawhite=None):
+                 FWHM_PSF=None, PSF_size=25, param=None, imawhite=None,
+                 wfields=None):
         self.path = path
         self.name = name
         self.outpath = os.path.join(path, name)
@@ -223,8 +224,8 @@ class ORIGIN(steps.LogMixin):
         # FSF
         self.param['fieldmap'] = fieldmap
         self.param['PSF_size'] = PSF_size
-        self._read_fsf(cub, fieldmap, PSF=PSF, FWHM_PSF=FWHM_PSF,
-                       PSF_size=PSF_size)
+        self._read_fsf(cub, fieldmap=fieldmap, wfields=wfields, PSF=PSF,
+                       FWHM_PSF=FWHM_PSF, PSF_size=PSF_size)
 
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
@@ -364,8 +365,9 @@ class ORIGIN(steps.LogMixin):
 
         obj = cls(path=path, name=name, param=param,
                   imawhite=ima_white, loglevel=loglevel, logcolor=logcolor,
-                  filename=param['cubename'], fieldmap=wfields,
-                  profiles=param['profiles'], PSF=PSF, FWHM_PSF=FWHM_PSF)
+                  filename=param['cubename'], fieldmap=param['cubename'],
+                  wfields=wfields, profiles=param['profiles'], PSF=PSF,
+                  FWHM_PSF=FWHM_PSF)
 
         for step in obj.steps.values():
             step.load(obj.outpath)
@@ -465,7 +467,8 @@ class ORIGIN(steps.LogMixin):
         with fits.open(self.param['profiles']) as hdul:
             return [hdu.header['FWHM'] for hdu in hdul[1:]]
 
-    def _read_fsf(self, cube, fieldmap, PSF=None, FWHM_PSF=None, PSF_size=25):
+    def _read_fsf(self, cube, fieldmap=None, wfields=None, PSF=None,
+                  FWHM_PSF=None, PSF_size=25):
         """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
         self.wfields = None
         info = self.logger.info
@@ -529,8 +532,8 @@ class ORIGIN(steps.LogMixin):
                     info('Load FSF from %s', PSF[n])
                     self.PSF.append(Cube(PSF[n])._data)
                     # weighted field map
-                    info('Load weight maps from %s', fieldmap[n])
-                    self.wfields.append(Image(fieldmap[n])._data)
+                    info('Load weight maps from %s', wfields[n])
+                    self.wfields.append(Image(wfields[n])._data)
                     info('mean FWHM of the FSFs (field %d) = %.2f pixels',
                          n, FWHM_PSF[n])
 
