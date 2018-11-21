@@ -1857,7 +1857,9 @@ def unique_sources(table):
         x_waverage = np.average(group['x'], weights=group['flux'])
         y_waverage = np.average(group['y'], weights=group['flux'])
 
-        n_lines = len(group[group['merged_in'] != -9999])
+        # The number of lines in the source is the number of lines that have
+        # not been merged in another one.
+        n_lines = np.sum(group['merged_in'] == -9999)
 
         seg_label = group['seg_label'][0]
         comp = group['comp'][0]  # FIXME: not necessarily true
