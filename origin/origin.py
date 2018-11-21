@@ -365,7 +365,7 @@ class ORIGIN(steps.LogMixin):
 
         obj = cls(path=path, name=name, param=param,
                   imawhite=ima_white, loglevel=loglevel, logcolor=logcolor,
-                  filename=param['cubename'], fieldmap=param['cubename'],
+                  filename=param['cubename'], fieldmap=param['fieldmap'],
                   wfields=wfields, profiles=param['profiles'], PSF=PSF,
                   FWHM_PSF=FWHM_PSF)
 
