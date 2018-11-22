@@ -3,6 +3,7 @@ import logging
 import os
 
 from astropy import units as u
+from astropy.io import fits
 from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
@@ -12,7 +13,7 @@ from .lib_origin import ProgressBar
 from .version import __version__ as origin_version
 
 
-def create_source(source_id, source_table, line_table, origin_params,
+def create_source(source_id, source_table, source_lines, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, segmap_filename, version,
                   profile_fwhm, *, author="", nb_fwhm=2, size=5,
@@ -27,7 +28,7 @@ def create_source(source_id, source_table, line_table, origin_params,
         Identifier for the source in the source and line tables.
     source_table: astropy.table.Table
         Catalogue of sources like the Cat3_sources one.
-    line_table: astropy.table.Table
+    source_lines: astropy.table.Table
         Catalogue of lines like the Cat3_lines one.
     origin_params: dict
         Dictionary of the parameters for the ORIGIN run.
@@ -68,10 +69,8 @@ def create_source(source_id, source_table, line_table, origin_params,
 
     # [0] is to get a Row not a table.
     source_info = source_table[source_table['ID'] == source_id][0]
-    source_lines = line_table[line_table['ID'] == source_id]
 
-    data_cube = Cube(origin_params['cubename'])
-    cube_correl = Cube(cube_cor_filename)
+    data_cube = Cube(origin_params['cubename'], convert_float64=False)
 
     source = Source.from_data(
         source_info['ID'], source_info['ra'], source_info['dec'],
@@ -154,27 +153,38 @@ def create_source(source_id, source_table, line_table, origin_params,
     # Mini-cubes
     source.add_cube(data_cube, "MUSE_CUBE", size=size, unit_size=u.arcsec,
                     add_white=True)
+    # Add FSF with the full cube, to have the same shape as fieldmap, then we
+    # can work directly with the subcube
+    source.add_FSF(data_cube, fieldmap=origin_params['fieldmap'])
+    data_cube = source.cubes['MUSE_CUBE']
+
+    cube_correl = Cube(cube_cor_filename, convert_float64=False)
     source.add_cube(cube_correl, "ORI_CORREL", size=size, unit_size=u.arcsec)
+    cube_correl = source.cubes['ORI_CORREL']
 
     # Table of sources around the exported sources.
     y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
     x_min, x_max = source_info['x'] - x_radius, source_info['x'] + x_radius
     y_min, y_max = source_info['y'] - y_radius, source_info['y'] + y_radius
-    nearby_sources = (source_table['x'] >= x_min) & \
-        (source_table['x'] <= x_max) & \
-        (source_table['y'] >= y_min) & \
-        (source_table['y'] <= y_max)
+    nearby_sources = ((source_table['x'] >= x_min) &
+                      (source_table['x'] <= x_max) &
+                      (source_table['y'] >= y_min) &
+                      (source_table['y'] <= y_max))
     source.tables['ORI_CAT'] = source_table['ID', 'ra', 'dec'][nearby_sources]
 
     # Maps
     # The white map was added when adding the MUSE cube.
-    source.images["ORI_MAXMAP"] = source.cubes['ORI_CORREL'].max(axis=0)
+    source.images["ORI_MAXMAP"] = cube_correl.max(axis=0)
     # Using add_image, the image size is taken from the white map.
-    source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
-    source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
-    source.add_image(Image(segmap_filename), "ORI_SEGMAP")
+    source.add_image(Image(mask_filename, convert_float64=False),
+                     "ORI_MASK_OBJ")
+    source.add_image(Image(skymask_filename, convert_float64=False),
+                     "ORI_MASK_SKY")
+    source.add_image(Image(segmap_filename, convert_float64=False),
+                     "ORI_SEGMAP")
     if expmap_filename is not None:
-        source.add_image(Image(expmap_filename), "EXPMAP")
+        source.add_image(Image(expmap_filename, convert_float64=False),
+                         "EXPMAP")
 
     # Full source spectra
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
@@ -184,9 +194,9 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.spectra['ORI_CORR'] = (
         source.cubes["ORI_CORREL"] *
         source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
-    source.add_FSF(data_cube, fieldmap=origin_params['fieldmap'])
     a, b, beta, _ = source.get_FSF()
     fwhm_fsf = b * data_cube.wave.coord() + a
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
@@ -236,50 +246,52 @@ def create_source(source_id, source_table, line_table, origin_params,
     source.add_table(source_lines, "ORI_LINES")
 
     # Table containing the information on the narrow band images.
-    nb_par = Table(
-        names=["LINE", "LBDA", "WIDTH", "MARGIN", "FBAND"],
-        dtype=['U20', float, float, float, float]
-    )
+    nb_par_rows = []
 
-    for line in [_ for _ in source_lines if _['merged_in'] == -9999]:
-        num_line = line['num_line']
-        ra_ori, dec_ori = line['ra'], line['dec']
-        lbda_ori = line['lbda']
-        prof = line['profile']
+    hdulist = fits.open(spectra_fits_filename)
+
+    for line in source_lines[source_lines['merged_in'] == -9999]:
+        num_line, lbda_ori, prof = line[['num_line', 'lbda', 'profile']]
         fwhm_ori = (profile_fwhm[prof] *
                     data_cube.wave.get_step(unit=u.Angstrom))
-        flux_ori = line['flux']
         if source.COMP_CAT:
             glr_std = line['STD']
         else:
             glr_std = line['T_GLR']
-        purity = line['purity']
 
         source.add_line(
             cols=line_columns,
-            values=[num_line, ra_ori, dec_ori, lbda_ori, fwhm_ori, flux_ori,
-                    glr_std, prof, purity],
+            values=[num_line, line['ra'], line['dec'], lbda_ori, fwhm_ori,
+                    line['flux'], glr_std, prof, line['purity']],
             units=line_units,
             fmt=line_fmt,
             desc=None)
 
         source.spectra[f"ORI_SPEC_{num_line}"] = Spectrum(
-            filename=spectra_fits_filename,
-            ext=(f"DATA{num_line}", f"STAT{num_line}")
+            hdulist=hdulist, ext=(f"DATA{num_line}", f"STAT{num_line}"),
+            convert_float64=False
         )
 
         source.add_narrow_band_image_lbdaobs(
             data_cube, f"NB_LINE_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=True,
             margin=10., fband=3.)
-        nb_par.add_row([f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori,
-                        10., 3.])
+
+        nb_par_rows.append(
+            [f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori, 10., 3.])
 
         # TODO: Do we want the sum or the max?
         source.add_narrow_band_image_lbdaobs(
             cube_correl, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=False)
 
+    hdulist.close()
+
+    nb_par = Table(
+        names=["LINE", "LBDA", "WIDTH", "MARGIN", "FBAND"],
+        dtype=['U20', float, float, float, float],
+        rows=nb_par_rows
+    )
     source.add_table(nb_par, "NB_PAR")
 
     if save_to is not None:
@@ -343,10 +355,12 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     job_list = []
 
     for source_id in cat3_sources['ID']:
+        source_lines = cat3_lines[cat3_lines['ID'] == source_id]
+
         job_list.append(delayed(create_source)(
             source_id=source_id,
             source_table=cat3_sources,
-            line_table=cat3_lines,
+            source_lines=source_lines,
             origin_params=origin_params,
             cube_cor_filename=cube_cor_filename,
             mask_filename=mask_filename_tpl % source_id,
