@@ -201,15 +201,8 @@ class ORIGIN(steps.LogMixin):
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
         self.param['cubename'] = filename
-        cub = Cube(filename)
-
-        # Flux - set to 0 the Nan
-        self.cube_raw = cub.data.filled(fill_value=0)
-        self.mask = cub._mask
+        self.cube = cub = Cube(filename)
         self.Nz, self.Ny, self.Nx = self.shape = cub.shape
-
-        # variance - set to Inf the Nan
-        self.var = cub.var.filled(np.inf)
 
         # RA-DEC coordinates
         self.wcs = cub.wcs
@@ -246,6 +239,20 @@ class ORIGIN(steps.LogMixin):
     def __dir__(self):
         return (super().__dir__() + list(self._dataobjs.keys()) +
                 [o.method_name for o in self.steps.values()])
+
+    @lazyproperty
+    def cube_raw(self):
+        # Flux - set to 0 the Nan
+        return self.cube.data.filled(fill_value=0)
+
+    @lazyproperty
+    def mask(self):
+        return self.cube._mask
+
+    @lazyproperty
+    def var(self):
+        # variance - set to Inf the Nan
+        return self.cube.var.filled(np.inf)
 
     @classmethod
     def init(cls, cube, segmap=None, fieldmap=None, profiles=None, PSF=None,
@@ -945,9 +952,9 @@ class ORIGIN(steps.LogMixin):
         # Larger spatial ranges for the plots
         longxy0 = 20
         y01 = max(0, y0 - longxy0)
-        y02 = min(self.cube_raw.shape[1], y0 + longxy0 + 1)
+        y02 = min(self.shape[1], y0 + longxy0 + 1)
         x01 = max(0, x0 - longxy0)
-        x02 = min(self.cube_raw.shape[2], x0 + longxy0 + 1)
+        x02 = min(self.shape[2], x0 + longxy0 + 1)
         # Coordinates in this window
         y00 = y0 - y01
         x00 = x0 - x01
@@ -961,13 +968,13 @@ class ORIGIN(steps.LogMixin):
         longz = long0 // 2
         # spectral range
         intz1 = max(0, z0 - longz)
-        intz2 = min(self.cube_raw.shape[0], z0 + longz + 1)
+        intz2 = min(self.shape[0], z0 + longz + 1)
         # subcube for the plot
         cube_test_plot = self.cube_raw[intz1:intz2, y01:y02, x01:x02]
         wcs = self.wcs[y01:y02, x01:x02]
         # controle cube
         nb_ranges = 3
-        if (z0 + longz + nb_ranges * long0) < self.cube_raw.shape[0]:
+        if (z0 + longz + nb_ranges * long0) < self.shape[0]:
             intz1c = intz1 + nb_ranges * long0
             intz2c = intz2 + nb_ranges * long0
         else:
