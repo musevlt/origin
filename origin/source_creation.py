@@ -176,15 +176,11 @@ def create_source(source_id, source_table, source_lines, origin_params,
     # The white map was added when adding the MUSE cube.
     source.images["ORI_MAXMAP"] = cube_correl.max(axis=0)
     # Using add_image, the image size is taken from the white map.
-    source.add_image(Image(mask_filename, convert_float64=False),
-                     "ORI_MASK_OBJ")
-    source.add_image(Image(skymask_filename, convert_float64=False),
-                     "ORI_MASK_SKY")
-    source.add_image(Image(segmap_filename, convert_float64=False),
-                     "ORI_SEGMAP")
+    source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
+    source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
+    source.add_image(Image(segmap_filename), "ORI_SEGMAP")
     if expmap_filename is not None:
-        source.add_image(Image(expmap_filename, convert_float64=False),
-                         "EXPMAP")
+        source.add_image(Image(expmap_filename), "EXPMAP")
 
     # Full source spectra
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
