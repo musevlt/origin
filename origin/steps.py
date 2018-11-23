@@ -1142,9 +1142,9 @@ class SaveSources(Step):
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
-            segmap_filenames=[
-                os.path.join(outpath, 'segmap_label.fits'),
-                os.path.join(outpath, 'segmap_merged.fits')],
+            segmaps={
+                "LABEL": os.path.join(outpath, 'segmap_label.fits'),
+                "MERGED": os.path.join(outpath, 'segmap_merged.fits')},
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),
