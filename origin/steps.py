@@ -12,6 +12,7 @@ from astropy.table import vstack, Table, Column
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
+from mpdaf.MUSE.PSF import get_FSF_from_cube_keywords
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
@@ -1040,6 +1041,9 @@ class CreateMasks(Step):
     seg_thres_factor: float
         Factor applied to the detection threshold to get the threshold used
         for mask creation.
+    fwhm_factor: float
+        When creating a source, for each line a disk with a diameter of the
+        FWMH multiplied by this factor is added to the source mask.
     plot_problems: bool
         If true, when the mask or a source seems dubious, some diagnostic plots
         about the source and its lines is saved in the output folder. Note that
@@ -1053,7 +1057,7 @@ class CreateMasks(Step):
     require = ('clean_results', )
 
     def run(self, orig, path=None, overwrite=True, mask_size=50,
-            seg_thres_factor=.5, plot_problems=False):
+            seg_thres_factor=.5, fwhm_factor=2, plot_problems=False):
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
@@ -1069,6 +1073,12 @@ class CreateMasks(Step):
         orig.param['mask_filename_tpl'] = f"{out_dir}/source-mask-%0.5d.fits"
         orig.param['skymask_filename_tpl'] = f"{out_dir}/sky-mask-%0.5d.fits"
 
+        # If the cube has several fields, we use the mean FWHM.
+        _, fwhm, _ = get_FSF_from_cube_keywords(orig.cube, 0)
+        fwhm = np.array(fwhm)
+        if len(fwhm.shape) > 1:
+            fwhm = fwhm.mean(axis=0)
+
         create_masks(
             line_table=orig.Cat3_lines,
             source_table=orig.Cat3_sources,
@@ -1078,9 +1088,11 @@ class CreateMasks(Step):
             cube_std=orig.cube_std,
             threshold_std=orig.threshold_std,
             segmap=orig.segmap_label,
+            fwhm=fwhm,
             out_dir=out_dir,
             mask_size=mask_size,
             seg_thres_factor=seg_thres_factor,
+            fwhm_factor=fwhm_factor,
             plot_problems=plot_problems)
 
 

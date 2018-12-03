@@ -1957,8 +1957,9 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
 
 
 def create_masks(line_table, source_table, profile_fwhm, cube_correl,
-                 threshold_correl, cube_std, threshold_std, segmap, out_dir, *,
-                 mask_size=50, seg_thres_factor=.5, plot_problems=True):
+                 threshold_correl, cube_std, threshold_std, segmap, fwhm,
+                 out_dir, *, mask_size=50, seg_thres_factor=.5, fwhm_factor=2,
+                 plot_problems=True):
     """Create the mask of each source.
 
     This function creates the masks and sky masks of the sources in the line
@@ -1991,6 +1992,9 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
     segmap: mpdaf.obj.Image
         Segmentation map. Must have the same spatial WCS as the cube. The sky
         must be in segment 0.
+    fwhm: numpy array of floats
+        Value of the spatial FWHM in pixels at each wavelength of the detection
+        cube.
     out_dir: str
         Directory into which the masks will be created.
     mask_size: int
@@ -1998,6 +2002,9 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
     seg_thres_factor: float
         Factor applied to the detection thresholds to get the threshold used
         for segmentation. The default is to take half of it.
+    fwhm_factor: float
+        When creating a source, for each line a disk with a diameter of the
+        FWMH multiplied by this factor is added to the source mask.
     plot_problems: bool
         If true, the problematic sources will be reprocessed by gen_source_mask
         in verbose mode to produce various plots of the mask creation process.
@@ -2043,7 +2050,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         gen_mask_return = gen_source_mask(
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=skymap, out_dir=out_dir, mask_size=mask_size
+            cont_sky=skymap, fwhm=fwhm, out_dir=out_dir, mask_size=mask_size,
+            fwhm_factor=fwhm_factor
         )
 
         if gen_mask_return is not None:
@@ -2056,8 +2064,9 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                 gen_mask_return = gen_source_mask(
                     source_id, source_x, source_y,
                     lines=group, detection_cube=detection_cube,
-                    threshold=threshold, cont_sky=skymap, out_dir=out_dir,
-                    mask_size=mask_size, verbose=True
+                    threshold=threshold, cont_sky=skymap, fwhm=fwhm,
+                    out_dir=out_dir, mask_size=mask_size,
+                    fwhm_factor=fwhm_factor, verbose=True
                 )
 
 
