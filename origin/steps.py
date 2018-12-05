@@ -1073,12 +1073,6 @@ class CreateMasks(Step):
         orig.param['mask_filename_tpl'] = f"{out_dir}/source-mask-%0.5d.fits"
         orig.param['skymask_filename_tpl'] = f"{out_dir}/sky-mask-%0.5d.fits"
 
-        # If the cube has several fields, we use the mean FWHM.
-        _, fwhm, _ = get_FSF_from_cube_keywords(orig.cube, 0)
-        fwhm = np.array(fwhm)
-        if len(fwhm.shape) > 1:
-            fwhm = fwhm.mean(axis=0)
-
         create_masks(
             line_table=orig.Cat3_lines,
             source_table=orig.Cat3_sources,
@@ -1088,7 +1082,7 @@ class CreateMasks(Step):
             cube_std=orig.cube_std,
             threshold_std=orig.threshold_std,
             segmap=orig.segmap_label,
-            fwhm=fwhm,
+            fwhm=orig.LBDA_FWHM_PSF,
             out_dir=out_dir,
             mask_size=mask_size,
             seg_thres_factor=seg_thres_factor,

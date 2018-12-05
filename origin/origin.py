@@ -80,6 +80,9 @@ class ORIGIN(steps.LogMixin):
         None: just one field
     PSF : array (Nz, PSF_size, PSF_size) or list of arrays
         MUSE PSF (one per field)
+    LBDA_FWHM_PSF: list of floats
+        Value of the FWMH of the PSF in pixel for each wavelength step (mean of
+        the fields).
     FWHM_PSF : float or list of float
         Mean of the fwhm of the PSF in pixel (one per field).
     imawhite : `~mpdaf.obj.Image`
@@ -158,8 +161,8 @@ class ORIGIN(steps.LogMixin):
 
     def __init__(self, filename, name='origin', path='.', loglevel='DEBUG',
                  logcolor=False, fieldmap=None, profiles=None, PSF=None,
-                 FWHM_PSF=None, PSF_size=25, param=None, imawhite=None,
-                 wfields=None):
+                 LBDA_FWHM_PSF=None, FWHM_PSF=None, PSF_size=25, param=None,
+                 imawhite=None, wfields=None):
         self.path = path
         self.name = name
         self.outpath = os.path.join(path, name)
@@ -218,7 +221,8 @@ class ORIGIN(steps.LogMixin):
         self.param['fieldmap'] = fieldmap
         self.param['PSF_size'] = PSF_size
         self._read_fsf(cub, fieldmap=fieldmap, wfields=wfields, PSF=PSF,
-                       FWHM_PSF=FWHM_PSF, PSF_size=PSF_size)
+                       LBDA_FWHM_PSF=LBDA_FWHM_PSF, FWHM_PSF=FWHM_PSF,
+                       PSF_size=PSF_size)
 
         # additional images
         self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
@@ -256,8 +260,8 @@ class ORIGIN(steps.LogMixin):
 
     @classmethod
     def init(cls, cube, segmap=None, fieldmap=None, profiles=None, PSF=None,
-             FWHM_PSF=None, PSF_size=25, name='origin', path='.',
-             loglevel='DEBUG', logcolor=False):
+             LBDA_FWHM_PSF=None, FWHM_PSF=None, PSF_size=25, name='origin',
+             path='.', loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
 
         An Origin object is composed by:
@@ -280,6 +284,9 @@ class ORIGIN(steps.LogMixin):
             If None, PSF are computed with a Moffat function
             (13x13 pixels, beta=2.6, fwhm1=0.76, fwhm2=0.66,
             lambda1=4750, lambda2=7000)
+        LBDA_FWHM_PSF: list of floats
+            Value of the FWMH of the PSF in pixel for each wavelength step
+            (mean of the fields).
         FWHM_PSF : array (Nz)
             FWHM of the PSFs in pixels.
         PSF_size : int
@@ -299,8 +306,9 @@ class ORIGIN(steps.LogMixin):
             warnings.warn('External segmap is no more needed/used',
                           UserWarning)
         return cls(cube, path=path, name=name, fieldmap=fieldmap,
-                   profiles=profiles, PSF=PSF, FWHM_PSF=FWHM_PSF,
-                   PSF_size=PSF_size, loglevel=loglevel, logcolor=logcolor)
+                   profiles=profiles, PSF=PSF, LBDA_FWHM_PSF=LBDA_FWHM_PSF,
+                   FWHM_PSF=FWHM_PSF, PSF_size=PSF_size, loglevel=loglevel,
+                   logcolor=logcolor)
 
     @classmethod
     @timeit
@@ -335,6 +343,11 @@ class ORIGIN(steps.LogMixin):
             FWHM_PSF = np.asarray(param['FWHM PSF'])
         else:
             FWHM_PSF = None
+
+        if 'LBDA_FWHM PSF' in param:
+            LBDA_FWHM_PSF = np.asarray(param['LBDA FWHM PSF'])
+        else:
+            LBDA_FWHM_PSF = None
 
         if os.path.isfile(param['PSF']):
             PSF = param['PSF']
@@ -374,7 +387,7 @@ class ORIGIN(steps.LogMixin):
                   imawhite=ima_white, loglevel=loglevel, logcolor=logcolor,
                   filename=param['cubename'], fieldmap=param['fieldmap'],
                   wfields=wfields, profiles=param['profiles'], PSF=PSF,
-                  FWHM_PSF=FWHM_PSF)
+                  FWHM_PSF=FWHM_PSF, LBDA_FWHM_PSF=LBDA_FWHM_PSF)
 
         for step in obj.steps.values():
             step.load(obj.outpath)
@@ -475,11 +488,11 @@ class ORIGIN(steps.LogMixin):
             return [hdu.header['FWHM'] for hdu in hdul[1:]]
 
     def _read_fsf(self, cube, fieldmap=None, wfields=None, PSF=None,
-                  FWHM_PSF=None, PSF_size=25):
+                  LBDA_FWHM_PSF=None, FWHM_PSF=None, PSF_size=25):
         """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
         self.wfields = None
         info = self.logger.info
-        if PSF is None or FWHM_PSF is None:
+        if PSF is None or FWHM_PSF is None or LBDA_FWHM_PSF is None:
             info('Compute FSFs from the datacube FITS header keywords')
             if 'FSFMODE' not in cube.primary_header:
                 raise IOError('missing PSF keywords in the cube FITS header')
@@ -492,16 +505,20 @@ class ORIGIN(steps.LogMixin):
                 # Normalization
                 self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, None, None]
                 # mean of the fwhm of the FSF in pixel
+                self.LBDA_FWHM_PSF = fwhm_pix
                 self.FWHM_PSF = np.mean(fwhm_pix)
                 self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
+                self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
                 info('mean FWHM of the FSFs = %.2f pixels', self.FWHM_PSF)
             else:  # mosaic: one FSF cube per field
                 self.PSF = []
+                self.LBDA_FWHM_PSF = []
                 self.FWHM_PSF = []
                 for i in range(nfields):
                     # Normalization
                     norm = np.sum(PSF[i], axis=(1, 2))[:, None, None]
                     self.PSF.append(PSF[i] / norm)
+                    self.LBDA_FWHM_PSF.append(fwhm_pix[i])
                     # mean of the fwhm of the FSF in pixel
                     fwhm = np.mean(fwhm_pix[i])
                     self.FWHM_PSF.append(fwhm)
@@ -511,6 +528,8 @@ class ORIGIN(steps.LogMixin):
                 fmap = FieldsMap(fieldmap, nfields=nfields)
                 # weighted field map
                 self.wfields = fmap.compute_weights()
+                self.LBDA_FWHM_PSF = np.array(self.LBDA_FWHM_PSF).mean(axis=0)
+                self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
                 self.param['FWHM PSF'] = self.FWHM_PSF
         else:
             if isinstance(PSF, str):
