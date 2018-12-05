@@ -6,8 +6,9 @@ from photutils import detect_sources
 
 
 def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
-                    cont_sky, out_dir, *, mask_size=50, seg_npixel=5,
-                    verbose=False, unit_center=None, unit_size=None):
+                    cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
+                    fwhm_factor=2, verbose=False, unit_center=None,
+                    unit_size=None):
     """Generate a mask for the source segmenting the detection cube.
 
     This function generates a mask for a source by combining the masks of each
@@ -15,6 +16,9 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     extracted from the detection cube around the line wavelength.  For primary
     ORIGIN sources, the correlation cube should be used, for complementary
     sources, the STD cube should be used.
+
+    For each line, a disk with a diameter of the FWHM at the line position,
+    multiplied by `fwhm_factor`, is added to the mask.
 
     The sky mask of each source is computed by intersecting the reverse of the
     source mask and the continuum sky mask.
@@ -48,12 +52,17 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         Sky mask obtained from a segmentation of the continuum. Must be on the
         same spatial WCS as the detection cube. The pixels must have a value of
         1 at the sky positions, 0 otherwise.
+    fwhm: numpy array of floats
+        Value of the spatial FWHM in pixels at each wavelength of the detection
+        cube.
     out_dir: string
         Name of the output directory to create the masks in.
     mask_size: int
         Size in pixels of the (square) masks.
     seg_npixel:
         Minimum number of pixels used by photutils for the segmentation.
+    fwhm_factor: float
+        Factor applied to the FWHM when adding a disk at the line position.
     verbose: true
         If true, the correlation map and the segmentation map images associated
         to each line will also be saved in the output directory.
@@ -106,6 +115,12 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         # may end with values with .999.
         x_line, y_line = np.round([x_line, y_line]).astype(int)
         seg_line = segmap.data[y_line, x_line]
+        line_mask = segmap.data == seg_line
+
+        # Adding the FWHM disk around the line position
+        radius = int(np.ceil(0.5 * fwhm_factor * fwhm[z_line]))
+        yy, xx = np.mgrid[:line_mask.shape[0], :line_mask.shape[1]]
+        line_mask[((xx - x_line)**2 + (yy - y_line)**2) <= radius**2] = True
 
         if verbose:
             max_map.write(f"{out_dir}/S{source_id}_L{num_line}_cor.fits")
@@ -125,9 +140,16 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             fig.suptitle(f"S{source_id} / L{num_line} / seg {seg_line}")
             fig.savefig(f"{out_dir}/S{source_id}_L{num_line}_segmap.png")
             plt.close(fig)
+            # Line mask plot
+            fig, ax = plt.subplots()
+            im = ax.imshow(line_mask, origin='lower')
+            ax.scatter(x_line, y_line)
+            fig.suptitle(f"S{source_id} / L{num_line} / mask")
+            fig.savefig(f"{out_dir}/S{source_id}_L{num_line}_mask.png")
+            plt.close(fig)
 
         # Combine the line mask to the source mask with OR
-        source_mask.data |= (segmap.data == seg_line)
+        source_mask.data |= line_mask
 
     sky_mask[source_mask.data] = 0
 
