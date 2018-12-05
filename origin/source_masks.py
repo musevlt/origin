@@ -119,10 +119,8 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
 
         # Adding the FWHM disk around the line position
         radius = int(np.ceil(0.5 * fwhm_factor * fwhm[z_line]))
-        yy, xx = np.ogrid[-radius:radius, -radius:radius]
-        indisk = xx**2 + yy**2 <= radius**2
-        line_mask[y_line-radius:y_line+radius,
-                  x_line-radius:x_line+radius][indisk] = True
+        yy, xx = np.mgrid[:line_mask.shape[0], :line_mask.shape[1]]
+        line_mask[((xx - x_line)**2 + (yy - y_line)**2) <= radius**2] = True
 
         if verbose:
             max_map.write(f"{out_dir}/S{source_id}_L{num_line}_cor.fits")
