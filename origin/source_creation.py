@@ -8,9 +8,64 @@ from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
+import numpy as np
 
 from .lib_origin import ProgressBar
 from .version import __version__ as origin_version
+
+
+def optimal_size(mask, ra, dec):
+    """Find the optimal size for cutout at a position in a mask.
+
+    Given a source mask and a position, this function compute the optimal
+    cutout size for which all the source pixels will be inside the cutouts with
+    an at least 1 pixel border on the edge.
+
+    Parameters
+    ----------
+    mask : `mpdaf.obj.Image`
+        The integer mask image with 1 for pixels on the source and 0 else
+        where.
+    ra : float
+        The Right Ascension of the cutout center.
+    dec : float
+        The Declination of the cutout center.
+
+    Returns
+    -------
+    size: float
+        The size in arc-seconds of the optimal cutout (side of the square
+        cutout)
+
+    """
+    center_y, center_x = mask.wcs.sky2pix((dec, ra), nearest=True)[0]
+    step_y, step_x = mask.wcs.get_step(unit=u.arcsec)
+
+    # Minimum x and y of source pixels
+    source_y_idxs = np.where(np.any(mask.data, axis=0))[0]
+    min_y, max_y = source_y_idxs.min(), source_y_idxs.max()
+    source_x_idxs = np.where(np.any(mask.data, axis=1))[0]
+    min_x, max_x = source_x_idxs.min(), source_x_idxs.max()
+
+    # Best radius in pixels
+    radius_x = np.max([
+        np.abs(center_x - min_x), np.abs(center_x - max_x)
+    ])
+    radius_y = np.max([
+        np.abs(center_y - min_y), np.abs(center_y - max_y)
+    ])
+
+    # Adding one to the radius to add one pixel border
+    # FIXME: On the test run, adding 1 makes the source touch the edge, adding
+    # 2 seems OK.
+    radius_x += 1
+    radius_y += 1
+
+    # Best angle radius
+    radius = np.max([radius_x * step_x, radius_y * step_y])
+    size = 2 * radius
+
+    return size
 
 
 def create_source(source_id, source_table, source_lines, origin_params,
@@ -71,6 +126,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # [0] is to get a Row not a table.
     source_info = source_table[source_table['ID'] == source_id][0]
+
+    source_mask = Image(mask_filename)
+    opt_size = optimal_size(source_mask, source_info['ra'], source_info['dec'])
+    if size < opt_size:
+        logger.warning("%s arc-second size is too small for source %s, "
+                       "using %s arc-second instead.", size, source_id,
+                       opt_size)
+        size = opt_size
 
     data_cube = Cube(origin_params['cubename'], convert_float64=False)
 
