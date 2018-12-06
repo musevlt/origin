@@ -12,7 +12,6 @@ from astropy.table import vstack, Table, Column
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
-from mpdaf.MUSE.PSF import get_FSF_from_cube_keywords
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
