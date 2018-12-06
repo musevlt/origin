@@ -1,4 +1,6 @@
 """Source map creation code."""
+import logging
+
 from astropy import units as u
 from matplotlib import pyplot as plt
 import numpy as np
@@ -8,7 +10,7 @@ from photutils import detect_sources
 def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                     cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
                     fwhm_factor=2, verbose=False, unit_center=None,
-                    unit_size=None):
+                    unit_size=None, _step=1):
     """Generate a mask for the source segmenting the detection cube.
 
     This function generates a mask for a source by combining the masks of each
@@ -24,10 +26,13 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     source mask and the continuum sky mask.
     TODO: Implement the sky mask.
 
-    The function also check that all the border pixels of the mask are 0.  If
-    that's not the case - that means that the mask size is to small or that
-    there is a problem in the mask creation - the source identifier is returned
-    else nothing is returned (i.e. None).
+    After creating the mask, this function checks that all the border pixels
+    are 0. If that's not the case, that may mean that the mask size is too
+    small.  A new mask is computed with a size multiplied by 1.5.  After
+    4 iterations - that's the purpose of the _step parameter - is the problem
+    persists the source identifier is returned.
+
+    When the mask is correctly created, nothing is returned (i.e. None).
 
     Parameters
     ----------
@@ -68,6 +73,8 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         to each line will also be saved in the output directory.
 
     """
+    logger = logging.getLogger(__name__)
+
     # We will modify the table
     lines = lines.copy()
 
@@ -182,6 +189,29 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                 np.sum(source_mask.data[:, 0]) +
                 np.sum(source_mask.data[:, -1]))
 
+    if is_wrong and _step <= 4:
+        new_size = int(mask_size * 1.5)
+        logger.warning("Source %s mask can't be done with size %s px at "
+                       "step %s. Trying with %s px.", source_id, mask_size,
+                       _step, new_size)
+        return gen_source_mask(
+            source_id=source_id,
+            ra=ra,
+            dec=dec,
+            lines=lines,
+            detection_cube=detection_cube,
+            threshold=threshold,
+            cont_sky=cont_sky,
+            fwhm=fwhm,
+            out_dir=out_dir,
+            mask_size=new_size,
+            seg_npixel=seg_npixel,
+            fwhm_factor=fwhm_factor,
+            verbose=verbose,
+            unit_center=unit_center,
+            unit_size=unit_size,
+            _step=_step + 1)
+
     # Convert the mask to integer before saving to FITS.
     source_mask.data = source_mask.data.astype(int)
     source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
@@ -191,4 +221,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                    savemask="none")
 
     if is_wrong:
+        logger.error("Source %s mask couldn't be done after %s attempts "
+                     "with a mask size up to %s.", source_id, _step, mask_size)
         return source_id
+
