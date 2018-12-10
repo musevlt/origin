@@ -1109,9 +1109,6 @@ class SaveSources(Step):
     nb_fwhm: float
         Factor multiplying the FWHM of a line to compute the width of the
         associated narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position
-        (for images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map to add to the source.
     overwrite: bool
@@ -1123,7 +1120,7 @@ class SaveSources(Step):
     desc = 'Save sources'
 
     def run(self, orig, version, *, path=None, n_jobs=1, author="",
-            nb_fwhm=2, size=5, expmap_filename=None, overwrite=True):
+            nb_fwhm=2, expmap_filename=None, overwrite=True):
 
         if path is None:
             outpath = orig.outpath
@@ -1160,7 +1157,6 @@ class SaveSources(Step):
             n_jobs=n_jobs,
             author=author,
             nb_fwhm=nb_fwhm,
-            size=size,
             expmap_filename=expmap_filename,
         )
 

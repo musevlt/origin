@@ -14,64 +14,10 @@ from .lib_origin import ProgressBar
 from .version import __version__ as origin_version
 
 
-def optimal_size(mask, ra, dec):
-    """Find the optimal size for cutout at a position in a mask.
-
-    Given a source mask and a position, this function compute the optimal
-    cutout size for which all the source pixels will be inside the cutouts with
-    an at least 1 pixel border on the edge.
-
-    Parameters
-    ----------
-    mask : `mpdaf.obj.Image`
-        The integer mask image with 1 for pixels on the source and 0 else
-        where.
-    ra : float
-        The Right Ascension of the cutout center.
-    dec : float
-        The Declination of the cutout center.
-
-    Returns
-    -------
-    size: float
-        The size in arc-seconds of the optimal cutout (side of the square
-        cutout)
-
-    """
-    center_y, center_x = mask.wcs.sky2pix((dec, ra), nearest=True)[0]
-    step_y, step_x = mask.wcs.get_step(unit=u.arcsec)
-
-    # Minimum x and y of source pixels
-    source_y_idxs = np.where(np.any(mask.data, axis=0))[0]
-    min_y, max_y = source_y_idxs.min(), source_y_idxs.max()
-    source_x_idxs = np.where(np.any(mask.data, axis=1))[0]
-    min_x, max_x = source_x_idxs.min(), source_x_idxs.max()
-
-    # Best radius in pixels
-    radius_x = np.max([
-        np.abs(center_x - min_x), np.abs(center_x - max_x)
-    ])
-    radius_y = np.max([
-        np.abs(center_y - min_y), np.abs(center_y - max_y)
-    ])
-
-    # Adding one to the radius to add one pixel border
-    # FIXME: On the test run, adding 1 makes the source touch the edge, adding
-    # 2 seems OK.
-    radius_x += 1
-    radius_y += 1
-
-    # Best angle radius
-    radius = np.max([radius_x * step_x, radius_y * step_y])
-    size = 2 * radius
-
-    return size
-
-
 def create_source(source_id, source_table, source_lines, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, segmaps, version,
-                  profile_fwhm, *, author="", nb_fwhm=2, size=5,
+                  profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
     """Create a MPDAF source.
 
@@ -107,9 +53,6 @@ def create_source(source_id, source_table, source_lines, origin_params,
     nb_fwhm: float
         Factor multiplying the FWHM of the line to compute the width of the
         narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position (for
-        images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
@@ -127,13 +70,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
     # [0] is to get a Row not a table.
     source_info = source_table[source_table['ID'] == source_id][0]
 
-    source_mask = Image(mask_filename)
-    opt_size = optimal_size(source_mask, source_info['ra'], source_info['dec'])
-    if size < opt_size:
-        logger.warning("%s arc-second size is too small for source %s, "
-                       "using %s arc-second instead.", size, source_id,
-                       opt_size)
-        size = opt_size
+    # The mask size is used for the cut-out size.
+    mask_size = Image(mask_filename).shape[0]
 
     data_cube = Cube(origin_params['cubename'], convert_float64=False)
 
@@ -216,7 +154,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
         "OR input, purity")
 
     # Mini-cubes
-    source.add_cube(data_cube, "MUSE_CUBE", size=size, unit_size=u.arcsec,
+    source.add_cube(data_cube, "MUSE_CUBE", size=mask_size, unit_size=None,
                     add_white=True)
     # Add FSF with the full cube, to have the same shape as fieldmap, then we
     # can work directly with the subcube
@@ -224,13 +162,13 @@ def create_source(source_id, source_table, source_lines, origin_params,
     data_cube = source.cubes['MUSE_CUBE']
 
     cube_correl = Cube(cube_cor_filename, convert_float64=False)
-    source.add_cube(cube_correl, "ORI_CORREL", size=size, unit_size=u.arcsec)
+    source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
     cube_correl = source.cubes['ORI_CORREL']
 
     # Table of sources around the exported sources.
-    y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
-    x_min, x_max = source_info['x'] - x_radius, source_info['x'] + x_radius
-    y_min, y_max = source_info['y'] - y_radius, source_info['y'] + y_radius
+    radius = mask_size / 2
+    x_min, x_max = source_info['x'] - radius, source_info['x'] + radius
+    y_min, y_max = source_info['y'] - radius, source_info['y'] + radius
     nearby_sources = ((source_table['x'] >= x_min) &
                       (source_table['x'] <= x_max) &
                       (source_table['y'] >= y_min) &
@@ -366,7 +304,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
                        cube_cor_filename, mask_filename_tpl,
                        skymask_filename_tpl, spectra_fits_filename,
                        segmaps, version, profile_fwhm, out_tpl, *,
-                       n_jobs=1, author="", nb_fwhm=2, size=5,
+                       n_jobs=1, author="", nb_fwhm=2,
                        expmap_filename=None):
     """Create and save a MPDAF source file for each source.
 
@@ -406,9 +344,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     nb_fwhm: float
         Factor multiplying the FWHM of the line to compute the width of the
         narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position (for
-        images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
@@ -433,7 +368,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             profile_fwhm=profile_fwhm,
             author=author,
             nb_fwhm=nb_fwhm,
-            size=size,
             expmap_filename=expmap_filename,
             save_to=out_tpl % source_id
         ))
