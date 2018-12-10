@@ -92,8 +92,8 @@ def test_origin():
         src = Source.from_file('./tmp2/sources/source-00001.fits')
         # FIXME: check if this test is really useful
         # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
-        assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
-        assert src.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
+        assert set(ima.shape for ima in src.images.values()) == {(50, 50)}
+        assert src.cubes['MUSE_CUBE'].shape == (1100, 50, 50)
     finally:
         # Cleanup (try to close opened files)
         for h in my_origin.logger.handlers:
