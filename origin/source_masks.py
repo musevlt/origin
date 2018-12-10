@@ -105,9 +105,8 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         max_map = sub_cube.get_image(
             wave=(min_z, max_z), unit_wave=None, method="max")
 
-        # NOTE: photutils will have a mask=max_map.mask param in 0.5
-        max_map.data[max_map.mask] = -9999.
-        segmap = detect_sources(max_map.data, threshold, seg_npixel)
+        segmap = detect_sources(max_map.data, threshold, seg_npixel,
+                                mask=max_map.mask)
 
         # Segment associated to the line (maps are y, x)
         # The position to look for the value of the segment must be integers,
@@ -115,7 +114,13 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         # may end with values with .999.
         x_line, y_line = np.round([x_line, y_line]).astype(int)
         seg_line = segmap.data[y_line, x_line]
-        line_mask = segmap.data == seg_line
+        if seg_line != 0:
+            line_mask = segmap.data == seg_line
+        else:
+            # If the segment of the line is 0, that means that there are not
+            # enough pixels above the threshold to create a source with
+            # photutils. The mask will consist only in the PSF added next.
+            line_mask = np.full_like(segmap.data, False, dtype=bool)
 
         # Adding the FWHM disk around the line position
         radius = int(np.ceil(0.5 * fwhm_factor * fwhm[z_line]))
@@ -123,14 +128,16 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         line_mask[((xx - x_line)**2 + (yy - y_line)**2) <= radius**2] = True
 
         if verbose:
-            max_map.write(f"{out_dir}/S{source_id}_L{num_line}_cor.fits")
+            max_map.write(
+                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_cor.fits")
             # Correlation map plot
             fig, ax = plt.subplots()
             im = ax.imshow(max_map.data, origin='lower')
             ax.scatter(x_line, y_line)
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / correlation map")
-            fig.savefig(f"{out_dir}/S{source_id}_L{num_line}_cor.png")
+            fig.savefig(
+                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_cor.png")
             plt.close(fig)
             # Segmap plot
             fig, ax = plt.subplots()
@@ -138,14 +145,16 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             ax.scatter(x_line, y_line)
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / seg {seg_line}")
-            fig.savefig(f"{out_dir}/S{source_id}_L{num_line}_segmap.png")
+            fig.savefig(
+                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_segmap.png")
             plt.close(fig)
             # Line mask plot
             fig, ax = plt.subplots()
             im = ax.imshow(line_mask, origin='lower')
             ax.scatter(x_line, y_line)
             fig.suptitle(f"S{source_id} / L{num_line} / mask")
-            fig.savefig(f"{out_dir}/S{source_id}_L{num_line}_mask.png")
+            fig.savefig(
+                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_mask.png")
             plt.close(fig)
 
         # Combine the line mask to the source mask with OR
