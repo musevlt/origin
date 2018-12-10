@@ -1958,8 +1958,8 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
 
 def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                  threshold_correl, cube_std, threshold_std, segmap, fwhm,
-                 out_dir, *, mask_size=50, seg_thres_factor=.5, fwhm_factor=2,
-                 plot_problems=True):
+                 out_dir, *, mask_size=50, min_sky_npixels=100,
+                 seg_thres_factor=.5, fwhm_factor=2, plot_problems=True):
     """Create the mask of each source.
 
     This function creates the masks and sky masks of the sources in the line
@@ -1999,6 +1999,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
         Directory into which the masks will be created.
     mask_size: int
         Width in pixel for the square masks.
+    min_sky_npixels: int
+        Minimum number of sky pixels in the mask.
     seg_thres_factor: float
         Factor applied to the detection thresholds to get the threshold used
         for segmentation. The default is to take half of it.
@@ -2051,7 +2053,7 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
             source_id, source_x, source_y,
             lines=group, detection_cube=detection_cube, threshold=threshold,
             cont_sky=skymap, fwhm=fwhm, out_dir=out_dir, mask_size=mask_size,
-            fwhm_factor=fwhm_factor
+            min_sky_npixels=min_sky_npixels, fwhm_factor=fwhm_factor
         )
 
         if gen_mask_return is not None:
@@ -2066,7 +2068,8 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                     lines=group, detection_cube=detection_cube,
                     threshold=threshold, cont_sky=skymap, fwhm=fwhm,
                     out_dir=out_dir, mask_size=mask_size,
-                    fwhm_factor=fwhm_factor, verbose=True
+                    min_sky_npixels=min_sky_npixels, fwhm_factor=fwhm_factor,
+                    verbose=True
                 )
 
 

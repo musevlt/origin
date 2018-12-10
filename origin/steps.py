@@ -1036,7 +1036,9 @@ class CreateMasks(Step):
     overwrite : bool
         Overwrite the folder if it already exists
     mask_size: int
-        Widht in pixel for the square masks.
+        Minimal width in pixel for the square masks.
+    min_sky_npixel: int
+        Minimum number of sky pixels in the mask.
     seg_thres_factor: float
         Factor applied to the detection threshold to get the threshold used
         for mask creation.
@@ -1056,7 +1058,8 @@ class CreateMasks(Step):
     require = ('clean_results', )
 
     def run(self, orig, path=None, overwrite=True, mask_size=50,
-            seg_thres_factor=.5, fwhm_factor=2, plot_problems=False):
+            min_sky_npixels=100, seg_thres_factor=.5, fwhm_factor=2,
+            plot_problems=False):
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
@@ -1084,6 +1087,7 @@ class CreateMasks(Step):
             fwhm=orig.LBDA_FWHM_PSF,
             out_dir=out_dir,
             mask_size=mask_size,
+            min_sky_npixels=min_sky_npixels,
             seg_thres_factor=seg_thres_factor,
             fwhm_factor=fwhm_factor,
             plot_problems=plot_problems)

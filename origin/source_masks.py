@@ -7,19 +7,35 @@ import numpy as np
 from photutils import detect_sources
 
 
+def _touches_edge(array):
+    """Return true if any of the border pixels is 1."""
+    return np.any([
+        array[0, :], array[-1, :], array[:, 0], array[:, -1]
+    ])
+
+
+def _trimmed(array, border_size):
+    """Return a view on the array in the border removed"""
+    return array[border_size:-border_size, border_size:-border_size]
+
+
+def _count_1(ma):
+    """Count the number of pixels to 1 in the masked array"""
+    return np.count_nonzero(ma[~ma.mask] == 1)
+
 def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
                  cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
-                 fwhm_factor=2, verbose=False, unit_center=None,
-                 unit_size=None, step=1):
-    """
+                 min_sky_pixels=100, fwhm_factor=2, verbose=False,
+                 unit_center=None, unit_size=None, step=1):
+    """Create the initial source mask.
+
     Function to create the source mask. The resulting mask may be too large
     because the initial size may be extended when the source touches the edges
-    of the mask.
+    of the mask or when there are not enough sky pixels.
 
     Return:
     - source mask
     - sky mask
-    - is_wrong: True if there was a problem creating the mask
     """
     logger = logging.getLogger(__name__)
 
@@ -36,14 +52,14 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         unit_center=unit_center, unit_size=unit_size).copy()
 
     # When the source is at the edge of the cube, the sky mask may be “masked”
-    # for regions outside of the cube.  We set these regions to 0 (not sky) in
-    # the sky mask as we don't know their content.
-    sky_mask[sky_mask.mask] = 0
+    # for regions outside of the cube.  Ensure that they will be set to 0 (non
+    # sky) when saving.
+    sky_mask.data.fill_value = 0
 
     # Empty (0) source mask
-    source_mask = sub_cube[0, :, :]
-    source_mask.mask = np.zeros_like(source_mask.data)
-    source_mask.data = np.zeros_like(source_mask.data, dtype=bool)
+    source_mask = (sub_cube[0, :, :] * 0)
+    source_mask.data.fill_value = 0
+    source_mask.data = source_mask.data.astype(bool)
 
     # Pixel position of the lines in the sub-cube
     lines['ra'].unit, lines['dec'].unit = u.deg, u.deg
@@ -84,7 +100,7 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
 
         if verbose:
             max_map.write(
-                f"{out_dir}/S{source_id}_L{num_line}step{step}_cor.fits")
+                f"{out_dir}/S{source_id}_L{num_line}_step{step}_cor.fits")
             # Correlation map plot
             fig, ax = plt.subplots()
             im = ax.imshow(max_map.data, origin='lower')
@@ -92,7 +108,7 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / correlation map")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}step{step}_cor.png")
+                f"{out_dir}/S{source_id}_L{num_line}_step{step}_cor.png")
             plt.close(fig)
             # Segmap plot
             fig, ax = plt.subplots()
@@ -101,7 +117,7 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / seg {seg_line}")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}step{step}_segmap.png")
+                f"{out_dir}/S{source_id}_L{num_line}_step{step}_segmap.png")
             plt.close(fig)
             # Line mask plot
             fig, ax = plt.subplots()
@@ -109,7 +125,7 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
             ax.scatter(x_line, y_line)
             fig.suptitle(f"S{source_id} / L{num_line} / mask")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}step{step}_mask.png")
+                f"{out_dir}/S{source_id}_L{num_line}_step{step}_mask.png")
             plt.close(fig)
 
         # Combine the line mask to the source mask with OR
@@ -129,13 +145,8 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         fig.savefig(f"{out_dir}/S{source_id}_skymask.png")
         plt.close(fig)
 
-    # Count number of true pixels in the edges of the mask.  If it's not
-    # 0 that means that the mask touch the edge for the image and there may
-    # be a problem.
-    is_wrong = (np.sum(source_mask.data[0, :]) +
-                np.sum(source_mask.data[-1, :]) +
-                np.sum(source_mask.data[:, 0]) +
-                np.sum(source_mask.data[:, -1]))
+    is_wrong = (_touches_edge(source_mask.data) or
+                _count_1(sky_mask.data) < min_sky_pixels)
 
     if is_wrong and step <= 4:
         new_size = int(mask_size * 1.5)
@@ -154,6 +165,7 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
             out_dir=out_dir,
             mask_size=new_size,
             seg_npixel=seg_npixel,
+            min_sky_pixels=min_sky_pixels,
             fwhm_factor=fwhm_factor,
             verbose=verbose,
             unit_center=unit_center,
@@ -164,13 +176,49 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         logger.error("Source %s mask couldn't be done after %s attempts "
                      "with a mask size up to %s.", source_id, step, mask_size)
 
-    return source_mask, sky_mask, is_wrong
+    return source_mask, sky_mask
+
+
+def _trim_masks(source_mask, sky_mask, min_size, min_sky_npixels):
+    """Trim the source and sky masks
+
+    This function trims the source and sky masks to the minimum size ensuring
+    that:
+    - the size is at least `min_size`
+    - the source does not touch the mask edges
+    - the number of sky pixels is at least `min_sky_npixels`
+
+    Returns:
+    - source_mask
+    - sky_mask
+    - touch_edge: True if the source touches the edge of the mask
+    - not_enough_sky: True is the are fewer sky pixels than `min_sky_npixels`
+    """
+    initial_size = len(source_mask.data)
+    border_size = 1
+
+    while (initial_size - 2 * border_size >= min_size and
+           not _touches_edge(_trimmed(source_mask.data, border_size)) and
+           _count_1(_trimmed(sky_mask.data, border_size)) >= min_sky_npixels):
+        border_size += 1
+
+    # Last border size before there is a problem.
+    border_size -= 1
+
+    if border_size > 1:
+        source_mask = source_mask[border_size:-border_size,
+                                  border_size:-border_size]
+        sky_mask = sky_mask[border_size:-border_size, border_size:-border_size]
+    touch_edge = _touches_edge(source_mask.data)
+    not_enough_sky = _count_1(sky_mask.data) < min_sky_npixels
+
+    return source_mask, sky_mask, touch_edge, not_enough_sky
 
 
 def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                     cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
-                    fwhm_factor=2, verbose=False, unit_center=None,
-                    unit_size=None):
+                    min_sky_npixels=100, fwhm_factor=2, verbose=False,
+                    unit_center=None, unit_size=None):
     """Generate a mask for the source segmenting the detection cube.
 
     This function generates a mask for a source by combining the masks of each
@@ -185,11 +233,13 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     The sky mask of each source is computed by intersecting the reverse of the
     source mask and the continuum sky mask.
 
-    After creating the mask, this function checks that all the border pixels
-    are 0. If that's not the case, that may mean that the mask size is too
-    small. Several larger size of mask are then tried to fix the problem.
+    The size of the returned mask may be larger than the requested `mask_size`
+    so that:
+    - the source mask does not touch the edge of the mask
+    - the number of sky pixels is at least `min_sky_npixels`
 
-    When the mask is correctly created, nothing is returned (i.e. None).
+    If that's not possible, `source_id` is returned, else nothing is returned
+    (i.e. None).
 
     Parameters
     ----------
@@ -220,9 +270,11 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     out_dir: string
         Name of the output directory to create the masks in.
     mask_size: int
-        Size in pixels of the (square) masks.
-    seg_npixel:
+        Minimal size in pixels of the (square) masks.
+    seg_npixel: int
         Minimum number of pixels used by photutils for the segmentation.
+    min_sky_npixels: int
+        Minimum number of sky pixels in the mask.
     fwhm_factor: float
         Factor applied to the FWHM when adding a disk at the line position.
     verbose: true
@@ -230,9 +282,9 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         to each line will also be saved in the output directory.
 
     """
-    #logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
-    source_mask, sky_mask, is_wrong = _create_mask(
+    source_mask, sky_mask = _create_mask(
         source_id=source_id,
         ra=ra,
         dec=dec,
@@ -249,6 +301,18 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
         unit_center=unit_center,
         unit_size=unit_size)
 
+    source_mask, sky_mask, touch_edge, not_enough_sky = _trim_masks(
+        source_mask, sky_mask, min_size=mask_size,
+        min_sky_npixels=min_sky_npixels
+    )
+
+    if touch_edge:
+        logger.error("Mask creation problem: the source %s touches the edge "
+                     "of the mask.", source_id)
+    if not_enough_sky:
+        logger.error("Mask creation problem: the source %s has not enough "
+                     "sky pixels.", source_id)
+
     # Convert the mask to integer before saving to FITS.
     source_mask.data = source_mask.data.astype(int)
     source_mask.write(f"{out_dir}/source-mask-%0.5d.fits" % source_id,
@@ -257,5 +321,5 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
     sky_mask.write(f"{out_dir}/sky-mask-%0.5d.fits" % source_id,
                    savemask="none")
 
-    if is_wrong:
+    if touch_edge or not_enough_sky:
         return source_id
