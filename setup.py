@@ -45,6 +45,6 @@ setup(
     zip_safe=False,
     python_requires='>=3.5',
     install_requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'mpdaf',
-                      'tqdm', 'joblib', 'PyYAML', 'photutils'],
+                      'tqdm', 'joblib', 'PyYAML', 'photutils>=0.5'],
     tests_require=['pytest'],
 )
