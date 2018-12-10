@@ -7,71 +7,19 @@ import numpy as np
 from photutils import detect_sources
 
 
-def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
-                    cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
-                    fwhm_factor=2, verbose=False, unit_center=None,
-                    unit_size=None, _step=1):
-    """Generate a mask for the source segmenting the detection cube.
+def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
+                 cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
+                 fwhm_factor=2, verbose=False, unit_center=None,
+                 unit_size=None, step=1):
+    """
+    Function to create the source mask. The resulting mask may be too large
+    because the initial size may be extended when the source touches the edges
+    of the mask.
 
-    This function generates a mask for a source by combining the masks of each
-    of its lines.  The mask of a line is created by segmenting the max image
-    extracted from the detection cube around the line wavelength.  For primary
-    ORIGIN sources, the correlation cube should be used, for complementary
-    sources, the STD cube should be used.
-
-    For each line, a disk with a diameter of the FWHM at the line position,
-    multiplied by `fwhm_factor`, is added to the mask.
-
-    The sky mask of each source is computed by intersecting the reverse of the
-    source mask and the continuum sky mask.
-    TODO: Implement the sky mask.
-
-    After creating the mask, this function checks that all the border pixels
-    are 0. If that's not the case, that may mean that the mask size is too
-    small.  A new mask is computed with a size multiplied by 1.5.  After
-    4 iterations - that's the purpose of the _step parameter - is the problem
-    persists the source identifier is returned.
-
-    When the mask is correctly created, nothing is returned (i.e. None).
-
-    Parameters
-    ----------
-    source_id: str or int
-        Source identifier used in file names.
-    ra, dec: float
-        Right Ascension and declination of the source (or pixel position if
-        radec_is_xy is true).  The mask will be centred on this position.
-    lines: astropy.table.Table
-        Table containing all the lines associated to the source.  This table
-        must contain these columns:
-        - num_line: the identifier of the line (for verbose output)
-        - ra, dec: the position of the line in degrees
-        - z: the pixel position of the line in the wavelength axis
-        - fwhm: the full with at half maximum of the line in pixels
-    detection_cube: mpdaf.obj.Cube
-        Cube the lines where detected in.
-    threshold: float
-        Threshold used for segmentation. Should be lower (e.g. 50%) than the
-        threshold used for source detection.
-    cont_sky: mpdaf.obj.Image
-        Sky mask obtained from a segmentation of the continuum. Must be on the
-        same spatial WCS as the detection cube. The pixels must have a value of
-        1 at the sky positions, 0 otherwise.
-    fwhm: numpy array of floats
-        Value of the spatial FWHM in pixels at each wavelength of the detection
-        cube.
-    out_dir: string
-        Name of the output directory to create the masks in.
-    mask_size: int
-        Size in pixels of the (square) masks.
-    seg_npixel:
-        Minimum number of pixels used by photutils for the segmentation.
-    fwhm_factor: float
-        Factor applied to the FWHM when adding a disk at the line position.
-    verbose: true
-        If true, the correlation map and the segmentation map images associated
-        to each line will also be saved in the output directory.
-
+    Return:
+    - source mask
+    - sky mask
+    - is_wrong: True if there was a problem creating the mask
     """
     logger = logging.getLogger(__name__)
 
@@ -136,7 +84,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
 
         if verbose:
             max_map.write(
-                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_cor.fits")
+                f"{out_dir}/S{source_id}_L{num_line}step{step}_cor.fits")
             # Correlation map plot
             fig, ax = plt.subplots()
             im = ax.imshow(max_map.data, origin='lower')
@@ -144,7 +92,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / correlation map")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_cor.png")
+                f"{out_dir}/S{source_id}_L{num_line}step{step}_cor.png")
             plt.close(fig)
             # Segmap plot
             fig, ax = plt.subplots()
@@ -153,7 +101,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             fig.colorbar(im)
             fig.suptitle(f"S{source_id} / L{num_line} / seg {seg_line}")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_segmap.png")
+                f"{out_dir}/S{source_id}_L{num_line}step{step}_segmap.png")
             plt.close(fig)
             # Line mask plot
             fig, ax = plt.subplots()
@@ -161,7 +109,7 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             ax.scatter(x_line, y_line)
             fig.suptitle(f"S{source_id} / L{num_line} / mask")
             fig.savefig(
-                f"{out_dir}/S{source_id}_L{num_line}_step{_step}_mask.png")
+                f"{out_dir}/S{source_id}_L{num_line}step{step}_mask.png")
             plt.close(fig)
 
         # Combine the line mask to the source mask with OR
@@ -189,12 +137,12 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                 np.sum(source_mask.data[:, 0]) +
                 np.sum(source_mask.data[:, -1]))
 
-    if is_wrong and _step <= 4:
+    if is_wrong and step <= 4:
         new_size = int(mask_size * 1.5)
         logger.warning("Source %s mask can't be done with size %s px at "
                        "step %s. Trying with %s px.", source_id, mask_size,
-                       _step, new_size)
-        return gen_source_mask(
+                       step, new_size)
+        return _create_mask(
             source_id=source_id,
             ra=ra,
             dec=dec,
@@ -210,7 +158,96 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
             verbose=verbose,
             unit_center=unit_center,
             unit_size=unit_size,
-            _step=_step + 1)
+            step=step + 1)
+
+    if is_wrong:
+        logger.error("Source %s mask couldn't be done after %s attempts "
+                     "with a mask size up to %s.", source_id, step, mask_size)
+
+    return source_mask, sky_mask, is_wrong
+
+
+def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
+                    cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
+                    fwhm_factor=2, verbose=False, unit_center=None,
+                    unit_size=None):
+    """Generate a mask for the source segmenting the detection cube.
+
+    This function generates a mask for a source by combining the masks of each
+    of its lines.  The mask of a line is created by segmenting the max image
+    extracted from the detection cube around the line wavelength.  For primary
+    ORIGIN sources, the correlation cube should be used, for complementary
+    sources, the STD cube should be used.
+
+    For each line, a disk with a diameter of the FWHM at the line position,
+    multiplied by `fwhm_factor`, is added to the mask.
+
+    The sky mask of each source is computed by intersecting the reverse of the
+    source mask and the continuum sky mask.
+
+    After creating the mask, this function checks that all the border pixels
+    are 0. If that's not the case, that may mean that the mask size is too
+    small. Several larger size of mask are then tried to fix the problem.
+
+    When the mask is correctly created, nothing is returned (i.e. None).
+
+    Parameters
+    ----------
+    source_id: str or int
+        Source identifier used in file names.
+    ra, dec: float
+        Right Ascension and declination of the source (or pixel position if
+        radec_is_xy is true).  The mask will be centred on this position.
+    lines: astropy.table.Table
+        Table containing all the lines associated to the source.  This table
+        must contain these columns:
+        - num_line: the identifier of the line (for verbose output)
+        - ra, dec: the position of the line in degrees
+        - z: the pixel position of the line in the wavelength axis
+        - fwhm: the full with at half maximum of the line in pixels
+    detection_cube: mpdaf.obj.Cube
+        Cube the lines where detected in.
+    threshold: float
+        Threshold used for segmentation. Should be lower (e.g. 50%) than the
+        threshold used for source detection.
+    cont_sky: mpdaf.obj.Image
+        Sky mask obtained from a segmentation of the continuum. Must be on the
+        same spatial WCS as the detection cube. The pixels must have a value of
+        1 at the sky positions, 0 otherwise.
+    fwhm: numpy array of floats
+        Value of the spatial FWHM in pixels at each wavelength of the detection
+        cube.
+    out_dir: string
+        Name of the output directory to create the masks in.
+    mask_size: int
+        Size in pixels of the (square) masks.
+    seg_npixel:
+        Minimum number of pixels used by photutils for the segmentation.
+    fwhm_factor: float
+        Factor applied to the FWHM when adding a disk at the line position.
+    verbose: true
+        If true, the correlation map and the segmentation map images associated
+        to each line will also be saved in the output directory.
+
+    """
+    #logger = logging.getLogger(__name__)
+
+    source_mask, sky_mask, is_wrong = _create_mask(
+        source_id=source_id,
+        ra=ra,
+        dec=dec,
+        lines=lines,
+        detection_cube=detection_cube,
+        threshold=threshold,
+        cont_sky=cont_sky,
+        fwhm=fwhm,
+        out_dir=out_dir,
+        mask_size=mask_size,
+        seg_npixel=seg_npixel,
+        fwhm_factor=fwhm_factor,
+        verbose=verbose,
+        unit_center=unit_center,
+        unit_size=unit_size)
 
     # Convert the mask to integer before saving to FITS.
     source_mask.data = source_mask.data.astype(int)
@@ -221,7 +258,4 @@ def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
                    savemask="none")
 
     if is_wrong:
-        logger.error("Source %s mask couldn't be done after %s attempts "
-                     "with a mask size up to %s.", source_id, _step, mask_size)
         return source_id
-
