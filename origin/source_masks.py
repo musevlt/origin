@@ -39,6 +39,12 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
     """
     logger = logging.getLogger(__name__)
 
+    # Mask size must be odd
+    if mask_size % 2 == 0:
+        logger.warning("Mask size must be odd. Changing mask_size from %s "
+                       "to %s.", mask_size, mask_size + 1)
+        mask_size += 1
+
     # We will modify the table
     lines = lines.copy()
 

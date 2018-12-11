@@ -1036,7 +1036,9 @@ class CreateMasks(Step):
     overwrite : bool
         Overwrite the folder if it already exists
     mask_size: int
-        Minimal width in pixel for the square masks.
+        Minimal width in pixel for the square masks. The mask size must be odd.
+        If this parameter is even, 1 will be added to it when creating the
+        masks.
     min_sky_npixel: int
         Minimum number of sky pixels in the mask.
     seg_thres_factor: float
