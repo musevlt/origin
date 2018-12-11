@@ -1958,7 +1958,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
 
 def create_masks(line_table, source_table, profile_fwhm, cube_correl,
                  threshold_correl, cube_std, threshold_std, segmap, fwhm,
-                 out_dir, *, mask_size=50, min_sky_npixels=100,
+                 out_dir, *, mask_size=25, min_sky_npixels=100,
                  seg_thres_factor=.5, fwhm_factor=2, plot_problems=True):
     """Create the mask of each source.
 

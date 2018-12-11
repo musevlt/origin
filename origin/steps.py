@@ -1057,7 +1057,7 @@ class CreateMasks(Step):
     desc = 'Mask creation'
     require = ('clean_results', )
 
-    def run(self, orig, path=None, overwrite=True, mask_size=50,
+    def run(self, orig, path=None, overwrite=True, mask_size=25,
             min_sky_npixels=100, seg_thres_factor=.5, fwhm_factor=2,
             plot_problems=False):
         if path is None:

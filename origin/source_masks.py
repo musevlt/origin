@@ -24,7 +24,7 @@ def _count_1(ma):
     return np.count_nonzero(ma[~ma.mask] == 1)
 
 def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
-                 cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
+                 cont_sky, fwhm, out_dir, *, mask_size=25, seg_npixel=5,
                  min_sky_pixels=100, fwhm_factor=2, verbose=False,
                  unit_center=None, unit_size=None, step=1):
     """Create the initial source mask.
@@ -216,7 +216,7 @@ def _trim_masks(source_mask, sky_mask, min_size, min_sky_npixels):
 
 
 def gen_source_mask(source_id, ra, dec, lines, detection_cube, threshold,
-                    cont_sky, fwhm, out_dir, *, mask_size=50, seg_npixel=5,
+                    cont_sky, fwhm, out_dir, *, mask_size=25, seg_npixel=5,
                     min_sky_npixels=100, fwhm_factor=2, verbose=False,
                     unit_center=None, unit_size=None):
     """Generate a mask for the source segmenting the detection cube.
