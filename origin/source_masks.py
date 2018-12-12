@@ -39,7 +39,13 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
     """
     logger = logging.getLogger(__name__)
 
-    # Mask size must be odd
+    # FIXME: there is a bug if the mask size is even in pixels. For now, we
+    # force the use of an odd size. If the size is angular, we first convert
+    # to a square pixel size using the first step of the cube.
+    if unit_size is not None:
+        step = detection_cube.wcs.get_step(unit=unit_size)[0]
+        mask_size = np.ceil(mask_size / step)
+        unit_size = None
     if mask_size % 2 == 0:
         logger.warning("Mask size must be odd. Changing mask_size from %s "
                        "to %s.", mask_size, mask_size + 1)
