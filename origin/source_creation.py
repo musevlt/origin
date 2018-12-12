@@ -8,6 +8,7 @@ from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
+import numpy as np
 
 from .lib_origin import ProgressBar
 from .version import __version__ as origin_version
@@ -16,7 +17,7 @@ from .version import __version__ as origin_version
 def create_source(source_id, source_table, source_lines, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, segmaps, version,
-                  profile_fwhm, *, author="", nb_fwhm=2, size=5,
+                  profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
     """Create a MPDAF source.
 
@@ -52,9 +53,6 @@ def create_source(source_id, source_table, source_lines, origin_params,
     nb_fwhm: float
         Factor multiplying the FWHM of the line to compute the width of the
         narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position (for
-        images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
@@ -71,6 +69,9 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # [0] is to get a Row not a table.
     source_info = source_table[source_table['ID'] == source_id][0]
+
+    # The mask size is used for the cut-out size.
+    mask_size = Image(mask_filename).shape[0]
 
     data_cube = Cube(origin_params['cubename'], convert_float64=False)
 
@@ -153,7 +154,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
         "OR input, purity")
 
     # Mini-cubes
-    source.add_cube(data_cube, "MUSE_CUBE", size=size, unit_size=u.arcsec,
+    source.add_cube(data_cube, "MUSE_CUBE", size=mask_size, unit_size=None,
                     add_white=True)
     # Add FSF with the full cube, to have the same shape as fieldmap, then we
     # can work directly with the subcube
@@ -161,13 +162,13 @@ def create_source(source_id, source_table, source_lines, origin_params,
     data_cube = source.cubes['MUSE_CUBE']
 
     cube_correl = Cube(cube_cor_filename, convert_float64=False)
-    source.add_cube(cube_correl, "ORI_CORREL", size=size, unit_size=u.arcsec)
+    source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
     cube_correl = source.cubes['ORI_CORREL']
 
     # Table of sources around the exported sources.
-    y_radius, x_radius = size / data_cube.wcs.get_step(u.arcsec) / 2
-    x_min, x_max = source_info['x'] - x_radius, source_info['x'] + x_radius
-    y_min, y_max = source_info['y'] - y_radius, source_info['y'] + y_radius
+    radius = mask_size / 2
+    x_min, x_max = source_info['x'] - radius, source_info['x'] + radius
+    y_min, y_max = source_info['y'] - radius, source_info['y'] + radius
     nearby_sources = ((source_table['x'] >= x_min) &
                       (source_table['x'] <= x_max) &
                       (source_table['y'] >= y_min) &
@@ -303,7 +304,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
                        cube_cor_filename, mask_filename_tpl,
                        skymask_filename_tpl, spectra_fits_filename,
                        segmaps, version, profile_fwhm, out_tpl, *,
-                       n_jobs=1, author="", nb_fwhm=2, size=5,
+                       n_jobs=1, author="", nb_fwhm=2,
                        expmap_filename=None):
     """Create and save a MPDAF source file for each source.
 
@@ -343,9 +344,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     nb_fwhm: float
         Factor multiplying the FWHM of the line to compute the width of the
         narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position (for
-        images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
@@ -370,7 +368,6 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             profile_fwhm=profile_fwhm,
             author=author,
             nb_fwhm=nb_fwhm,
-            size=size,
             expmap_filename=expmap_filename,
             save_to=out_tpl % source_id
         ))

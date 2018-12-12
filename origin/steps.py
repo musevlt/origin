@@ -12,7 +12,6 @@ from astropy.table import vstack, Table, Column
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
-from mpdaf.MUSE.PSF import get_FSF_from_cube_keywords
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
@@ -1037,7 +1036,11 @@ class CreateMasks(Step):
     overwrite : bool
         Overwrite the folder if it already exists
     mask_size: int
-        Widht in pixel for the square masks.
+        Minimal width in pixel for the square masks. The mask size must be odd.
+        If this parameter is even, 1 will be added to it when creating the
+        masks.
+    min_sky_npixel: int
+        Minimum number of sky pixels in the mask.
     seg_thres_factor: float
         Factor applied to the detection threshold to get the threshold used
         for mask creation.
@@ -1056,8 +1059,9 @@ class CreateMasks(Step):
     desc = 'Mask creation'
     require = ('clean_results', )
 
-    def run(self, orig, path=None, overwrite=True, mask_size=50,
-            seg_thres_factor=.5, fwhm_factor=2, plot_problems=False):
+    def run(self, orig, path=None, overwrite=True, mask_size=25,
+            min_sky_npixels=100, seg_thres_factor=.5, fwhm_factor=2,
+            plot_problems=False):
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
@@ -1085,6 +1089,7 @@ class CreateMasks(Step):
             fwhm=orig.LBDA_FWHM_PSF,
             out_dir=out_dir,
             mask_size=mask_size,
+            min_sky_npixels=min_sky_npixels,
             seg_thres_factor=seg_thres_factor,
             fwhm_factor=fwhm_factor,
             plot_problems=plot_problems)
@@ -1106,9 +1111,6 @@ class SaveSources(Step):
     nb_fwhm: float
         Factor multiplying the FWHM of a line to compute the width of the
         associated narrow band image.
-    size: float
-        Side of the square used for cut-outs around the source position
-        (for images and sub-cubes) in arc-seconds.
     expmap_filename: str
         Name of the file containing the exposure map to add to the source.
     overwrite: bool
@@ -1120,7 +1122,7 @@ class SaveSources(Step):
     desc = 'Save sources'
 
     def run(self, orig, version, *, path=None, n_jobs=1, author="",
-            nb_fwhm=2, size=5, expmap_filename=None, overwrite=True):
+            nb_fwhm=2, expmap_filename=None, overwrite=True):
 
         if path is None:
             outpath = orig.outpath
@@ -1157,7 +1159,6 @@ class SaveSources(Step):
             n_jobs=n_jobs,
             author=author,
             nb_fwhm=nb_fwhm,
-            size=size,
             expmap_filename=expmap_filename,
         )
 
