@@ -164,6 +164,10 @@ def create_source(source_id, source_table, source_lines, origin_params,
     cube_correl = Cube(cube_cor_filename, convert_float64=False)
     source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
     cube_correl = source.cubes['ORI_CORREL']
+    
+    # TODO,in case COMP_CAT save also the corresponding mini-cube
+    #if source.COMP_CAT:
+    #    source.add_cube(cube_sn, "ORI_SNCUBE", size=mask_size, unit_size=None)
 
     # Table of sources around the exported sources.
     radius = mask_size / 2
@@ -205,8 +209,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False, psf=fwhm_fsf,
                            beta=beta)
-    source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
 
+    
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
     # Content of the line table in the source
@@ -280,10 +284,24 @@ def create_source(source_id, source_table, source_lines, origin_params,
         nb_par_rows.append(
             [f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori, 10., 3.])
 
-        # TODO: Do we want the sum or the max?
         source.add_narrow_band_image_lbdaobs(
             cube_correl, f"ORI_CORR_{num_line}", lbda=lbda_ori,
-            width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=False)
+            width=nb_fwhm*fwhm_ori, method='max', subtract_off=False)
+        
+        if not source.COMP_CAT:
+            # Compute the spectra weighted by the correlation map for the current line
+            tags = [f"ORI_CORR_{num_line}"]
+            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                                       sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
+            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                                       sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)          
+    
+    if source.COMP_CAT:
+        source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"  
+    else:
+        # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
+        num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
+        source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"    
 
     hdulist.close()
 
