@@ -278,7 +278,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
         source.add_narrow_band_image_lbdaobs(
             data_cube, f"NB_LINE_{num_line}", lbda=lbda_ori,
-            width=nb_fwhm*fwhm_ori, is_sum=True, subtract_off=True,
+            width=nb_fwhm*fwhm_ori, method='sum', subtract_off=True,
             margin=10., fband=3.)
 
         nb_par_rows.append(

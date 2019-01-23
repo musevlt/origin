@@ -23,6 +23,7 @@ def _count_1(ma):
     """Count the number of pixels to 1 in the masked array"""
     return np.count_nonzero(ma[~ma.mask] == 1)
 
+
 def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
                  cont_sky, fwhm, out_dir, *, mask_size=25, seg_npixel=5,
                  min_sky_pixels=100, fwhm_factor=2, verbose=False,
@@ -53,6 +54,9 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
 
     # We will modify the table
     lines = lines.copy()
+
+    # Flag to keep track if something went wrong
+    is_wrong = False
 
     sub_cube = detection_cube.subcube(
         center=(dec, ra), size=mask_size,
@@ -96,7 +100,19 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         # as we got the value by WCS computation, we round the value because we
         # may end with values with .999.
         x_line, y_line = np.round([x_line, y_line]).astype(int)
-        seg_line = segmap.data[y_line, x_line]
+
+        try:
+            seg_line = segmap.data[y_line, x_line]
+        except IndexError:
+            # The line position is outside of the mask coverage. We must try
+            # with a larger mask.
+            is_wrong = True
+            logger.error("The line %d associated to source %d is too far "
+                         "from the source position given the mask size (%d). "
+                         "The created mask is wrong.", num_line, source_id,
+                         mask_size)
+            break  # Stop processing of this line.
+
         if seg_line != 0:
             line_mask = segmap.data == seg_line
         else:
@@ -157,8 +173,10 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         fig.savefig(f"{out_dir}/S{source_id}_skymask.png")
         plt.close(fig)
 
-    is_wrong = (_touches_edge(source_mask.data) or
-                _count_1(sky_mask.data) < min_sky_pixels)
+    # OR combination because the mask may be wrong because of lines outside of
+    # the mask.
+    is_wrong |= (_touches_edge(source_mask.data) or
+                 _count_1(sky_mask.data) < min_sky_pixels)
 
     if is_wrong and step <= 4:
         new_size = int(mask_size * 1.5)
