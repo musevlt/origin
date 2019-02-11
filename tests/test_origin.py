@@ -73,6 +73,10 @@ def test_origin():
         my_origin.step09_clean_results()
         my_origin.write()
 
+        # check that the catalog version was saves
+        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_lines.fits').meta
+        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_sources.fits').meta
+
         # create masks
         my_origin = ORIGIN.load('tmp2')
         my_origin.step10_create_masks()

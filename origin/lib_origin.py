@@ -1,5 +1,7 @@
 """Contains most of the methods that compose the ORIGIN software."""
 
+from datetime import datetime
+
 import itertools
 import logging
 import matplotlib.pyplot as plt
@@ -1869,9 +1871,13 @@ def unique_sources(table):
                             y_waverage, n_lines, seg_label, comp,
                             line_merged_flag])
 
-    return Table(rows=result_rows, names=["ID", "ra", "dec", "x", "y",
-                                          "n_lines", "seg_label", "comp",
-                                          "line_merged_flag"])
+    source_table = Table(
+        rows=result_rows,
+        names=["ID", "ra", "dec", "x", "y", "n_lines", "seg_label", "comp",
+               "line_merged_flag"])
+    source_table.meta["CAT3_TS"] = table.meta["CAT3_TS"]
+
+    return source_table
 
 
 def merge_similar_lines(table, *, z_pix_threshold=5):
@@ -1952,6 +1958,9 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
 
     table.remove_columns('_idx')
     table.sort(['ID', 'z'])
+
+    # Add a catalog version based on the current date (up to the minutes)
+    table.meta["CAT3_TS"] = datetime.now().strftime("%Y%m%d-%H%M")
 
     return table
 
