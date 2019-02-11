@@ -73,6 +73,10 @@ def test_origin():
         my_origin.step09_clean_results()
         my_origin.write()
 
+        # check that the catalog version was saves
+        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_lines.fits').meta
+        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_sources.fits').meta
+
         # create masks
         my_origin = ORIGIN.load('tmp2')
         my_origin.step10_create_masks()
@@ -89,11 +93,15 @@ def test_origin():
         assert len(cat) == 8
 
         # test returned sources are valid
-        src = Source.from_file('./tmp2/sources/source-00001.fits')
+        src1 = Source.from_file('./tmp2/sources/source-00001.fits')
+        src2 = Source.from_file('./tmp2/sources/source-00002.fits')
         # FIXME: check if this test is really useful
         # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
-        assert set(ima.shape for ima in src.images.values()) == {(25, 25)}
-        assert src.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
+        assert set(ima.shape for ima in src1.images.values()) == {(25, 25)}
+        assert src1.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
+        assert "SRC_TS" in src1.header
+        assert src1.header["CAT3_TS"] == src2.header["CAT3_TS"]
+        assert src1.header["SRC_TS"] == src2.header["SRC_TS"]
     finally:
         # Cleanup (try to close opened files)
         for h in my_origin.logger.handlers:
