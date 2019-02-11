@@ -1,4 +1,5 @@
 """Source file creation code."""
+from datetime import datetime
 import logging
 import os
 
@@ -16,7 +17,7 @@ from .version import __version__ as origin_version
 
 def create_source(source_id, source_table, source_lines, origin_params,
                   cube_cor_filename, mask_filename, skymask_filename,
-                  spectra_fits_filename, segmaps, version,
+                  spectra_fits_filename, segmaps, version, source_ts,
                   profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
     """Create a MPDAF source.
@@ -45,6 +46,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
         Dictionnary associating to a segmap type the associated FITS file name.
     version: str
         Version number stored in the source.
+    source_ts: str
+        Time stamp for when the source was created.
     profile_fwhm: list of int
         List of line profile FWHM in pixel. The index in the list is the
         profile number.
@@ -83,6 +86,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # Information about the source in the headers
     source.header["SRC_V"] = version, "Source version"
+    source.header["SRC_TS"] = source_ts
+    source.header["CAT3_TS"] = source_table.meta["CAT3_TS"]
     source.add_history("Source created with ORIGIN", author)
 
     source.header["OR_X"] = source_info['x'], "x position in pixels"
@@ -164,7 +169,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
     cube_correl = Cube(cube_cor_filename, convert_float64=False)
     source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
     cube_correl = source.cubes['ORI_CORREL']
-    
+
     # TODO,in case COMP_CAT save also the corresponding mini-cube
     #if source.COMP_CAT:
     #    source.add_cube(cube_sn, "ORI_SNCUBE", size=mask_size, unit_size=None)
@@ -210,7 +215,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
                            sky_mask="ORI_MASK_SKY", skysub=False, psf=fwhm_fsf,
                            beta=beta)
 
-    
+
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
     # Content of the line table in the source
@@ -287,21 +292,21 @@ def create_source(source_id, source_table, source_lines, origin_params,
         source.add_narrow_band_image_lbdaobs(
             cube_correl, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, method='max', subtract_off=False)
-        
+
         if not source.COMP_CAT:
             # Compute the spectra weighted by the correlation map for the current line
             tags = [f"ORI_CORR_{num_line}"]
             source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                                        sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
             source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                                       sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)          
-    
+                                       sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
+
     if source.COMP_CAT:
-        source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"  
+        source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
     else:
         # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
         num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
-        source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"    
+        source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
 
     hdulist.close()
 
@@ -369,6 +374,9 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     """
     job_list = []
 
+    # Timestamp of the source creation
+    source_ts = datetime.now().strftime("%Y%m%d-%H%M")
+
     for source_id in cat3_sources['ID']:
         source_lines = cat3_lines[cat3_lines['ID'] == source_id]
 
@@ -383,6 +391,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             spectra_fits_filename=spectra_fits_filename,
             segmaps=segmaps,
             version=version,
+            source_ts=source_ts,
             profile_fwhm=profile_fwhm,
             author=author,
             nb_fwhm=nb_fwhm,
