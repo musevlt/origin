@@ -1960,7 +1960,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     table.sort(['ID', 'z'])
 
     # Add a catalog version based on the current date (up to the minutes)
-    table.meta["CAT3_TS"] = datetime.now().strftime("%Y%m%d-%H%M")
+    table.meta["CAT3_TS"] = datetime.now().isoformat()
 
     return table
 

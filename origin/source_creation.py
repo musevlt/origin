@@ -375,7 +375,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
     job_list = []
 
     # Timestamp of the source creation
-    source_ts = datetime.now().strftime("%Y%m%d-%H%M")
+    source_ts = datetime.now().isoformat()
 
     for source_id in cat3_sources['ID']:
         source_lines = cat3_lines[cat3_lines['ID'] == source_id]
