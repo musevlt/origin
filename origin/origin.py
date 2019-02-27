@@ -30,7 +30,7 @@ from collections import OrderedDict
 from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
 from mpdaf.obj import Cube, Image
-from mpdaf.MUSE import FieldsMap, get_FSF_from_cube_keywords
+from mpdaf.MUSE import FieldsMap
 
 from . import steps
 from .lib_origin import timeit
@@ -498,39 +498,36 @@ class ORIGIN(steps.LogMixin):
                 raise IOError('missing PSF keywords in the cube FITS header')
 
             # FSF created from FSF*** keywords
-            PSF, fwhm_pix, _ = get_FSF_from_cube_keywords(cube, PSF_size)
-            self.param['PSF'] = cube.primary_header['FSFMODE']
-            nfields = cube.primary_header['NFIELDS']
-            if nfields == 1:  # just one FSF
-                # Normalization
-                self.PSF = PSF / np.sum(PSF, axis=(1, 2))[:, None, None]
+            try:
+                from mpdaf.MUSE import FSFModel
+            except ImportError:
+                sys.exit('you must upgrade MPDAF')
+
+            fsf = FSFModel.read(cube)
+            lbda = cube.wave.coord()
+            shape = (PSF_size, PSF_size)
+            if isinstance(fsf, FSFModel):  # just one FSF
+                self.PSF = fsf.get_3darray(lbda, shape)
+                self.LBDA_FWHM_PSF = fsf.get_fwhm(lbda, unit='pix')
+                self.FWHM_PSF = np.mean(self.LBDA_FWHM_PSF)
                 # mean of the fwhm of the FSF in pixel
-                self.LBDA_FWHM_PSF = fwhm_pix
-                self.FWHM_PSF = np.mean(fwhm_pix)
-                self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-                self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
                 info('mean FWHM of the FSFs = %.2f pixels', self.FWHM_PSF)
-            else:  # mosaic: one FSF cube per field
-                self.PSF = []
-                self.LBDA_FWHM_PSF = []
-                self.FWHM_PSF = []
-                for i in range(nfields):
-                    # Normalization
-                    norm = np.sum(PSF[i], axis=(1, 2))[:, None, None]
-                    self.PSF.append(PSF[i] / norm)
-                    self.LBDA_FWHM_PSF.append(fwhm_pix[i])
-                    # mean of the fwhm of the FSF in pixel
-                    fwhm = np.mean(fwhm_pix[i])
-                    self.FWHM_PSF.append(fwhm)
+            else:
+                self.PSF = [f.get_3darray(lbda, shape) for f in fsf]
+                fwhm = np.array([f.get_fwhm(lbda, unit='pix') for f in fsf])
+                self.LBDA_FWHM_PSF = np.mean(fwhm, axis=0)
+                self.FWHM_PSF = np.mean(fwhm, axis=1)
+                for i, fwhm in enumerate(self.FWHM_PSF):
                     info('mean FWHM of the FSFs (field %d) = %.2f pixels',
                          i, fwhm)
                 info('Compute weight maps from field map %s', fieldmap)
-                fmap = FieldsMap(fieldmap, nfields=nfields)
+                fmap = FieldsMap(fieldmap, nfields=len(fsf))
                 # weighted field map
                 self.wfields = fmap.compute_weights()
-                self.LBDA_FWHM_PSF = np.array(self.LBDA_FWHM_PSF).mean(axis=0)
-                self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
-                self.param['FWHM PSF'] = self.FWHM_PSF
+
+            self.param['PSF'] = cube.primary_header['FSFMODE']
+            self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
+            self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
         else:
             if isinstance(PSF, str):
                 info('Load FSFs from %s', PSF)
