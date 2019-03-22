@@ -204,11 +204,11 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False)
     if source.COMP_CAT:
-            source.spectra['ORI_CORR'] = (
+        source.spectra['ORI_CORR'] = (
             source.cubes["ORI_SNCUBE"] *
             source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
     else:
-            source.spectra['ORI_CORR'] = (
+        source.spectra['ORI_CORR'] = (
             source.cubes["ORI_CORREL"] *
             source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
 
@@ -222,7 +222,6 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False, psf=fwhm_fsf,
                            beta=beta)
-
 
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
