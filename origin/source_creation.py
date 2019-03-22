@@ -16,7 +16,7 @@ from .version import __version__ as origin_version
 
 
 def create_source(source_id, source_table, source_lines, origin_params,
-                  cube_cor_filename, mask_filename, skymask_filename,
+                  cube_cor_filename, cube_std_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, segmaps, version, source_ts,
                   profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
@@ -36,6 +36,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
         Dictionary of the parameters for the ORIGIN run.
     cube_cor_filename: str
         Name of the file containing the correlation cube of the ORIGIN run.
+    cube_std_filename: str
+        Name of the file containing the std cube of the ORIGIN run.
     mask_filename: str
         Name of the file containing the mask of the source.
     skymask_filename: str:
@@ -166,13 +168,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.add_FSF(data_cube, fieldmap=origin_params['fieldmap'])
     data_cube = source.cubes['MUSE_CUBE']
 
-    cube_correl = Cube(cube_cor_filename, convert_float64=False)
-    source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
-    cube_correl = source.cubes['ORI_CORREL']
-
-    # TODO,in case COMP_CAT save also the corresponding mini-cube
-    #if source.COMP_CAT:
-    #    source.add_cube(cube_sn, "ORI_SNCUBE", size=mask_size, unit_size=None)
+    if source.COMP_CAT:
+        cube_ori = Cube(cube_std_filename, convert_float64=False)
+        source.add_cube(cube_ori, "ORI_SNCUBE", size=mask_size, unit_size=None)
+        cube_ori = source.cubes['ORI_SNCUBE']
+    else:
+        cube_ori = Cube(cube_cor_filename, convert_float64=False)
+        source.add_cube(cube_ori, "ORI_CORREL", size=mask_size, unit_size=None)
+        cube_ori = source.cubes['ORI_CORREL']
 
     # Table of sources around the exported sources.
     radius = mask_size / 2
@@ -186,7 +189,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # Maps
     # The white map was added when adding the MUSE cube.
-    source.images["ORI_MAXMAP"] = cube_correl.max(axis=0)
+    source.images["ORI_MAXMAP"] = cube_ori.max(axis=0)
     # Using add_image, the image size is taken from the white map.
     source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
@@ -200,9 +203,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
                            sky_mask="ORI_MASK_SKY", skysub=True)
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False)
-    source.spectra['ORI_CORR'] = (
-        source.cubes["ORI_CORREL"] *
-        source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+    if source.COMP_CAT:
+        source.spectra['ORI_CORR'] = (
+            source.cubes["ORI_SNCUBE"] *
+            source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+    else:
+        source.spectra['ORI_CORR'] = (
+            source.cubes["ORI_CORREL"] *
+            source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
 
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
@@ -214,7 +222,6 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False, psf=fwhm_fsf,
                            beta=beta)
-
 
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
@@ -290,23 +297,19 @@ def create_source(source_id, source_table, source_lines, origin_params,
             [f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori, 10., 3.])
 
         source.add_narrow_band_image_lbdaobs(
-            cube_correl, f"ORI_CORR_{num_line}", lbda=lbda_ori,
+            cube_ori, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, method='max', subtract_off=False)
 
-        if not source.COMP_CAT:
-            # Compute the spectra weighted by the correlation map for the current line
-            tags = [f"ORI_CORR_{num_line}"]
-            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                                       sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
-            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                                       sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
+        # Compute the spectra weighted by the correlation map for the current line
+        tags = [f"ORI_CORR_{num_line}"]
+        source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                               sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
+        source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                               sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
 
-    if source.COMP_CAT:
-        source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
-    else:
-        # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
-        num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
-        source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
+    # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
+    num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
+    source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
 
     hdulist.close()
 
@@ -324,7 +327,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
 
 def create_all_sources(cat3_sources, cat3_lines, origin_params,
-                       cube_cor_filename, mask_filename_tpl,
+                       cube_cor_filename, cube_std_filename, mask_filename_tpl,
                        skymask_filename_tpl, spectra_fits_filename,
                        segmaps, version, profile_fwhm, out_tpl, *,
                        n_jobs=1, author="", nb_fwhm=2,
@@ -341,6 +344,8 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
         Dictionary of the parameters for the ORIGIN run.
     cube_cor_filename: str
         Name of the file containing the correlation cube of the ORIGIN run.
+    cube_std_filename: str
+        Name of the file containing the std cube of the ORIGIN run.
     mask_filename_tpl: str
         Template for the filename of the FITS file containing the mask of
         a source. The template is formatted with the id of the source.
@@ -386,6 +391,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             source_lines=source_lines,
             origin_params=origin_params,
             cube_cor_filename=cube_cor_filename,
+            cube_std_filename=cube_std_filename,
             mask_filename=mask_filename_tpl % source_id,
             skymask_filename=skymask_filename_tpl % source_id,
             spectra_fits_filename=spectra_fits_filename,
