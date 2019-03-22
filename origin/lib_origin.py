@@ -926,7 +926,9 @@ def compute_thresh_gaussfit(data, pfa, bins='fd'):
     ksel = x < xcut
     g2 = fit_g(g1, x[ksel], histO2[ksel])
     mea, std = (g2.mean.value, g2.stddev.value)
-    thresO2 = mea - std * coef
+
+    # make sure to return float, not np.float64
+    thresO2 = float(mea - std * coef)
 
     return histO2, frecO2, thresO2, mea, std
 
@@ -1358,7 +1360,8 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
         logger.info('Interpolated Threshold %.2f Detection %d for Purity %.2f',
                     threshold, detect, purity)
 
-    return threshold, res
+    # make sure to return float, not np.float64
+    return float(threshold), res
 
 
 def LS_deconv_wgt(data_in, var_in, psf_in):
