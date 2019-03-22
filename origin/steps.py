@@ -1147,6 +1147,7 @@ class SaveSources(Step):
             cat3_lines=orig.Cat3_lines,
             origin_params=orig.param,
             cube_cor_filename=os.path.join(outpath, 'cube_correl.fits'),
+            cube_std_filename=os.path.join(outpath, 'cube_std.fits'),
             mask_filename_tpl=orig.param['mask_filename_tpl'],
             skymask_filename_tpl=orig.param['skymask_filename_tpl'],
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),

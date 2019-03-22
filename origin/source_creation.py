@@ -16,7 +16,7 @@ from .version import __version__ as origin_version
 
 
 def create_source(source_id, source_table, source_lines, origin_params,
-                  cube_cor_filename, mask_filename, skymask_filename,
+                  cube_cor_filename, cube_std_filename, mask_filename, skymask_filename,
                   spectra_fits_filename, segmaps, version, source_ts,
                   profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
@@ -36,6 +36,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
         Dictionary of the parameters for the ORIGIN run.
     cube_cor_filename: str
         Name of the file containing the correlation cube of the ORIGIN run.
+    cube_std_filename: str
+        Name of the file containing the std cube of the ORIGIN run.
     mask_filename: str
         Name of the file containing the mask of the source.
     skymask_filename: str:
@@ -168,7 +170,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     if source.COMP_CAT:
         cube_ori = Cube(cube_std_filename, convert_float64=False)
-        source.add_cube(cube_ori, "ORI_STD", size=mask_size, unit_size=None)
+        source.add_cube(cube_ori, "ORI_SNCUBE", size=mask_size, unit_size=None)
         cube_ori = source.cubes['ORI_SNCUBE']
     else:
         cube_ori = Cube(cube_cor_filename, convert_float64=False)
@@ -201,9 +203,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
                            sky_mask="ORI_MASK_SKY", skysub=True)
     source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                            sky_mask="ORI_MASK_SKY", skysub=False)
-    source.spectra['ORI_CORR'] = (
-        source.cubes["ORI_CORREL"] *
-        source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+    if source.COMP_CAT:
+            source.spectra['ORI_CORR'] = (
+            source.cubes["ORI_SNCUBE"] *
+            source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
+    else:
+            source.spectra['ORI_CORR'] = (
+            source.cubes["ORI_CORREL"] *
+            source.images['ORI_MASK_OBJ']).mean(axis=(1, 2))
 
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
@@ -321,7 +328,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
 
 def create_all_sources(cat3_sources, cat3_lines, origin_params,
-                       cube_cor_filename, mask_filename_tpl,
+                       cube_cor_filename, cube_std_filename, mask_filename_tpl,
                        skymask_filename_tpl, spectra_fits_filename,
                        segmaps, version, profile_fwhm, out_tpl, *,
                        n_jobs=1, author="", nb_fwhm=2,
@@ -338,6 +345,8 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
         Dictionary of the parameters for the ORIGIN run.
     cube_cor_filename: str
         Name of the file containing the correlation cube of the ORIGIN run.
+    cube_std_filename: str
+        Name of the file containing the std cube of the ORIGIN run.
     mask_filename_tpl: str
         Template for the filename of the FITS file containing the mask of
         a source. The template is formatted with the id of the source.
@@ -383,6 +392,7 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
             source_lines=source_lines,
             origin_params=origin_params,
             cube_cor_filename=cube_cor_filename,
+            cube_std_filename=cube_std_filename,
             mask_filename=mask_filename_tpl % source_id,
             skymask_filename=skymask_filename_tpl % source_id,
             spectra_fits_filename=spectra_fits_filename,
