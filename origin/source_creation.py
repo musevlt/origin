@@ -166,13 +166,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.add_FSF(data_cube, fieldmap=origin_params['fieldmap'])
     data_cube = source.cubes['MUSE_CUBE']
 
-    cube_correl = Cube(cube_cor_filename, convert_float64=False)
-    source.add_cube(cube_correl, "ORI_CORREL", size=mask_size, unit_size=None)
-    cube_correl = source.cubes['ORI_CORREL']
-
-    # TODO,in case COMP_CAT save also the corresponding mini-cube
-    #if source.COMP_CAT:
-    #    source.add_cube(cube_sn, "ORI_SNCUBE", size=mask_size, unit_size=None)
+    if source.COMP_CAT:
+        cube_ori = Cube(cube_std_filename, convert_float64=False)
+        source.add_cube(cube_ori, "ORI_STD", size=mask_size, unit_size=None)
+        cube_ori = source.cubes['ORI_SNCUBE']
+    else:
+        cube_ori = Cube(cube_cor_filename, convert_float64=False)
+        source.add_cube(cube_ori, "ORI_CORREL", size=mask_size, unit_size=None)
+        cube_ori = source.cubes['ORI_CORREL']
 
     # Table of sources around the exported sources.
     radius = mask_size / 2
@@ -186,7 +187,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # Maps
     # The white map was added when adding the MUSE cube.
-    source.images["ORI_MAXMAP"] = cube_correl.max(axis=0)
+    source.images["ORI_MAXMAP"] = cube_ori.max(axis=0)
     # Using add_image, the image size is taken from the white map.
     source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
@@ -290,23 +291,19 @@ def create_source(source_id, source_table, source_lines, origin_params,
             [f"NB_LINE_{num_line}", lbda_ori, nb_fwhm * fwhm_ori, 10., 3.])
 
         source.add_narrow_band_image_lbdaobs(
-            cube_correl, f"ORI_CORR_{num_line}", lbda=lbda_ori,
+            cube_ori, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm*fwhm_ori, method='max', subtract_off=False)
 
-        if not source.COMP_CAT:
-            # Compute the spectra weighted by the correlation map for the current line
-            tags = [f"ORI_CORR_{num_line}"]
-            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                                       sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
-            source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                                       sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
+        # Compute the spectra weighted by the correlation map for the current line
+        tags = [f"ORI_CORR_{num_line}"]
+        source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                               sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
+        source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
+                               sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
 
-    if source.COMP_CAT:
-        source.header["REFSPEC"] = "MUSE_PSF_SKYSUB"
-    else:
-        # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
-        num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
-        source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
+    # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
+    num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
+    source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
 
     hdulist.close()
 
