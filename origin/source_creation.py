@@ -97,6 +97,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source.header["OR_SEG"] = (source_info['seg_label'],
                                "Label in the segmentation map")
     source.header["OR_V"] = origin_version, "ORIGIN version"
+    source.header["OR_FLUX"] = source_info['flux'], "flux maximum in all lines"
+    source.header["OR_PMAX"] = source_info['purity'], "maximum purity in all lines"
+    if not np.isnan(source_info['STD']):
+        source.header["OR_STD"] = source_info['STD'], "STD max value in all lines"
+        source.header["OR_nSTD"] = source_info['nsigSTD'], "max of STD/std(STD) in all lines"
+    if not np.isnan(source_info['T_GLR']):
+        source.header["OR_TGLR"] = source_info['T_GLR'], "T_GLR max value in all lines"
+        source.header["OR_nTGLR"] = source_info['nsigTGLR'], "max of T_GLR/std(T_GLR) in all lines"
 
     # source_header_keyword: (key_in_origin_param, description)
     parameters_to_add = {
@@ -148,7 +156,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
         else:
             add_keyword(keyword, *val, origin_params)
 
-    source.header["COMP_CAT"] = source_info['comp']
+    source.header["COMP_CAT"] = source_info['comp'], '1/0 (1=Pre-detected in STD, 0=detected in CORREL)'
     if source.COMP_CAT:
         threshold_keyword, purity_keyword = "threshold_std", "purity_std"
     else:
@@ -234,14 +242,16 @@ def create_source(source_id, source_table, source_lines, origin_params,
         ("FWHM", u.Angstrom, ".2f"),
         ("FLUX", u.erg / (u.s * u.cm**2), ".1f"),
         ("GLR", None, ".1f"),
+        ("nGLR", None, ".1f"),
         ("PROF", None, None),
-        ("PURITY", None, ".2f"),
+        ("PURITY", None, ".2f"),      
     ])
 
     # If the line is a complementary one, the GLR column is replace by STD
     if source.COMP_CAT:
         line_columns = list(line_columns)
         line_columns[6] = "STD"
+        line_columns[7] = "nSTD"
 
     # We put all the ORIGIN lines in an ORI_LINES tables but keep only the
     # unique lines in the LINES tables.
@@ -258,13 +268,15 @@ def create_source(source_id, source_table, source_lines, origin_params,
                     data_cube.wave.get_step(unit=u.Angstrom))
         if source.COMP_CAT:
             glr_std = line['STD']
+            nglr_std = line['nsigSTD']
         else:
             glr_std = line['T_GLR']
+            nglr_std = line['nsigTGLR']
 
         source.add_line(
             cols=line_columns,
             values=[num_line, line['ra'], line['dec'], lbda_ori, fwhm_ori,
-                    line['flux'], glr_std, prof, line['purity']],
+                    line['flux'], glr_std, nglr_std, prof, line['purity']],
             units=line_units,
             fmt=line_fmt,
             desc=None)

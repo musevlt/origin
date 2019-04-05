@@ -11,7 +11,7 @@ from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.modeling.models import Gaussian1D
 from astropy.nddata import overlap_slices
 from astropy.stats import gaussian_sigma_to_fwhm
-from astropy.table import Table, Column
+from astropy.table import Table, Column, join
 from functools import wraps
 from joblib import Parallel, delayed
 from numpy import fft
@@ -1882,7 +1882,49 @@ def unique_sources(table):
 
     return source_table
 
+def add_tglr_stat(src_table, lines_table, correl, std):
+    """Add TGLR and STD detection statistics to the source and line table
 
+      The following column is added to the line table:
+
+    - nsigTGLR: the  ratio of the line Tglr value with the standard deviation of the TGLR cube (for comp = 0 lines)
+    - nsigSTD: the  ratio of the line STD value with the standard deviation of the STD cube (for comp = 1 lines)
+    
+    The follwing columns are added to the source table
+    - nsigTGLR: the maximum of nstd_Tglr for all detected lines,
+    - T_GLR the maxium of Tglr for all detected lines with comp=0
+    - STD: the maximum of Std for all detected lines with comp=1
+    - nsigSTD: the maximum of nstd_STD for all detected lines with comp=1,
+    - purity: the maximum of purity for all detected lines 
+    - flux: the maximum of flux of all detected lines 
+    
+
+    Parameters
+    ----------
+    lines_table: astropy.table.Table
+        A table of lines from ORIGIN. The table must contain the columns: ID,
+        flux, Tglr, purity.
+    src_table: astropy.table.Table
+        A table of source from ORIGIN. The table must contain the columns: ID
+    correl : array
+        cube of T_GLR values of maximum correlation
+    std : array
+        cube of STD values 
+
+    """
+
+    std_correl = np.std(correl)
+    lines_table['nsigTGLR'] = lines_table['T_GLR']/std_correl
+    std_std = np.std(std)
+    lines_table['nsigSTD'] = lines_table['STD']/std_std 
+
+    cols = ['ID','flux','STD','nsigSTD','T_GLR','nsigTGLR','purity']
+    lines = lines_table[cols]
+    glines = lines.group_by('ID')
+    res = glines.groups.aggregate(np.max)
+    new_src_table = join(src_table, res)
+    return new_src_table
+    
 def merge_similar_lines(table, *, z_pix_threshold=5):
     """Merge and flag possibily duplicated lines.
 

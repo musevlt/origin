@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import warnings
+import datetime
 
 from astropy.io import fits
 from astropy.utils import lazyproperty
@@ -1128,3 +1129,72 @@ class ORIGIN(steps.LogMixin):
 
         ax.legend()
         ax.set_title('Cumulative histogram of min/max loc')
+        
+    def timestat(self, table=False):
+        """ return cpu usage by steps 
+        if table=True, an astropy table is returned """
+        if table:
+            name = []
+            exdate = []
+            extime = []
+            tot = 0
+            for s in self.steps.items():
+                if 'execution_date' in s[1].meta.keys():
+                    name.append(s[1].method_name)
+                    exdate.append(s[1].meta['execution_date'])
+                    t = s[1].meta['runtime']
+                    tot += t
+                    extime.append(datetime.timedelta(seconds=t))
+            name.append('Total')
+            exdate.append('')
+            extime.append(str(datetime.timedelta(seconds=tot)))
+            return Table(data=[name,exdate,extime], names=['Step','Exec Date','Exec Time'], masked=True)
+        else:
+            tot = 0
+            for s in self.steps.items():
+                name = s[1].method_name
+                if 'execution_date' in s[1].meta.keys():
+                    exdate = s[1].meta['execution_date']
+                    t = s[1].meta['runtime']
+                    tot += t
+                    extime = datetime.timedelta(seconds=t)
+                    self.logger.info('%s executed: %s run time: %s',name,exdate,str(extime))
+            self.logger.info('*** Total run time: %s',str(datetime.timedelta(seconds=tot)))
+            
+            
+    def stat(self):
+        """ print detection summary """
+        d = self._get_stat()
+        self.logger.info('ORIGIN PCA pfa %.2f Back Purity: %.2f '
+                         'Threshold: %.2f Bright Purity %.2f Threshold %.2f',
+                         d['pca'],d['back_purity'],d['back_threshold'],
+                         d['bright_purity'],d['bright_threshold'])
+        self.logger.info('Nb of detected lines: %d', d['tot_nlines'])
+        self.logger.info('Nb of sources Total: %d Background: %d Cont: %d',
+                         d['tot_nsources'],d['back_nsources'],d['cont_nsources'])
+        self.logger.info('Nb of sources detected in faint (after PCA): %d '
+                             'in std (before PCA): %d',d['faint_nsources'],d['bright_nsources'])
+        
+    def _get_stat(self):
+        p = self.param
+        cat = self.Cat3_sources
+        if cat:
+            back = cat[cat['seg_label']==0]
+            cont = cat[cat['seg_label']>0]
+            bright = cat[cat['comp']==1]
+            faint = cat[cat['comp']==0]
+        d = dict(pca=p['compute_PCA_threshold']['params']['pfa_test'],
+                 back_purity=p['purity'],
+                 back_threshold=p['threshold'],
+                 bright_purity=p['purity_std'],
+                 bright_threshold=p['threshold_std'],
+                 tot_nlines=len(self.Cat3_lines),
+                 tot_nsources=len(cat),
+                 back_nsources=len(back),
+                 cont_nsources=len(cont),
+                 faint_nsources=len(faint),
+                 bright_nsources=len(bright)
+                 )
+        return d    
+    
+    

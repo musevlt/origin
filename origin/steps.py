@@ -37,6 +37,7 @@ from .lib_origin import (
     purity_estimation,
     spatiospectral_merging,
     unique_sources,
+    add_tglr_stat,
 )
 
 
@@ -991,6 +992,7 @@ class CleanResults(Step):
       considering their z positions.  The lines are all marked as merged in
       the brightest line of the group (but are kept in the line table).
     - A table of unique sources is created.
+    - Statistical detection info is added on the 2 resulting catalogs
 
     Attributes added to the ORIGIN object:
     - `Cat3_lines`: clean table of lines;
@@ -1013,6 +1015,9 @@ class CleanResults(Step):
         self.Cat3_lines = merge_similar_lines(
             orig.Cat2, z_pix_threshold=merge_lines_z_threshold)
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
+        # add some statistics to Cat3_lines and Cat3_sources
+        self.Cat3_sources = add_tglr_stat(self.Cat3_sources, self.Cat3_lines, 
+                                          orig.cube_correl.data, orig.cube_std.data)
 
         self._loginfo('Save the unique source catalog in self.Cat3_sources'
                       ' (%d sources)', len(orig.Cat3_sources))
