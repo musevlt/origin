@@ -244,14 +244,14 @@ def create_source(source_id, source_table, source_lines, origin_params,
                   None,
                   None,
                   None]
-    line_fmt = ["d",
+    line_fmt = [None,
                 ".2f",
                 ".2f",
                 ".2f",
                 ".2f",
                 ".1f",
                 ".1f",
-                "d",
+                None,
                 ".2f"]
     # If the line is a complementary one, the GLR column is replace by STD
     if source.COMP_CAT:
