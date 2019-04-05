@@ -37,10 +37,10 @@ from .lib_origin import timeit
 from .version import __version__
 
 try:
-    # With PyYaml 5.1, load and safe have been renamed to full_* and
+    # With PyYaml 5.1, load and safe have been renamed to unsafe_* and
     # replaced by the safe_* functions. We need the full ones to
     # be able to dump Python objects, yay!
-    from yaml import full_load as load_yaml, dump as dump_yaml
+    from yaml import unsafe_load as load_yaml, dump as dump_yaml
 except ImportError:
     from yaml import load as load_yaml, dump as dump_yaml
 
