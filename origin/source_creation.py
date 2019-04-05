@@ -226,35 +226,21 @@ def create_source(source_id, source_table, source_lines, origin_params,
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
     # Content of the line table in the source
-    line_columns = ["NUM_LINE",
-                    "RA",
-                    "DEC",
-                    "LBDA_OBS",
-                    "FWHM",
-                    "FLUX",
-                    "GLR",
-                    "PROF",
-                    "PURITY"]
-    line_units = [None,
-                  u.deg,
-                  u.deg,
-                  u.Angstrom,
-                  u.Angstrom,
-                  u.erg / (u.s * u.cm**2),
-                  None,
-                  None,
-                  None]
-    line_fmt = [None,
-                ".2f",
-                ".2f",
-                ".2f",
-                ".2f",
-                ".1f",
-                ".1f",
-                None,
-                ".2f"]
+    line_columns, line_units, line_fmt = zip(*[
+        ("NUM_LINE", None, None),
+        ("RA", u.deg, ".2f"),
+        ("DEC", u.deg, ".2f"),
+        ("LBDA_OBS", u.Angstrom, ".2f"),
+        ("FWHM", u.Angstrom, ".2f"),
+        ("FLUX", u.erg / (u.s * u.cm**2), ".1f"),
+        ("GLR", None, ".1f"),
+        ("PROF", None, None),
+        ("PURITY", None, ".2f"),
+    ])
+
     # If the line is a complementary one, the GLR column is replace by STD
     if source.COMP_CAT:
+        line_columns = list(line_columns)
         line_columns[6] = "STD"
 
     # We put all the ORIGIN lines in an ORI_LINES tables but keep only the
@@ -290,7 +276,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
         source.add_narrow_band_image_lbdaobs(
             data_cube, f"NB_LINE_{num_line}", lbda=lbda_ori,
-            width=nb_fwhm*fwhm_ori, method='sum', subtract_off=True,
+            width=nb_fwhm * fwhm_ori, method='sum', subtract_off=True,
             margin=10., fband=3.)
 
         nb_par_rows.append(
@@ -298,7 +284,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
         source.add_narrow_band_image_lbdaobs(
             cube_ori, f"ORI_CORR_{num_line}", lbda=lbda_ori,
-            width=nb_fwhm*fwhm_ori, method='max', subtract_off=False)
+            width=nb_fwhm * fwhm_ori, method='max', subtract_off=False)
 
         # Compute the spectra weighted by the correlation map for the current line
         tags = [f"ORI_CORR_{num_line}"]
