@@ -1,7 +1,6 @@
 import numpy as np
 import os
 import pytest
-import shutil
 
 from astropy.io import fits
 from astropy.table import Table
@@ -42,124 +41,125 @@ def test_init_load(tmpdir):
     assert newpath.join('orig', 'orig.yaml').exists()
 
 
-def test_origin(caplog):
-    """test ORIGIN"""
-    # Number of subcubes for the spatial segmentation
+def test_origin(caplog, tmpdir):
+    """Test the full ORIGIN process."""
 
-    try:
-        my_origin = ORIGIN.init(MINICUBE, name='tmp', loglevel='INFO')
-        my_origin.write()
+    orig = ORIGIN.init(MINICUBE, name='tmp', loglevel='INFO', path=str(tmpdir))
+    orig.write()
 
-        # test that log level is correctly reloaded, then change it
-        my_origin = ORIGIN.load('tmp')
-        assert my_origin.logger.handlers[0].level == 20
-        my_origin.set_loglevel('DEBUG')
-        assert my_origin.logger.handlers[0].level == 10
+    origfolder = str(tmpdir.join('tmp'))
 
-        my_origin.step01_preprocessing()
-        assert my_origin.ima_dct is not None
-        assert my_origin.ima_std is not None
-        my_origin.write()
+    # test that log level is correctly reloaded, then change it
+    orig = ORIGIN.load(origfolder)
+    assert orig.logger.handlers[0].level == 20
+    orig.set_loglevel('DEBUG')
+    assert orig.logger.handlers[0].level == 10
 
-        my_origin = ORIGIN.load('tmp')
-        my_origin.step02_areas()
-        assert my_origin.param['nbareas'] == 1
-        assert list(np.unique(my_origin.areamap._data)) == [1]
-        my_origin.write()
+    orig.step01_preprocessing()
+    assert orig.ima_dct is not None
+    assert orig.ima_std is not None
+    orig.write()
 
-        my_origin = ORIGIN.load('tmp')
-        assert my_origin.param['nbareas'] == 1
-        my_origin.step03_compute_PCA_threshold()
-        my_origin.step04_compute_greedy_PCA()
+    orig = ORIGIN.load(origfolder)
+    orig.step02_areas()
+    assert orig.param['nbareas'] == 1
+    assert list(np.unique(orig.areamap._data)) == [1]
+    orig.write()
 
-        # TGLR computing (normalized correlations)
-        my_origin.step05_compute_TGLR(ncpu=1)
-        # my_origin.step05_compute_TGLR(ncpu=1, NbSubcube=2)
+    orig = ORIGIN.load(origfolder)
+    assert orig.param['nbareas'] == 1
+    orig.step03_compute_PCA_threshold()
+    orig.step04_compute_greedy_PCA()
 
-        # threshold applied on pvalues
-        my_origin.step06_compute_purity_threshold(purity=0.8)
+    # TGLR computing (normalized correlations)
+    orig.step05_compute_TGLR(ncpu=1)
+    # orig.step05_compute_TGLR(ncpu=1, NbSubcube=2)
 
-        # FIXME: threshold is hardcoded for now
-        my_origin.step07_detection(threshold=9.28, segmap=SEGMAP)
+    # threshold applied on pvalues
+    orig.step06_compute_purity_threshold(purity=0.8)
 
-        # estimation
-        my_origin.step08_compute_spectra()
-        my_origin.write()
+    # FIXME: threshold is hardcoded for now
+    orig.step07_detection(threshold=9.28, segmap=SEGMAP)
 
-        cat = Catalog.read('tmp/Cat1.fits')
-        subcat = cat[cat['comp'] == 0]
-        assert np.all(np.isnan(subcat['STD']))
-        # Test that the columns mask is correct. To be tested when we switch
-        # back to a masked table
-        # assert np.all(subcat['T_GLR'].mask == False)
-        # assert np.all(subcat['STD'].mask == True)
+    # estimation
+    orig.step08_compute_spectra()
+    orig.write()
 
-        # cleaned results
-        my_origin = ORIGIN.load('tmp', newname='tmp2')
-        my_origin.step09_clean_results()
-        my_origin.write()
+    cat = Catalog.read(str(tmpdir.join('tmp', 'Cat1.fits')))
+    subcat = cat[cat['comp'] == 0]
+    assert np.all(np.isnan(subcat['STD']))
+    # Test that the columns mask is correct. To be tested when we switch
+    # back to a masked table
+    # assert np.all(subcat['T_GLR'].mask == False)
+    # assert np.all(subcat['STD'].mask == True)
 
-        # check that the catalog version was saves
-        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_lines.fits').meta
-        assert "CAT3_TS" in Catalog.read('tmp2/Cat3_sources.fits').meta
+    # cleaned results
+    orig = ORIGIN.load(origfolder, newname='tmp2')
+    orig.step09_clean_results()
+    orig.write()
 
-        # create masks
-        my_origin = ORIGIN.load('tmp2')
-        my_origin.step10_create_masks()
-        my_origin.write()
+    # check that the catalog version was saves
+    assert "CAT3_TS" in Catalog.read(
+        str(tmpdir.join('tmp2', 'Cat3_lines.fits'))).meta
+    assert "CAT3_TS" in Catalog.read(
+        str(tmpdir.join('tmp2', 'Cat3_sources.fits'))).meta
 
-        # list of source objects
-        my_origin = ORIGIN.load('tmp2')
-        my_origin.step11_save_sources("0.1")
-        my_origin.step11_save_sources("0.1", n_jobs=2, overwrite=True)
+    # create masks
+    origfolder2 = str(tmpdir.join('tmp2'))
+    orig = ORIGIN.load(origfolder2)
+    orig.step10_create_masks()
+    orig.write()
 
-        my_origin.info()
-        with open(my_origin.logfile) as f:
-            log = f.read().splitlines()
-            assert 'Create the final catalog...' in log[-2]
+    # list of source objects
+    orig = ORIGIN.load(origfolder2)
+    orig.step11_save_sources("0.1")
+    orig.step11_save_sources("0.1", n_jobs=2, overwrite=True)
 
-        tbl = my_origin.timestat(table=True)
-        assert len(tbl) == 12
-        assert tbl.colnames == ['Step', 'Exec Date', 'Exec Time']
+    orig.info()
+    with open(orig.logfile) as f:
+        log = f.read().splitlines()
+        assert 'Create the final catalog...' in log[-2]
 
-        caplog.clear()
-        my_origin.timestat()
-        rec = caplog.records
-        assert rec[0].message.startswith('step01_preprocessing executed:')
-        assert rec[10].message.startswith('step11_save_sources executed:')
-        assert rec[11].message.startswith('*** Total run time:')
+    tbl = orig.timestat(table=True)
+    assert len(tbl) == 12
+    assert tbl.colnames == ['Step', 'Exec Date', 'Exec Time']
 
-        caplog.clear()
-        my_origin.stat()
-        assert [rec.message for rec in caplog.records] == [
-            'ORIGIN PCA pfa 0.01 Back Purity: 0.80 Threshold: 9.28 ' 'Bright Purity 0.80 Threshold 5.46',
-            'Nb of detected lines: 17',
-            'Nb of sources Total: 8 Background: 4 Cont: 4',
-            'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2']
+    caplog.clear()
+    orig.timestat()
+    rec = caplog.records
+    assert rec[0].message.startswith('step01_preprocessing executed:')
+    assert rec[10].message.startswith('step11_save_sources executed:')
+    assert rec[11].message.startswith('*** Total run time:')
 
-        cat = Catalog.read('tmp2/tmp2.fits')
-        assert len(cat) == 8
+    caplog.clear()
+    orig.stat()
+    assert [rec.message for rec in caplog.records] == [
+        'ORIGIN PCA pfa 0.01 Back Purity: 0.80 Threshold: 9.28 '
+        'Bright Purity 0.80 Threshold 5.46',
+        'Nb of detected lines: 17',
+        'Nb of sources Total: 8 Background: 4 Cont: 4',
+        'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2'
+    ]
 
-        # test returned sources are valid
-        src1 = Source.from_file('./tmp2/sources/source-00001.fits')
-        src2 = Source.from_file('./tmp2/sources/source-00002.fits')
-        # FIXME: check if this test is really useful
-        # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
-        assert set(ima.shape for ima in src1.images.values()) == {(25, 25)}
-        assert src1.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
-        assert "SRC_TS" in src1.header
-        assert src1.header["CAT3_TS"] == src2.header["CAT3_TS"]
-        assert src1.header["SRC_TS"] == src2.header["SRC_TS"]
-    finally:
-        # Cleanup (try to close opened files)
-        for h in my_origin.logger.handlers:
-            h.close()
+    cat = Catalog.read(str(tmpdir.join('tmp2', 'tmp2.fits')))
+    assert len(cat) == 8
 
-        try:
-            shutil.rmtree('tmp')
-            shutil.rmtree('tmp2')
-        except OSError:
-            print('Failed to remove tmp directories')
+    # test returned sources are valid
+    src1 = Source.from_file(str(tmpdir.join('tmp2', 'sources',
+                                            'source-00001.fits')))
+    src2 = Source.from_file(str(tmpdir.join('tmp2', 'sources',
+                                            'source-00002.fits')))
+    # FIXME: check if this test is really useful
+    # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
+    assert set(ima.shape for ima in src1.images.values()) == {(25, 25)}
+    assert src1.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
+    assert "SRC_TS" in src1.header
+    assert src1.header["CAT3_TS"] == src2.header["CAT3_TS"]
+    assert src1.header["SRC_TS"] == src2.header["SRC_TS"]
+
+    # Cleanup (try to close opened files)
+    for h in orig.logger.handlers:
+        h.close()
 
 
 def test_merging():
