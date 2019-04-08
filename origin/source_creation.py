@@ -244,7 +244,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
         ("GLR", None, ".1f"),
         ("nGLR", None, ".1f"),
         ("PROF", None, None),
-        ("PURITY", None, ".2f"),      
+        ("PURITY", None, ".2f"),
     ])
 
     # If the line is a complementary one, the GLR column is replace by STD

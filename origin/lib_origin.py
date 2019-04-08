@@ -261,7 +261,7 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
     # convolve with PSF
     if fwhm_fsf > 0:
         fwhm_pix = int(fwhm_fsf) // 2
-        size = fwhm_pix*2 + 1
+        size = fwhm_pix * 2 + 1
         disc = np.hypot(*list(np.mgrid[:size, :size] - fwhm_pix)) < fwhm_pix
         mask = fftconvolve(mask, disc, mode='same')
         mask = mask > 1e-9
@@ -1342,7 +1342,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
 
     n0 = np.array(n0) * (L1 / L0)
     n1 = np.array(n1)
-    est_purity = 1 - n0/n1
+    est_purity = 1 - n0 / n1
     res = Table([threshlist, est_purity, n0.astype(int), n1],
                 names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
     res['Tval_r'].format = '.2f'
@@ -1882,22 +1882,25 @@ def unique_sources(table):
 
     return source_table
 
+
 def add_tglr_stat(src_table, lines_table, correl, std):
-    """Add TGLR and STD detection statistics to the source and line table
+    """Add TGLR and STD detection statistics to the source and line table.
 
-      The following column is added to the line table:
+    The following column is added to the line table:
 
-    - nsigTGLR: the  ratio of the line Tglr value with the standard deviation of the TGLR cube (for comp = 0 lines)
-    - nsigSTD: the  ratio of the line STD value with the standard deviation of the STD cube (for comp = 1 lines)
-    
-    The follwing columns are added to the source table
+    - nsigTGLR: the ratio of the line Tglr value with the standard deviation
+      of the TGLR cube (for comp = 0 lines).
+    - nsigSTD: the ratio of the line STD value with the standard deviation
+      of the STD cube (for comp = 1 lines).
+
+    The following columns are added to the source table
+
     - nsigTGLR: the maximum of nstd_Tglr for all detected lines,
-    - T_GLR the maxium of Tglr for all detected lines with comp=0
+    - T_GLR the maximum of Tglr for all detected lines with comp=0
     - STD: the maximum of Std for all detected lines with comp=1
     - nsigSTD: the maximum of nstd_STD for all detected lines with comp=1,
-    - purity: the maximum of purity for all detected lines 
-    - flux: the maximum of flux of all detected lines 
-    
+    - purity: the maximum of purity for all detected lines
+    - flux: the maximum of flux of all detected lines
 
     Parameters
     ----------
@@ -1909,22 +1912,23 @@ def add_tglr_stat(src_table, lines_table, correl, std):
     correl : array
         cube of T_GLR values of maximum correlation
     std : array
-        cube of STD values 
+        cube of STD values
 
     """
 
     std_correl = np.std(correl)
-    lines_table['nsigTGLR'] = lines_table['T_GLR']/std_correl
+    lines_table['nsigTGLR'] = lines_table['T_GLR'] / std_correl
     std_std = np.std(std)
-    lines_table['nsigSTD'] = lines_table['STD']/std_std 
+    lines_table['nsigSTD'] = lines_table['STD'] / std_std
 
-    cols = ['ID','flux','STD','nsigSTD','T_GLR','nsigTGLR','purity']
+    cols = ['ID', 'flux', 'STD', 'nsigSTD', 'T_GLR', 'nsigTGLR', 'purity']
     lines = lines_table[cols]
     glines = lines.group_by('ID')
     res = glines.groups.aggregate(np.max)
     new_src_table = join(src_table, res)
     return new_src_table
-    
+
+
 def merge_similar_lines(table, *, z_pix_threshold=5):
     """Merge and flag possibily duplicated lines.
 
@@ -2155,7 +2159,7 @@ def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
 
     tbl = Table(rows=res, names=['thresh', 'ndetect', 'ntrue', 'nfalse',
                                  'nmiss'])
-    tbl['purity'] = 1 - tbl['nfalse']/tbl['ndetect']
+    tbl['purity'] = 1 - tbl['nfalse'] / tbl['ndetect']
 
     if plot:
         fig, ax = plt.subplots(figsize=(7, 7))
@@ -2173,7 +2177,7 @@ def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
             # ax.errorbar(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
             #             err_est_purity[ind], fmt='o', label='Estimated Purity')
 
-        ax.plot(tbl['thresh'], 1 - tbl['nmiss']/nref, drawstyle='steps-mid',
+        ax.plot(tbl['thresh'], 1 - tbl['nmiss'] / nref, drawstyle='steps-mid',
                 label='completeness')
         ax.set_ylim((0, 1))
         ax.set_ylabel('purity / completeness')

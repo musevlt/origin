@@ -1016,7 +1016,7 @@ class CleanResults(Step):
             orig.Cat2, z_pix_threshold=merge_lines_z_threshold)
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
         # add some statistics to Cat3_lines and Cat3_sources
-        self.Cat3_sources = add_tglr_stat(self.Cat3_sources, self.Cat3_lines, 
+        self.Cat3_sources = add_tglr_stat(self.Cat3_sources, self.Cat3_lines,
                                           orig.cube_correl.data, orig.cube_std.data)
 
         self._loginfo('Save the unique source catalog in self.Cat3_sources'
