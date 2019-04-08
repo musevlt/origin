@@ -876,13 +876,21 @@ class Detection(Step):
         self._loginfo('kept %d lines from std after filtering', len(unmatched))
 
         if segmap is not None:
+            self.logger.info('Overriding segmap_cont with the given one')
             self.segmap_label = Image(segmap)
             if self.segmap_label.shape != orig.shape[1:]:
                 raise ValueError('segmap does not have the same shape as the '
                                  'processed cube')
-            self.logger.info('Overriding segmap_cont with the given one')
         else:
-            self.segmap_label = orig.segmap_cont
+            self.logger.info('Using segmap_cont with an additional deblending'
+                             'step')
+            from photutils import deblend_sources
+            segm_deblend = deblend_sources(orig.ima_dct.data,
+                                           orig.segmap_cont.data, npixels=5)
+            self.segmap_label = Image(data=segm_deblend.data,
+                                      wcs=orig.segmap_cont.wcs,
+                                      mask=orig.segmap_cont.mask,
+                                      copy=False)
 
         cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = self.segmap_label._data[cat['y0'], cat['x0']]

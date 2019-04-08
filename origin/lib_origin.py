@@ -7,7 +7,6 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 
-from astropy.convolution import Gaussian2DKernel
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.modeling.models import Gaussian1D
 from astropy.nddata import overlap_slices
@@ -19,7 +18,6 @@ from joblib import Parallel, delayed
 from mpdaf.obj import Image
 from numpy import fft
 from numpy.linalg import multi_dot
-from photutils import make_source_mask, detect_sources, deblend_sources
 from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import label as ndi_label, maximum_filter
@@ -309,6 +307,8 @@ def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
         The deblended segmentation map.
 
     """
+    from astropy.convolution import Gaussian2DKernel
+    from photutils import make_source_mask, detect_sources, deblend_sources
     data = image.data
     mask = make_source_mask(data, snr=snr, npixels=npixels,
                             dilate_size=dilate_size)
@@ -328,7 +328,8 @@ def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
 
     segm_deblend = deblend_sources(data, segm, npixels=npixels,
                                    filter_kernel=kernel)
-    return Image(data=segm_deblend.data, wcs=image.wcs, mask=image.mask)
+    return Image(data=segm_deblend.data, wcs=image.wcs, mask=image.mask,
+                 copy=False)
 
 
 def createradvar(cu, ot):
