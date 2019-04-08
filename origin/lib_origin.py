@@ -7,15 +7,19 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 
+from astropy.convolution import Gaussian2DKernel
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.modeling.models import Gaussian1D
 from astropy.nddata import overlap_slices
-from astropy.stats import gaussian_sigma_to_fwhm
+from astropy.stats import (gaussian_sigma_to_fwhm, gaussian_fwhm_to_sigma,
+                           sigma_clipped_stats)
 from astropy.table import Table, Column, join
 from functools import wraps
 from joblib import Parallel, delayed
+from mpdaf.obj import Image
 from numpy import fft
 from numpy.linalg import multi_dot
+from photutils import make_source_mask, detect_sources, deblend_sources
 from scipy import stats, fftpack
 from scipy.signal import fftconvolve
 from scipy.ndimage import label as ndi_label, maximum_filter
@@ -267,6 +271,64 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
         mask = mask > 1e-9
 
     return gamma, ndi_label(mask)[0]
+
+
+def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
+                             maxiters=5, sigma=3, fwhm=3.0, kernelsize=5):
+    """Compute segmentation map using photutils.
+
+    The segmentation map is computed with the following steps:
+
+    - Creation of a mask of sources with the ``snr`` threshold, using
+      `photutils.make_source_mask`.
+    - Estimation of the background statistics with this mask
+      (`astropy.stats.sigma_clipped_stats`), to estimate a refined threshold
+      with ``median + sigma * rms``.
+    - Convolution with a Gaussian kernel.
+    - Creation of the segmentation image, using `photutils.detect_sources`.
+    - Deblending of the segmentation image, using `photutils.deblend_sources`.
+
+    Parameters
+    ----------
+    image : mpdaf.obj.Image
+        The input image.
+    npixels : int
+        The number of connected pixels that an object must have to be detected.
+    snr, dilate_size :
+        See `photutils.make_source_mask`.
+    maxiters, sigma :
+        See `astropy.stats.sigma_clipped_stats`.
+    fwhm : float
+        Kernel size (pixels) for the PSF convolution.
+    kernelsize : int
+        Size of the convolution kernel.
+
+    Returns
+    -------
+    `~mpdaf.obj.Image`
+        The deblended segmentation map.
+
+    """
+    data = image.data
+    mask = make_source_mask(data, snr=snr, npixels=npixels,
+                            dilate_size=dilate_size)
+    bkg_mean, bkg_median, bkg_rms = sigma_clipped_stats(
+        data, sigma=sigma, mask=mask, maxiters=maxiters)
+    threshold = bkg_median + sigma * bkg_rms
+
+    logger = logging.getLogger(__name__)
+    logger.info('Background Median %.2f RMS %.2f Threshold %.2f',
+                bkg_median, bkg_rms, threshold)
+
+    sig = fwhm * gaussian_fwhm_to_sigma
+    kernel = Gaussian2DKernel(sig, x_size=kernelsize, y_size=kernelsize)
+    kernel.normalize()
+    segm = detect_sources(data, threshold, npixels=npixels,
+                          filter_kernel=kernel)
+
+    segm_deblend = deblend_sources(data, segm, npixels=npixels,
+                                   filter_kernel=kernel)
+    return Image(data=segm_deblend.data, wcs=image.wcs, mask=image.mask)
 
 
 def createradvar(cu, ot):
