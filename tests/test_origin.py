@@ -1,7 +1,6 @@
-"""Test interface on ORIGIN software."""
-
 import numpy as np
 import os
+import pytest
 import shutil
 
 from astropy.io import fits
@@ -10,10 +9,37 @@ from mpdaf.sdetect import Source, Catalog
 from origin import ORIGIN
 from origin.lib_origin import spatiospectral_merging
 
-MINICUBE = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                        'minicube.fits')
-SEGMAP = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                      'segmap.fits')
+CURDIR = os.path.dirname(os.path.abspath(__file__))
+MINICUBE = os.path.join(CURDIR, 'minicube.fits')
+SEGMAP = os.path.join(CURDIR, 'segmap.fits')
+
+
+def test_attrs(tmpdir):
+    orig = ORIGIN.init(MINICUBE, name='orig', path=str(tmpdir))
+
+    attrs = dir(orig)
+    # Check step attributes
+    assert 'Cat3_sources' in attrs
+    assert 'cube_faint' in attrs
+    # Check step methods
+    assert 'step03_compute_PCA_threshold' in attrs
+    # Check params
+    assert 'threshold_correl' in attrs
+    # missing attributes
+    with pytest.raises(AttributeError):
+        orig.foo_bar_baz
+
+
+def test_init_load(tmpdir):
+    orig = ORIGIN.init(MINICUBE, name='orig', path=str(tmpdir))
+    orig.write()
+    assert tmpdir.join('orig', 'orig.yaml').exists()
+
+    newpath = tmpdir.join('new')
+    os.makedirs(newpath)
+    orig.write(path=str(newpath), erase=True)
+    orig = ORIGIN.load(str(newpath.join('orig')))
+    assert newpath.join('orig', 'orig.yaml').exists()
 
 
 def test_origin(caplog):
