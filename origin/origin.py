@@ -261,7 +261,7 @@ class ORIGIN(steps.LogMixin):
         return self.cube.var.filled(np.inf)
 
     @classmethod
-    def init(cls, cube, segmap=None, fieldmap=None, profiles=None, PSF=None,
+    def init(cls, cube, fieldmap=None, profiles=None, PSF=None,
              LBDA_FWHM_PSF=None, FWHM_PSF=None, PSF_size=25, name='origin',
              path='.', loglevel='DEBUG', logcolor=False):
         """Create a ORIGIN object.
@@ -304,9 +304,6 @@ class ORIGIN(steps.LogMixin):
             Use color for the logger levels.
 
         """
-        if segmap is not None:
-            warnings.warn('External segmap is no more needed/used',
-                          UserWarning)
         return cls(cube, path=path, name=name, fieldmap=fieldmap,
                    profiles=profiles, PSF=PSF, LBDA_FWHM_PSF=LBDA_FWHM_PSF,
                    FWHM_PSF=FWHM_PSF, PSF_size=PSF_size, loglevel=loglevel,
