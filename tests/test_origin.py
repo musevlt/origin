@@ -16,7 +16,7 @@ SEGMAP = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                       'segmap.fits')
 
 
-def test_origin():
+def test_origin(caplog):
     """test ORIGIN"""
     # Number of subcubes for the spatial segmentation
 
@@ -88,6 +88,28 @@ def test_origin():
         my_origin.step11_save_sources("0.1", n_jobs=2, overwrite=True)
 
         my_origin.info()
+        with open(my_origin.logfile) as f:
+            log = f.read().splitlines()
+            assert 'Create the final catalog...' in log[-2]
+
+        tbl = my_origin.timestat(table=True)
+        assert len(tbl) == 12
+        assert tbl.colnames == ['Step', 'Exec Date', 'Exec Time']
+
+        caplog.clear()
+        my_origin.timestat()
+        rec = caplog.records
+        assert rec[0].message.startswith('step01_preprocessing executed:')
+        assert rec[10].message.startswith('step11_save_sources executed:')
+        assert rec[11].message.startswith('*** Total run time:')
+
+        caplog.clear()
+        my_origin.stat()
+        assert [rec.message for rec in caplog.records] == [
+            'ORIGIN PCA pfa 0.01 Back Purity: 0.80 Threshold: 9.28 ' 'Bright Purity 0.80 Threshold 5.46',
+            'Nb of detected lines: 17',
+            'Nb of sources Total: 8 Background: 4 Cont: 4',
+            'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2']
 
         cat = Catalog.read('tmp2/tmp2.fits')
         assert len(cat) == 8

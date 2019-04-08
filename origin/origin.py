@@ -1177,9 +1177,11 @@ class ORIGIN(steps.LogMixin):
                          d['bright_purity'], d['bright_threshold'])
         self.logger.info('Nb of detected lines: %d', d['tot_nlines'])
         self.logger.info('Nb of sources Total: %d Background: %d Cont: %d',
-                         d['tot_nsources'], d['back_nsources'], d['cont_nsources'])
+                         d['tot_nsources'], d['back_nsources'],
+                         d['cont_nsources'])
         self.logger.info('Nb of sources detected in faint (after PCA): %d '
-                         'in std (before PCA): %d', d['faint_nsources'], d['bright_nsources'])
+                         'in std (before PCA): %d', d['faint_nsources'],
+                         d['bright_nsources'])
 
     def _get_stat(self):
         p = self.param
