@@ -5,6 +5,7 @@
 *.egg-info/
 .coverage
 .coverage.*
+.eggs/
 .tox/
 _githash.py
 tags
