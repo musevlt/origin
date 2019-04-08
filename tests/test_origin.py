@@ -41,6 +41,23 @@ def test_init_load(tmpdir):
     assert newpath.join('orig', 'orig.yaml').exists()
 
 
+def test_psf(caplog, tmpdir):
+    path = str(tmpdir)
+    orig = ORIGIN.init(MINICUBE, name='tmp', loglevel='INFO', path=path)
+
+    psffile = str(tmpdir.join('psf.fits'))
+    fits.writeto(psffile, orig.PSF)
+
+    # To build an ORIGIN with a PSF not present in the header, we must
+    # pass the PSF file
+    orig2 = ORIGIN.init(MINICUBE, name='tmp2', loglevel='INFO', path=path,
+                        PSF=psffile, FWHM_PSF=orig.FWHM_PSF,
+                        LBDA_FWHM_PSF=orig.LBDA_FWHM_PSF)
+
+    assert orig.param['FWHM PSF'] == orig2.param['FWHM PSF']
+    assert orig.param['LBDA FWHM PSF'] == orig2.param['LBDA FWHM PSF']
+
+
 def test_origin(caplog, tmpdir):
     """Test the full ORIGIN process."""
 

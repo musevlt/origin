@@ -16,9 +16,9 @@ from .version import __version__ as origin_version
 
 
 def create_source(source_id, source_table, source_lines, origin_params,
-                  cube_cor_filename, cube_std_filename, mask_filename, skymask_filename,
-                  spectra_fits_filename, segmaps, version, source_ts,
-                  profile_fwhm, *, author="", nb_fwhm=2,
+                  cube_cor_filename, cube_std_filename, mask_filename,
+                  skymask_filename, spectra_fits_filename, segmaps, version,
+                  source_ts, profile_fwhm, *, author="", nb_fwhm=2,
                   expmap_filename=None, save_to=None):
     """Create a MPDAF source.
 
@@ -98,13 +98,20 @@ def create_source(source_id, source_table, source_lines, origin_params,
                                "Label in the segmentation map")
     source.header["OR_V"] = origin_version, "ORIGIN version"
     source.header["OR_FLUX"] = source_info['flux'], "flux maximum in all lines"
-    source.header["OR_PMAX"] = source_info['purity'], "maximum purity in all lines"
+    source.header["OR_PMAX"] = (source_info['purity'],
+                                "maximum purity in all lines")
+
     if not np.isnan(source_info['STD']):
-        source.header["OR_STD"] = source_info['STD'], "STD max value in all lines"
-        source.header["OR_nSTD"] = source_info['nsigSTD'], "max of STD/std(STD) in all lines"
+        source.header["OR_STD"] = (source_info['STD'],
+                                   "STD max value in all lines")
+        source.header["OR_nSTD"] = (source_info['nsigSTD'],
+                                    "max of STD/std(STD) in all lines")
+
     if not np.isnan(source_info['T_GLR']):
-        source.header["OR_TGLR"] = source_info['T_GLR'], "T_GLR max value in all lines"
-        source.header["OR_nTGLR"] = source_info['nsigTGLR'], "max of T_GLR/std(T_GLR) in all lines"
+        source.header["OR_TGLR"] = (source_info['T_GLR'],
+                                    "T_GLR max value in all lines")
+        source.header["OR_nTGLR"] = (source_info['nsigTGLR'],
+                                     "max of T_GLR/std(T_GLR) in all lines")
 
     # source_header_keyword: (key_in_origin_param, description)
     parameters_to_add = {
@@ -156,7 +163,11 @@ def create_source(source_id, source_table, source_lines, origin_params,
         else:
             add_keyword(keyword, *val, origin_params)
 
-    source.header["COMP_CAT"] = source_info['comp'], '1/0 (1=Pre-detected in STD, 0=detected in CORREL)'
+    source.header["COMP_CAT"] = (
+        source_info['comp'],
+        '1/0 (1=Pre-detected in STD, 0=detected in CORREL)'
+    )
+
     if source.COMP_CAT:
         threshold_keyword, purity_keyword = "threshold_std", "purity_std"
     else:
@@ -301,9 +312,11 @@ def create_source(source_id, source_table, source_lines, origin_params,
         # Compute the spectra weighted by the correlation map for the current line
         tags = [f"ORI_CORR_{num_line}"]
         source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                               sky_mask="ORI_MASK_SKY", skysub=True, tags_to_try=tags)
+                               sky_mask="ORI_MASK_SKY", skysub=True,
+                               tags_to_try=tags)
         source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
-                               sky_mask="ORI_MASK_SKY", skysub=False, tags_to_try=tags)
+                               sky_mask="ORI_MASK_SKY", skysub=False,
+                               tags_to_try=tags)
 
     # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
     num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]

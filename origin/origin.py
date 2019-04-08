@@ -43,7 +43,7 @@ try:
     # replaced by the safe_* functions. We need the full ones to
     # be able to dump Python objects, yay!
     from yaml import unsafe_load as load_yaml, dump as dump_yaml
-except ImportError:
+except ImportError:  # pragma: no cover
     from yaml import load as load_yaml, dump as dump_yaml
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
@@ -206,13 +206,13 @@ class ORIGIN(steps.LogMixin):
         # MUSE data cube
         self._loginfo('Read the Data Cube %s', filename)
         self.param['cubename'] = filename
-        self.cube = cub = Cube(filename)
-        self.Nz, self.Ny, self.Nx = self.shape = cub.shape
+        self.cube = Cube(filename)
+        self.Nz, self.Ny, self.Nx = self.shape = self.cube.shape
 
         # RA-DEC coordinates
-        self.wcs = cub.wcs
+        self.wcs = self.cube.wcs
         # spectral coordinates
-        self.wave = cub.wave
+        self.wave = self.cube.wave
 
         # List of spectral profile
         if profiles is None:
@@ -222,12 +222,12 @@ class ORIGIN(steps.LogMixin):
         # FSF
         self.param['fieldmap'] = fieldmap
         self.param['PSF_size'] = PSF_size
-        self._read_fsf(cub, fieldmap=fieldmap, wfields=wfields, PSF=PSF,
+        self._read_fsf(self.cube, fieldmap=fieldmap, wfields=wfields, PSF=PSF,
                        LBDA_FWHM_PSF=LBDA_FWHM_PSF, FWHM_PSF=FWHM_PSF,
                        PSF_size=PSF_size)
 
         # additional images
-        self.ima_white = cub.mean(axis=0) if imawhite is None else imawhite
+        self.ima_white = imawhite if imawhite else self.cube.mean(axis=0)
 
         self.testO2, self.histO2, self.binO2 = None, None, None
 
@@ -286,11 +286,11 @@ class ORIGIN(steps.LogMixin):
             If None, PSF are computed with a Moffat function
             (13x13 pixels, beta=2.6, fwhm1=0.76, fwhm2=0.66,
             lambda1=4750, lambda2=7000)
-        LBDA_FWHM_PSF: list of floats
+        LBDA_FWHM_PSF: list of float
             Value of the FWMH of the PSF in pixel for each wavelength step
             (mean of the fields).
-        FWHM_PSF : array (Nz)
-            FWHM of the PSFs in pixels.
+        FWHM_PSF : list of float
+            FWHM of the PSFs in pixels, one per field.
         PSF_size : int
             Spatial size of the PSF (when reconstructed from the cube header).
         name : str
@@ -488,9 +488,40 @@ class ORIGIN(steps.LogMixin):
 
     def _read_fsf(self, cube, fieldmap=None, wfields=None, PSF=None,
                   LBDA_FWHM_PSF=None, FWHM_PSF=None, PSF_size=25):
-        """Read FSF cube(s), with fieldmap in the case of MUSE mosaic."""
+        """Read FSF cube(s), with fieldmap in the case of MUSE mosaic.
+
+        There are two ways to specify the PSF informations:
+
+        - with the ``PSF``, ``FWHM_PSF``, and ``LBDA_FWHM`` parameters.
+        - or read from the cube header and fieldmap.
+
+        If there are multiple fields, for a mosaic, we also need weight maps.
+        If the cube contains a FSF model and a fieldmap is given, these weight
+        maps are computed automatically.
+
+        Parameters
+        ----------
+        cube : mpdaf.obj.Cube
+            The input datacube.
+        fieldmap : str
+            FITS file containing the field map (mosaic).
+        wfields : list of str
+            List of weight maps (one per fields in the case of MUSE mosaic).
+        PSF : str or list of str
+            Cube FITS filename containing a MUSE PSF per wavelength, or a list
+            of filenames for multiple fields (mosaic).
+        LBDA_FWHM_PSF: list of float
+            Value of the FWMH of the PSF in pixel for each wavelength step
+            (mean of the fields).
+        FWHM_PSF : list of float
+            FWHM of the PSFs in pixels, one per field.
+        PSF_size : int
+            Spatial size of the PSF (when reconstructed from the cube header).
+
+        """
         self.wfields = None
         info = self.logger.info
+
         if PSF is None or FWHM_PSF is None or LBDA_FWHM_PSF is None:
             info('Compute FSFs from the datacube FITS header keywords')
             if 'FSFMODE' not in cube.primary_header:
@@ -525,39 +556,41 @@ class ORIGIN(steps.LogMixin):
                 self.wfields = fmap.compute_weights()
 
             self.param['PSF'] = cube.primary_header['FSFMODE']
-            self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
-            self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
         else:
+            self.LBDA_FWHM_PSF = LBDA_FWHM_PSF
+
             if isinstance(PSF, str):
                 info('Load FSFs from %s', PSF)
                 self.param['PSF'] = PSF
 
-                cubePSF = Cube(PSF)
-                if cubePSF.shape[1] != cubePSF.shape[2]:
+                self.PSF = fits.getdata(PSF)
+                if self.PSF.shape[1] != self.PSF.shape[2]:
                     raise IOError('PSF must be a square image.')
-                if not cubePSF.shape[1] % 2:
+                if not self.PSF.shape[1] % 2:
                     raise IOError('The spatial size of the PSF must be odd.')
-                if cubePSF.shape[0] != self.shape[0]:
+                if self.PSF.shape[0] != self.shape[0]:
                     raise IOError('PSF and data cube have not the same' +
                                   'dimensions along the spectral axis.')
-                self.PSF = cubePSF._data
                 # mean of the fwhm of the FSF in pixel
                 self.FWHM_PSF = np.mean(FWHM_PSF)
                 self.param['FWHM PSF'] = FWHM_PSF.tolist()
                 info('mean FWHM of the FSFs = %.2f pixels', self.FWHM_PSF)
             else:
                 nfields = len(PSF)
-                self.PSF = []
                 self.wfields = []
-                self.FWHM_PSF = FWHM_PSF.tolist()
+                self.PSF = []
+                self.FWHM_PSF = list(FWHM_PSF)
+
                 for n in range(nfields):
                     info('Load FSF from %s', PSF[n])
-                    self.PSF.append(Cube(PSF[n])._data)
-                    # weighted field map
+                    self.PSF.append(fits.getdata(PSF[n]))
                     info('Load weight maps from %s', wfields[n])
-                    self.wfields.append(Image(wfields[n])._data)
+                    self.wfields.append(fits.getdata(wfields[n]))
                     info('mean FWHM of the FSFs (field %d) = %.2f pixels',
                          n, FWHM_PSF[n])
+
+        self.param['FWHM PSF'] = self.FWHM_PSF.tolist()
+        self.param['LBDA FWHM PSF'] = self.LBDA_FWHM_PSF.tolist()
 
     @timeit
     def write(self, path=None, erase=False):
