@@ -61,13 +61,13 @@ def test_origin(caplog, tmpdir):
     orig.write()
 
     orig = ORIGIN.load(origfolder)
-    orig.step02_areas()
-    assert orig.param['nbareas'] == 1
-    assert list(np.unique(orig.areamap._data)) == [1]
+    orig.step02_areas(minsize=30, maxsize=60)
+    assert orig.param['nbareas'] == 4
+    assert list(np.unique(orig.areamap._data)) == [1, 2, 3, 4]
     orig.write()
 
     orig = ORIGIN.load(origfolder)
-    assert orig.param['nbareas'] == 1
+    assert orig.param['nbareas'] == 4
     orig.step03_compute_PCA_threshold()
     orig.step04_compute_greedy_PCA()
 
@@ -136,7 +136,7 @@ def test_origin(caplog, tmpdir):
     assert [rec.message for rec in caplog.records] == [
         'ORIGIN PCA pfa 0.01 Back Purity: 0.80 Threshold: 9.28 '
         'Bright Purity 0.80 Threshold 5.46',
-        'Nb of detected lines: 17',
+        'Nb of detected lines: 18',
         'Nb of sources Total: 8 Background: 4 Cont: 4',
         'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2'
     ]

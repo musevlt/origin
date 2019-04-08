@@ -306,20 +306,20 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
 
     Parameters
     ----------
-    label   :   area
-                The labels of areas
-    MinSize :   number
-                The size of areas under which they need to merge
-    MaxSize :   number
-                The size of areas above which they cant merge
-    option  :   string
-                if 'var' the compactness criteria is used
-                if None the minimum surface criteria is used
+    label : area
+        The labels of areas
+    MinSize : int
+        The size of areas under which they need to merge
+    MaxSize : int
+        The size of areas above which they cant merge
+    option : string
+        if 'var' the compactness criteria is used
+        if None the minimum surface criteria is used
 
     Returns
     -------
-    label :     array
-                The labels of merged areas
+    label : array
+        The labels of merged areas
 
     """
     while True:
@@ -373,33 +373,33 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
 
 @timeit
 def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
-    """Function to create non square area based on continuum test. The full
-    2D image is first segmented in subcube. The area are fused in case they
-    are too small. Thanks to the continuum test, detected sources are
-    fused with associated area. The convex enveloppe of the sources inside
-    each area is then done. Finally all the convex enveloppe growth until
-    using all the pixels
+    """Create non square area based on continuum test.
+
+    The full 2D image is first segmented in subcube. The area are fused in case
+    they are too small. Thanks to the continuum test, detected sources are
+    fused with associated area. The convex enveloppe of the sources inside each
+    area is then done. Finally all the convex enveloppe growth until using all
+    the pixels
 
     Parameters
     ----------
-    nexpmap :   2D array
+    nexpmap : 2D array
         the active pixel of the image
-    MinS    :   number
+    MinS : int
         The size of areas under which they need to merge
-    MaxS    :   number
+    MaxS : int
         The size of areas above which they cant merge
     NbSubcube : int
         Number of subcubes for the spatial segmentation
-    Nx        : int
+    Nx : int
         Number of columns
-    Ny        : int
-                Number of rows
-
+    Ny : int
+        Number of rows
 
     Returns
     -------
-    label :     array
-                label of the fused square
+    label : array
+        label of the fused square
 
     """
     # square area index with borders
@@ -654,17 +654,17 @@ def area_segmentation_final(label, MinS, MaxS):
 
     Parameters
     ----------
-    label :   array
-              label containing convex enveloppe of each area
-    MinS    :   number
-                The size of areas under which they need to merge
-    MaxS    :   number
-                The size of areas above which they cant merge
+    label : array
+        Label containing convex enveloppe of each area
+    MinS : number
+        The size of areas under which they need to merge
+    MaxS : number
+        The size of areas above which they cant merge
 
     Returns
     -------
     sety,setx : array
-                list of index of each label
+        List of index of each label
 
     """
     # if an area is too small
