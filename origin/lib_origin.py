@@ -6,6 +6,7 @@ import itertools
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+import warnings
 
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.modeling.models import Gaussian1D
@@ -13,6 +14,7 @@ from astropy.nddata import overlap_slices
 from astropy.stats import (gaussian_sigma_to_fwhm, gaussian_fwhm_to_sigma,
                            sigma_clipped_stats)
 from astropy.table import Table, Column, join
+from astropy.utils.exceptions import AstropyUserWarning
 from functools import wraps
 from joblib import Parallel, delayed
 from mpdaf.obj import Image
@@ -271,7 +273,7 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
     return gamma, ndi_label(mask)[0]
 
 
-def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
+def compute_deblended_segmap(image, npixels=5, snr=3, dilate_size=11,
                              maxiters=5, sigma=3, fwhm=3.0, kernelsize=5):
     """Compute segmentation map using photutils.
 
@@ -308,7 +310,7 @@ def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
 
     """
     from astropy.convolution import Gaussian2DKernel
-    from photutils import make_source_mask, detect_sources, deblend_sources
+    from photutils import make_source_mask, detect_sources
     data = image.data
     mask = make_source_mask(data, snr=snr, npixels=npixels,
                             dilate_size=dilate_size)
@@ -326,11 +328,19 @@ def compute_segmentation_map(image, npixels=5, snr=3, dilate_size=11,
     segm = detect_sources(data, threshold, npixels=npixels,
                           filter_kernel=kernel)
 
-    segm_deblend = deblend_sources(data, segm, npixels=npixels,
-                                   filter_kernel=kernel)
-    return Image(data=segm_deblend.data, wcs=image.wcs, mask=image.mask,
-                 copy=False)
+    segm_deblend = phot_deblend_sources(image, segm, npixels=npixels,
+                                        filter_kernel=kernel, mode='linear')
+    return segm_deblend
 
+
+def phot_deblend_sources(img, segmap, **kwargs):
+    """Wrapper to catch warnings from deblend_sources."""
+    from photutils import deblend_sources
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=AstropyUserWarning,
+                                message='.*contains negative values.*')
+        deblend = deblend_sources(img.data, segmap, **kwargs)
+    return Image(data=deblend.data, wcs=img.wcs, mask=img.mask, copy=False)
 
 def createradvar(cu, ot):
     """Compute the compactness of areas using variance of position.

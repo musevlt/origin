@@ -18,6 +18,7 @@ from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
 from .lib_origin import (
+    add_tglr_stat,
     area_growing,
     area_segmentation_convex_fusion,
     area_segmentation_final,
@@ -34,10 +35,10 @@ from .lib_origin import (
     estimation_line,
     merge_similar_lines,
     O2test,
+    phot_deblend_sources,
     purity_estimation,
     spatiospectral_merging,
     unique_sources,
-    add_tglr_stat,
 )
 
 
@@ -883,14 +884,9 @@ class Detection(Step):
                                  'processed cube')
         else:
             self.logger.info('Using segmap_cont with an additional deblending'
-                             'step')
-            from photutils import deblend_sources
-            segm_deblend = deblend_sources(orig.ima_dct.data,
-                                           orig.segmap_cont.data, npixels=5)
-            self.segmap_label = Image(data=segm_deblend.data,
-                                      wcs=orig.segmap_cont.wcs,
-                                      mask=orig.segmap_cont.mask,
-                                      copy=False)
+                             ' step')
+            self.segmap_label = phot_deblend_sources(
+                orig.ima_dct, orig.segmap_cont.data, npixels=5, mode='linear')
 
         cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = self.segmap_label._data[cat['y0'], cat['x0']]
