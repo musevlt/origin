@@ -247,8 +247,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
     # Content of the line table in the source
     line_columns, line_units, line_fmt = zip(*[
         ("NUM_LINE", None, None),
-        ("RA", u.deg, ".2f"),
-        ("DEC", u.deg, ".2f"),
+        ("RA_LINE", u.deg, ".2f"),
+        ("DEC_LINE", u.deg, ".2f"),
         ("LBDA_OBS", u.Angstrom, ".2f"),
         ("FWHM", u.Angstrom, ".2f"),
         ("FLUX", u.erg / (u.s * u.cm**2), ".1f"),

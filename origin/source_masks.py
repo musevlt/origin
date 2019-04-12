@@ -92,8 +92,11 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
         max_map = sub_cube.get_image(
             wave=(min_z, max_z), unit_wave=None, method="max")
 
-        segmap = detect_sources(max_map.data, threshold, seg_npixel,
-                                mask=max_map.mask)
+        if max_map.mask is False or max_map.mask.shape == ():
+            segmap = detect_sources(max_map.data, threshold, seg_npixel)
+        else:
+            segmap = detect_sources(max_map.data, threshold, seg_npixel,
+                                    mask=max_map.mask)
 
         # Segment associated to the line (maps are y, x)
         # The position to look for the value of the segment must be integers,
