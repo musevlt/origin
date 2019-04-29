@@ -76,7 +76,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
     source_info = source_table[source_table['ID'] == source_id][0]
 
     # The mask size is used for the cut-out size.
-    mask_size = Image(mask_filename).shape[0]
+    mask = Image(mask_filename)
+    mask_size = mask.shape[0]
 
     data_cube = Cube(origin_params['cubename'], convert_float64=False)
 
@@ -88,8 +89,9 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # Information about the source in the headers
     source.header["SRC_V"] = version, "Source version"
-    source.header["SRC_TS"] = source_ts
-    source.header["CAT3_TS"] = source_table.meta["CAT3_TS"]
+    source.header["SRC_TS"] = source_ts, "Timestamp of the source creation"
+    source.header["CAT3_TS"] = (source_table.meta["CAT3_TS"],
+                                "Timestamp of the catalog creation")
     source.add_history("Source created with ORIGIN", author)
 
     source.header["OR_X"] = source_info['x'], "x position in pixels"
@@ -210,7 +212,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
     # The white map was added when adding the MUSE cube.
     source.images["ORI_MAXMAP"] = cube_ori.max(axis=0)
     # Using add_image, the image size is taken from the white map.
-    source.add_image(Image(mask_filename), "ORI_MASK_OBJ")
+    source.add_image(mask, "ORI_MASK_OBJ")
     source.add_image(Image(skymask_filename), "ORI_MASK_SKY")
     for segmap_type, segmap_filename in segmaps.items():
         source.add_image(Image(segmap_filename), "ORI_SEGMAP_%s" % segmap_type)
@@ -309,7 +311,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
             cube_ori, f"ORI_CORR_{num_line}", lbda=lbda_ori,
             width=nb_fwhm * fwhm_ori, method='max', subtract_off=False)
 
-        # Compute the spectra weighted by the correlation map for the current line
+        # Compute the spectra weighted by the correlation map for the
+        # current line
         tags = [f"ORI_CORR_{num_line}"]
         source.extract_spectra(data_cube, obj_mask="ORI_MASK_OBJ",
                                sky_mask="ORI_MASK_SKY", skysub=True,
@@ -318,7 +321,8 @@ def create_source(source_id, source_table, source_lines, origin_params,
                                sky_mask="ORI_MASK_SKY", skysub=False,
                                tags_to_try=tags)
 
-    # set REFSPEC to the spectrum weighted by the correlation map of the brightest line
+    # set REFSPEC to the spectrum weighted by the correlation map of the
+    # brightest line
     num_max = source.lines['NUM_LINE'][np.argmax(source.lines['FLUX'])]
     source.header["REFSPEC"] = f"ORI_CORR_{num_max}_SKYSUB"
 
