@@ -268,7 +268,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
 
     # We put all the ORIGIN lines in an ORI_LINES tables but keep only the
     # unique lines in the LINES tables.
-    source.add_table(source_lines, "ORI_LINES")
+    source.add_table(source_lines, "ORI_LINES", select_in=None, col_dist=None)
 
     # Table containing the information on the narrow band images.
     nb_par_rows = []
@@ -333,7 +333,7 @@ def create_source(source_id, source_table, source_lines, origin_params,
         dtype=['U20', float, float, float, float],
         rows=nb_par_rows
     )
-    source.add_table(nb_par, "NB_PAR")
+    source.add_table(nb_par, "NB_PAR", select_in=None, col_dist=None)
 
     if save_to is not None:
         source.write(save_to)
