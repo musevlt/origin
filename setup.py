@@ -1,5 +1,6 @@
 import sys
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
 
 if sys.version_info[:2] < (3, 5):
     sys.exit('Origin supports Python 3.5+ only')

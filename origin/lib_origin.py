@@ -1,33 +1,36 @@
 """Contains most of the methods that compose the ORIGIN software."""
 
-from datetime import datetime
-
 import itertools
 import logging
+import warnings
+from datetime import datetime
+from functools import wraps
+from time import time
+
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
-
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.modeling.models import Gaussian1D
 from astropy.nddata import overlap_slices
-from astropy.stats import (gaussian_sigma_to_fwhm, gaussian_fwhm_to_sigma,
-                           sigma_clipped_stats)
-from astropy.table import Table, Column, join
+from astropy.stats import (
+    gaussian_fwhm_to_sigma,
+    gaussian_sigma_to_fwhm,
+    sigma_clipped_stats,
+)
+from astropy.table import Column, Table, join
 from astropy.utils.exceptions import AstropyUserWarning
-from functools import wraps
 from joblib import Parallel, delayed
 from mpdaf.obj import Image
 from numpy import fft
 from numpy.linalg import multi_dot
-from scipy import stats, fftpack
-from scipy.signal import fftconvolve
-from scipy.ndimage import label as ndi_label, maximum_filter
-from scipy.ndimage import binary_erosion, binary_dilation
-from scipy.spatial import ConvexHull, cKDTree
-from scipy.sparse.linalg import svds
+from scipy import fftpack, stats
 from scipy.interpolate import interp1d
-from time import time
+from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.ndimage import label as ndi_label
+from scipy.ndimage import maximum_filter
+from scipy.signal import fftconvolve
+from scipy.sparse.linalg import svds
+from scipy.spatial import ConvexHull, cKDTree
 
 from .source_masks import gen_source_mask
 

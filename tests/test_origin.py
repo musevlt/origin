@@ -1,10 +1,11 @@
-import numpy as np
 import os
-import pytest
 
+import numpy as np
+import pytest
 from astropy.io import fits
 from astropy.table import Table
-from mpdaf.sdetect import Source, Catalog
+from mpdaf.sdetect import Catalog, Source
+
 from origin import ORIGIN
 from origin.lib_origin import spatiospectral_merging
 

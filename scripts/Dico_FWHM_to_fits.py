@@ -5,8 +5,8 @@ Created on Thu Oct 13 15:05:06 2016
 @author: piqueras
 """
 
-from astropy.io import fits
 import numpy as np
+from astropy.io import fits
 from scipy.io import loadmat
 
 Dico = loadmat('origin/Dico_FWHM_2_12.mat')['Dico']

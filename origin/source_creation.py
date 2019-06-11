@@ -1,15 +1,16 @@
 """Source file creation code."""
-from datetime import datetime
+
 import logging
 import os
+from datetime import datetime
 
+import numpy as np
 from astropy import units as u
 from astropy.io import fits
 from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
-import numpy as np
 
 from .lib_origin import ProgressBar
 from .version import __version__ as origin_version

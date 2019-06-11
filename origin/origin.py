@@ -14,25 +14,25 @@ The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 
 """
 
+import datetime
 import glob
 import inspect
 import logging
-import matplotlib.pyplot as plt
-import numpy as np
 import os
 import shutil
 import sys
 import warnings
-import datetime
+from collections import OrderedDict
+from logging.handlers import RotatingFileHandler
 
+import matplotlib.pyplot as plt
+import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from astropy.utils import lazyproperty
-from collections import OrderedDict
-from logging.handlers import RotatingFileHandler
 from mpdaf.log import setup_logging
-from mpdaf.obj import Cube, Image
 from mpdaf.MUSE import FieldsMap
+from mpdaf.obj import Cube, Image
 
 from . import steps
 from .lib_origin import timeit

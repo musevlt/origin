@@ -1,40 +1,40 @@
 import inspect
 import itertools
 import logging
-import numpy as np
 import os
 import shutil
 import time
 import warnings
-
-from astropy.io import fits
-from astropy.table import vstack, Table, Column
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
+
+import numpy as np
+from astropy.io import fits
+from astropy.table import Column, Table, vstack
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
 from .lib_origin import (
+    Compute_GreedyPCA_area,
+    Compute_PCA_threshold,
+    Compute_threshold_purity,
+    Correlation_GLR_test,
+    O2test,
     add_tglr_stat,
     area_growing,
     area_segmentation_convex_fusion,
     area_segmentation_final,
     area_segmentation_sources_fusion,
     area_segmentation_square_fusion,
-    Compute_GreedyPCA_area,
     compute_local_max,
-    Compute_PCA_threshold,
     compute_segmap_gauss,
-    Compute_threshold_purity,
-    Correlation_GLR_test,
     create_masks,
     dct_residual,
     estimation_line,
     merge_similar_lines,
-    O2test,
     phot_deblend_sources,
     purity_estimation,
     spatiospectral_merging,

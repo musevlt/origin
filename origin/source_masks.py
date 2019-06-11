@@ -1,9 +1,10 @@
 """Source map creation code."""
 import logging
 
+import numpy as np
 from astropy import units as u
 from matplotlib import pyplot as plt
-import numpy as np
+
 from photutils import detect_sources
 
 
