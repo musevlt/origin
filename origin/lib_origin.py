@@ -21,6 +21,7 @@ from astropy.table import Column, Table, join
 from astropy.utils.exceptions import AstropyUserWarning
 from joblib import Parallel, delayed
 from mpdaf.obj import Image
+from mpdaf.tools import progressbar
 from numpy import fft
 from numpy.linalg import multi_dot
 from scipy import fftpack, stats
@@ -45,29 +46,6 @@ def timeit(f):
         logger.debug('%s executed in %0.1fs', f.__name__, time() - t0)
         return result
     return timed
-
-
-def isnotebook():  # pragma: no cover
-    try:
-        shell = get_ipython().__class__.__name__
-        if shell == 'ZMQInteractiveShell':
-            return True   # Jupyter notebook or qtconsole
-        elif shell == 'TerminalInteractiveShell':
-            return False  # Terminal running IPython
-        else:
-            return False  # Other type (?)
-    except NameError:
-        return False      # Probably standard Python interpreter
-
-
-def ProgressBar(*args, **kwargs):
-    logger = logging.getLogger('origin')
-    if logging.getLevelName(logger.getEffectiveLevel()) == 'ERROR':
-        kwargs['disable'] = True
-
-    from tqdm import tqdm, tqdm_notebook
-    func = tqdm_notebook if isnotebook() else tqdm
-    return func(*args, **kwargs)
 
 
 def orthogonal_projection(a, b):
@@ -186,7 +164,7 @@ def dct_residual(w_raw, order, var, approx, mask):
         # D0 is typically 3681x11 elements, so it is much more efficient
         # to compute D0^t.S first (note the array is reshaped below)
         cont = [multi_dot([D0, D0.T, w_raw[:, y, x]])
-                for y, x in ProgressBar(np.ndindex(shape), total=nspec)]
+                for y, x in progressbar(np.ndindex(shape), total=nspec)]
 
         # For reference, this is identical to the following scipy version,
         # though scipy is 2x slower than tensordot (probably because it
@@ -222,7 +200,7 @@ def dct_residual(w_raw, order, var, approx, mask):
 
         from numpy.linalg import inv
         cont = []
-        for y, x in ProgressBar(np.ndindex(shape), total=nspec):
+        for y, x in progressbar(np.ndindex(shape), total=nspec):
             if valid[y, x]:
                 res = multi_dot([D0,
                                  inv(np.dot(D0T / var[:, y, x], D0)),
@@ -788,7 +766,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
     nstop = 0
     area_iter = range(1, NbArea + 1)
     if NbArea > 1:
-        area_iter = ProgressBar(area_iter)
+        area_iter = progressbar(area_iter)
 
     for area_ind in area_iter:
         # limits of each spatial zone
@@ -879,7 +857,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     mapO2 = np.zeros(faint.shape[1])
     nstop = 0
 
-    with ProgressBar(total=npix, miniters=0) as bar:
+    with progressbar(total=npix, miniters=0) as bar:
         # greedy loop based on test
         nbiter = 0
         while len(pypx) > 0:
@@ -1096,7 +1074,7 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     nfields = len(fsf)
     fields = range(nfields)
     if nfields > 1:
-        fields = ProgressBar(fields)
+        fields = progressbar(fields)
 
     if nthreads != 1:
         # copy the arrays because otherwise joblib's memmap handling fails
@@ -1107,7 +1085,7 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
         for nf in fields:
             # convolve spatially each spectral channel by the FSF, and do the
             # same for the norm (inverse variance)
-            res = parallel(ProgressBar([
+            res = parallel(progressbar([
                 delayed(_convolve_fsf)(fsf[nf][i], cube[i],
                                        weights=weights[nf])
                 for i in range(Nz)]))
@@ -1170,7 +1148,7 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     # Then for each pixel we keep the maximum correlation (and min correlation)
     # and the profile number with the max correl.
     with Parallel(n_jobs=nthreads, backend='threading') as parallel:
-        for k in ProgressBar(range(len(prof_cut))):
+        for k in progressbar(range(len(prof_cut))):
             cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
                                              fshape, nthreads, parallel)
             cube_profile = cube_profile[cslice[k]]
@@ -1412,7 +1390,7 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     locm = cube_local_min[cube_local_min > threshmin]
 
     n0, n1 = [], []
-    for thresh in ProgressBar(threshlist):
+    for thresh in progressbar(threshlist):
         n1.append(np.count_nonzero(locM > thresh))
         n0.append(np.count_nonzero(locm > thresh))
 
@@ -1790,7 +1768,7 @@ def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
     cshape = (raw.shape[0], ) + shape
 
     res = []
-    for src in ProgressBar(Cat1):
+    for src in progressbar(Cat1):
         z, y, x = tuple(src[['z0', 'y0', 'x0']])
 
         # extract data around the current position, with margin
@@ -1927,7 +1905,7 @@ def unique_sources(table):
     table_by_id = table.group_by('ID')
 
     result_rows = []
-    for key, group in ProgressBar(
+    for key, group in progressbar(
             zip(table_by_id.groups.keys, table_by_id.groups),
             total=len(table_by_id.groups)):
         group_id = key['ID']
@@ -2049,7 +2027,7 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     # Column containing the row indexes to access them while in groups.
     table.add_column(Column(data=np.arange(len(table)), name="_idx"))
 
-    for group in ProgressBar(table.group_by('ID').groups):
+    for group in progressbar(table.group_by('ID').groups):
         if len(group) == 1:
             continue
 
@@ -2170,7 +2148,7 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
 
     by_id = line_table.group_by('ID')
 
-    for key, group in ProgressBar(zip(by_id.groups.keys, by_id.groups),
+    for key, group in progressbar(zip(by_id.groups.keys, by_id.groups),
                                   total=len(by_id.groups)):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']

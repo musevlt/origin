@@ -4,7 +4,6 @@ import logging
 import numpy as np
 from astropy import units as u
 from matplotlib import pyplot as plt
-
 from photutils import detect_sources
 
 

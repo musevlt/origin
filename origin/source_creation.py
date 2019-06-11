@@ -11,8 +11,8 @@ from astropy.table import Table
 from joblib import Parallel, delayed
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
+from mpdaf.tools import progressbar
 
-from .lib_origin import ProgressBar
 from .version import __version__ as origin_version
 
 
@@ -422,4 +422,4 @@ def create_all_sources(cat3_sources, cat3_lines, origin_params,
         ))
 
     if job_list:
-        Parallel(n_jobs=n_jobs)(ProgressBar(job_list))
+        Parallel(n_jobs=n_jobs)(progressbar(job_list))
