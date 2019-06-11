@@ -321,6 +321,9 @@ class Preprocessing(Step):
         PFA for the segmentation based on the residual.
     local_max_size : int
         Connectivity of contiguous voxels per axis, for the maximum filter.
+    bins : str
+        Method for computing bins for the segmentation of the continuum and of
+        the residual images (see `numpy.histogram_bin_edges`).
 
     Returns
     -------
@@ -356,7 +359,7 @@ class Preprocessing(Step):
     cube_std_local_max = DataObj('cube')
 
     def run(self, orig, dct_order=10, dct_approx=False, pfasegcont=0.01,
-            pfasegres=0.01, local_max_size=3):
+            pfasegres=0.01, local_max_size=3, bins='fd'):
         self._loginfo('DCT computation')
         cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
                                 orig.mask)
@@ -397,14 +400,16 @@ class Preprocessing(Step):
         # Test statistic for each spaxels - use log here as it gives a more
         # gaussian distribution
         map1 = np.log10(np.sum(cont_dct**2, axis=0))
-        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm)
+        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm,
+                                                bins=bins)
         self._loginfo('Found %d regions, threshold=%.2f',
                       len(np.unique(map_cont)) - 1, thresh)
         self.store_image('segmap_cont', map_cont)
 
         self._loginfo('Segmentation based on the residual')
         map2 = O2test(data)
-        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm)
+        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm,
+                                               bins=bins)
         self._loginfo('Found %d regions, threshold=%.2f',
                       len(np.unique(map_res)) - 1, thresh)
 
@@ -726,8 +731,8 @@ class ComputePurityThreshold(Step):
     pfasegfinal : float
         PFA for the segmentation based on the maxmap.
     bins : str
-        Method for computings bins for the maxmap segmap
-        (see numpy.histogram_bin_edges).
+        Method for computing bins for the maxmap segmap
+        (see `numpy.histogram_bin_edges`).
 
     Returns
     -------
