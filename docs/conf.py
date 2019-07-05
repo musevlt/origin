@@ -42,7 +42,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'sphinxcontrib.programoutput',
+    # 'sphinxcontrib.programoutput',
     # 'matplotlib.sphinxext.plot_directive',
 ]
 
