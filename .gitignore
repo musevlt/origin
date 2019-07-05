@@ -11,8 +11,8 @@ _githash.py
 tags
 build/
 dist/
-doc/api/
-doc/_build/
+docs/api/
+docs/_build/
 htmlcov/
 .ipynb_checkpoints/
 .pytest_cache/
