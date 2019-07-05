@@ -93,5 +93,5 @@ Changelog
 API
 ===
 
-.. automodapi:: origin
-   :no-heading:
+.. .. automodapi:: origin
+..    :no-heading:
