@@ -1,26 +1,21 @@
-# -*- coding: utf-8 -*-
-#
 # Configuration file for the Sphinx documentation builder.
 #
+# This file does only contain a selection of the most common options. For a
+# full list see the documentation:
+# http://www.sphinx-doc.org/en/master/config
 
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
 import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+
 from pkg_resources import get_distribution
 
 # -- Project information -----------------------------------------------------
 
-project = 'origin'
+project = 'ORIGIN'
 copyright = '2019, ORIGIN Team'
 author = 'Simon Conseil'
 
 release = get_distribution('origin').version
+# for example take major/minor
 version = '.'.join(release.split('.')[:2])
 
 # -- General configuration ---------------------------------------------------
@@ -36,17 +31,14 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
     'sphinx.ext.ifconfig',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.todo',
     'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
-    # 'sphinxcontrib.programoutput',
-    # 'matplotlib.sphinxext.plot_directive',
+    'numpydoc',
+    'sphinx_automodapi.automodapi',
+    'sphinx_automodapi.smart_resolver',
 ]
-
-# plot_include_source = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -72,15 +64,9 @@ language = None
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-# The reST default role (used for this markup: `text`) to use for all documents
+# The reST default role (used for this markup: `text`) to use for all
+# documents. Set to the "smart" one.
 default_role = 'obj'
-
-# If true, '()' will be appended to :func: etc. cross-reference text.
-#add_function_parentheses = True
-
-# If true, the current module name will be prepended to all description
-# unit titles (such as .. function::).
-#add_module_names = True
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -88,6 +74,10 @@ pygments_style = 'sphinx'
 
 # -- Options for HTML output -------------------------------------------------
 
+# The theme to use for HTML and HTML Help pages.  See the documentation for
+# a list of builtin themes.
+#
+# html_theme = 'alabaster'
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
 if not on_rtd:  # only import and set the theme if we're building docs locally
@@ -95,15 +85,11 @@ if not on_rtd:  # only import and set the theme if we're building docs locally
     html_theme = "sphinx_rtd_theme"
     html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-# html_theme = 'alabaster'
-
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {'collapse_navigation': False}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -119,6 +105,8 @@ if not on_rtd:  # only import and set the theme if we're building docs locally
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
+
+html_last_updated_fmt = '%b %d, %Y'
 
 # -- Extension configuration -------------------------------------------------
 
