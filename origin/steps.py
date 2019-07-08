@@ -325,12 +325,21 @@ class Step(LogMixin, metaclass=StepMeta):
 
 
 class Preprocessing(Step):
-    """Continuum subtraction, standardization and segmentation.
+    """
+    Preparation of the data for the following steps:
+
+    - Continuum subtraction with a DCT filter (the continuum cube is stored in
+      ``cube_dct``)
+    - Standardization of the data (stored in ``cube_std``).
+    - Computation of the local maxima and minima of the std cube.
+    - Segmentation based on the continuum (``segmap_cont``).
+    - Segmentation based on the residual image (``ima_std``), merged with the
+      previous one which gives ``segmap_merged``.
 
     Parameters
     ----------
     dct_order : int
-        The number of atom to keep for the dct decomposition.
+        The number of atom to keep for the DCT decomposition.
     dct_approx : bool
         if True, the DCT computation does not take the variance into account
         for the computation of the DCT coefficients.
@@ -440,7 +449,12 @@ class Preprocessing(Step):
 
 
 class CreateAreas(Step):
-    """ Creation of automatic area
+    """
+    Creation of areas to split the work.
+
+    This allows to split the cube into sub-cubes to distribute the following
+    steps on multiple processes. The merged segmap computed previously is used
+    to avoid cutting objects.
 
     Parameters
     ----------
@@ -515,7 +529,8 @@ class CreateAreas(Step):
 
 
 class ComputePCAThreshold(Step):
-    """ Loop on each zone of the data cube and estimate the threshold
+    """
+    Loop on each sub-cube and estimate the threshold for the PCA.
 
     Parameters
     ----------
@@ -570,7 +585,8 @@ class ComputePCAThreshold(Step):
 
 
 class ComputeGreedyPCA(Step):
-    """ Loop on each zone of the data cube and compute the greedy PCA.
+    """
+    Loop on each sub-cube and compute the greedy PCA.
 
     The test (test_fun) and the threshold (threshold_test) define the part
     of the each zone of the cube to segment in nuisance and background.
@@ -638,21 +654,12 @@ class ComputeGreedyPCA(Step):
 
 
 class ComputeTGLR(Step):
-    """Compute the cube of GLR test values.
+    """
+    Compute the cube of GLR test values.
 
     The test is done on the cube containing the faint signal
-    (``self.cube_faint``) and it uses the PSF and the spectral profile.
-    The correlation can be computed per "area"  for low memory system.
-    Then a Loop on each zone of ``self.cube_correl`` is performed to
-    compute for each zone:
-
-    - The local maxima distribution of each zone
-    - the p-values associated to the local maxima,
-    - the p-values associated to the number of thresholded p-values
-      of the correlations per spectral channel,
-    - the final p-values which are the thresholded pvalues associated
-      to the T_GLR values divided by twice the pvalues associated to the
-      number of thresholded p-values of the correlations per spectral channel.
+    (``self.cube_faint``) and it uses the PSF and the spectral profiles.
+    Then compute the p-values of local maximum of correlation values.
 
     Parameters
     ----------
@@ -952,7 +959,7 @@ class Detection(Step):
 
 
 class ComputeSpectra(Step):
-    """Compute the estimated emission line and the optimal coordinates
+    """Compute the estimated emission line and the optimal coordinates.
 
     For each detected line in a spatio-spectral grid, the line
     is estimated with the deconvolution model::
@@ -1021,7 +1028,7 @@ class CleanResults(Step):
       considering their z positions.  The lines are all marked as merged in
       the brightest line of the group (but are kept in the line table).
     - A table of unique sources is created.
-    - Statistical detection info is added on the 2 resulting catalogs
+    - Statistical detection info is added on the 2 resulting catalogs.
 
     Attributes added to the ORIGIN object:
     - `Cat3_lines`: clean table of lines;
