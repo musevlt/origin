@@ -1,8 +1,5 @@
 [run]
 source = origin
-omit =
-   origin/_githash.py
-   origin/version*
 
 [report]
 show_missing = false
