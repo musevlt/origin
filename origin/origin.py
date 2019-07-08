@@ -427,13 +427,13 @@ class ORIGIN(steps.LogMixin):
 
     @property
     def nbAreas(self):
-        """Number of area (segmentation) for the PCA"""
+        """Number of area (segmentation) for the PCA."""
         return self.param.get('nbareas')
 
     @property
     def threshold_correl(self):
         """Estimated threshold used to detect lines on local maxima of max
-        correl"""
+        correl."""
         return self.param.get('threshold')
 
     @threshold_correl.setter
@@ -443,7 +443,7 @@ class ORIGIN(steps.LogMixin):
     @property
     def threshold_std(self):
         """Estimated threshold used to detect complementary lines on local
-        maxima of std cube"""
+        maxima of std cube."""
         return self.param.get('threshold_std')
 
     @threshold_std.setter
@@ -452,7 +452,7 @@ class ORIGIN(steps.LogMixin):
 
     @lazyproperty
     def profiles(self):
-        """Read the list of spectral profile."""
+        """Read the list of spectral profiles."""
         profiles = self.param['profiles']
         self._loginfo('Load dictionary of spectral profile %s', profiles)
         with fits.open(profiles) as hdul:
@@ -579,7 +579,7 @@ class ORIGIN(steps.LogMixin):
     @timeit
     def write(self, path=None, erase=False):
         """Save the current session in a folder that will have the name of the
-        ORIGIN object (self.name)
+        ORIGIN object (self.name).
 
         The ORIGIN.load(folder, newname=None) method will be used to load a
         session. The parameter newname will let the user to load a session but
@@ -691,8 +691,8 @@ class ORIGIN(steps.LogMixin):
 
     def plot_step03_PCA_threshold(self, log10=False, ncol=3, legend=True,
                                   xlim=None, fig=None, **fig_kw):
-        """ Plot the histogram and the threshold for the starting point of the
-        PCA
+        """ Plot the histogram and the threshold for the starting point
+        of the PCA.
 
         Parameters
         ----------
@@ -783,8 +783,8 @@ class ORIGIN(steps.LogMixin):
 
     def plot_PCA_threshold(self, area, pfa_test='step03', log10=False,
                            legend=True, xlim=None, ax=None):
-        """ Plot the histogram and the threshold for the starting point of the
-        PCA
+        """ Plot the histogram and the threshold for the starting point
+        of the PCA.
 
         Parameters
         ----------
@@ -865,7 +865,7 @@ class ORIGIN(steps.LogMixin):
 
     def plot_mapPCA(self, area=None, iteration=None, ax=None, **kwargs):
         """ Plot at a given iteration (or at the end) the number of times
-        a spaxel got cleaned by the PCA
+        a spaxel got cleaned by the PCA.
 
         Parameters
         ----------
@@ -903,7 +903,7 @@ class ORIGIN(steps.LogMixin):
         themap.plot(title=title, colorbar='v', ax=ax, **kwargs)
 
     def plot_purity(self, comp=False, ax=None, log10=False, legend=True):
-        """Draw number of sources per threshold computed in step06/step08
+        """Draw number of sources per threshold computed in step06/step08.
 
         Parameters
         ----------
@@ -957,7 +957,7 @@ class ORIGIN(steps.LogMixin):
             ax.legend(h1 + h2, l1 + l2, loc=2)
 
     def plot_NB(self, src_ind, ax1=None, ax2=None, ax3=None):
-        """Plot the narrow bands images
+        """Plot the narrow band images.
 
         Parameters
         ----------
@@ -1084,35 +1084,53 @@ class ORIGIN(steps.LogMixin):
         else:
             ax.plot(x, y, 'k+')
 
-    def plot_segmaps(self, axes=None):
-        segmaps = [self.segmap]
-        if getattr(self, 'segmap_purity'):
-            segmaps.append(self.segmap_purity)
+    def plot_segmaps(self, axes=None, figsize=(6, 6)):
+        """Plot the segmentation maps:
+
+        - segmap_cont: segmentation map computed on the white-light image.
+        - segmap_merged: segmentation map merged with the cont one and another
+          one computed on the residual.
+        - segmap_purity: combines self.segmap and a segmentation on the maxmap.
+        - segmap_label: segmentation map used for the catalog, either the one
+          given as input, otherwise self.segmap_cont.
+
+        """
+        segmaps = {}
+        ncolors = 0
+        for name in ('segmap_cont', 'segmap_merged', 'segmap_purity',
+                     'segmap_label'):
+            segm = getattr(self, name, None)
+            if segm:
+                segmaps[name] = segm
+                ncolors = max(ncolors, len(np.unique(segm._data)))
+
+        nseg = len(segmaps)
+        if nseg == 0:
+            self.logger.warning('nothing to plot')
+            return
 
         try:
+            # TODO: this will be renamed to make_random_cmap in a future
+            # version of photutils
             from photutils.utils.colormaps import random_cmap
         except ImportError:
             self.logger.error('photutils is needed for this')
             cmap = 'jet'
         else:
-            cmap = random_cmap(ncolors=len(np.unique(segmaps[-1]._data)))
+            cmap = random_cmap(ncolors=ncolors)
             cmap.colors[0] = (0.0, 0.0, 0.0)
 
-        nseg = len(segmaps)
         if axes is None:
-            fig, axes = plt.subplots(1, nseg, figsize=(6 * nseg, 6),
-                                     sharex=True, sharey=True)
+            fig, axes = plt.subplots(1, nseg, sharex=True, sharey=True,
+                                     figsize=(figsize[0] * nseg, figsize[1]))
         if nseg == 1:
-            ax1 = axes
-        else:
-            ax1, ax2 = axes
+            axes = [axes]
 
-        segmaps[0].plot(ax=ax1, cmap=cmap, title='segmap', colorbar='v')
-        if nseg == 2:
-            segmaps[1].plot(ax=ax2, cmap=cmap, title='segmap avec mask maxmap',
-                            colorbar='v')
+        for ax, (name, im) in zip(axes, segmaps.items()):
+            im.plot(ax=ax, cmap=cmap, title=name, colorbar='v')
 
     def plot_min_max_hist(self, ax=None, comp=False):
+        """Plot the histograms of local maxima and minima."""
         if comp:
             cube_local_max = self.cube_std_local_max._data
             cube_local_min = self.cube_std_local_min._data
@@ -1183,7 +1201,7 @@ class ORIGIN(steps.LogMixin):
                              str(datetime.timedelta(seconds=tot)))
 
     def stat(self):
-        """ print detection summary """
+        """Print detection summary."""
         d = self._get_stat()
         self.logger.info('ORIGIN PCA pfa %.2f Back Purity: %.2f '
                          'Threshold: %.2f Bright Purity %.2f Threshold %.2f',

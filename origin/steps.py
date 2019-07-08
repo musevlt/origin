@@ -361,8 +361,8 @@ class Preprocessing(Step):
     self.segmap_cont : `~mpdaf.obj.Image`
         Segmentation map computed on the white-light image.
     self.segmap_merged : `~mpdaf.obj.Image`
-        Segmentation map merged with the cont one and another computed on the
-        residual.
+        Segmentation map merged with the cont one and another one computed
+        on the residual.
 
     """
 
@@ -760,7 +760,7 @@ class ComputePurityThreshold(Step):
     self.threshold_std : float
         Estimated threshold used to detect complementary lines on std cube.
     self.segmap_purity : `~mpdaf.obj.Image`
-        Combines self.segmap and a segmentation on the maxmap.
+        Combines self.segmap_merged and a segmentation on the maxmap.
     self.Pval : astropy.table.Table
         Table with the purity results for each threshold:
         - Pval_r : The purity function
@@ -785,7 +785,8 @@ class ComputePurityThreshold(Step):
             purity_std = purity
         orig.param.update(dict(purity=purity, purity_std=purity_std))
 
-        # compute another segmap on the maxmap and merge with self.segmap
+        # compute another segmap on the maxmap and merge with
+        # self.segmap_merged
         thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
                                                pfasegfinal, 0, bins=bins)
         segmap, nlabels = ndi.label((map_res > 0) |
