@@ -51,9 +51,15 @@ def test_psf(caplog, tmpdir):
 
     # To build an ORIGIN with a PSF not present in the header, we must
     # pass the PSF file
-    orig2 = ORIGIN.init(MINICUBE, name='tmp2', loglevel='INFO', path=path,
-                        PSF=psffile, FWHM_PSF=orig.FWHM_PSF,
-                        LBDA_FWHM_PSF=orig.LBDA_FWHM_PSF)
+    orig2 = ORIGIN.init(
+        MINICUBE,
+        name='tmp2',
+        loglevel='INFO',
+        path=path,
+        PSF=psffile,
+        FWHM_PSF=orig.FWHM_PSF,
+        LBDA_FWHM_PSF=orig.LBDA_FWHM_PSF,
+    )
 
     assert orig.param['FWHM PSF'] == orig2.param['FWHM PSF']
     assert orig.param['LBDA FWHM PSF'] == orig2.param['LBDA FWHM PSF']
@@ -117,10 +123,8 @@ def test_origin(caplog, tmpdir):
     orig.write()
 
     # check that the catalog version was saves
-    assert "CAT3_TS" in Catalog.read(
-        str(tmpdir.join('tmp2', 'Cat3_lines.fits'))).meta
-    assert "CAT3_TS" in Catalog.read(
-        str(tmpdir.join('tmp2', 'Cat3_sources.fits'))).meta
+    assert "CAT3_TS" in Catalog.read(str(tmpdir.join('tmp2', 'Cat3_lines.fits'))).meta
+    assert "CAT3_TS" in Catalog.read(str(tmpdir.join('tmp2', 'Cat3_sources.fits'))).meta
 
     # create masks
     origfolder2 = str(tmpdir.join('tmp2'))
@@ -156,17 +160,15 @@ def test_origin(caplog, tmpdir):
         'Bright Purity 0.80 Threshold 5.46',
         'Nb of detected lines: 18',
         'Nb of sources Total: 8 Background: 4 Cont: 4',
-        'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2'
+        'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2',
     ]
 
     cat = Catalog.read(str(tmpdir.join('tmp2', 'tmp2.fits')))
     assert len(cat) == 8
 
     # test returned sources are valid
-    src1 = Source.from_file(str(tmpdir.join('tmp2', 'sources',
-                                            'source-00001.fits')))
-    src2 = Source.from_file(str(tmpdir.join('tmp2', 'sources',
-                                            'source-00002.fits')))
+    src1 = Source.from_file(str(tmpdir.join('tmp2', 'sources', 'source-00001.fits')))
+    src2 = Source.from_file(str(tmpdir.join('tmp2', 'sources', 'source-00002.fits')))
     # FIXME: check if this test is really useful
     # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
     assert set(ima.shape for ima in src1.images.values()) == {(25, 25)}
@@ -182,48 +184,58 @@ def test_origin(caplog, tmpdir):
 
 def test_merging():
     segmap = fits.getdata(SEGMAP)
-    inputs = Table(rows=[
-        # First source
-        (72, 49, 545),
-        (71, 49, 549),
-        (71, 47, 751),
-        (72, 45, 543),
-        # close line, should be merged
-        (74, 44, 546),
-
-        (51, 44, 360),
-        (51, 44, 564),
-
-        (3, 15, 589),
-        (3, 15, 597),
-        (3, 15, 601),
-        # in a segmap region
-        (24, 12, 733),
-        (24, 15, 736),
-        (29, 11, 740),
-        (20, 10, 749)
-    ], names=['x0', 'y0', 'z0'])
+    inputs = Table(
+        rows=[
+            # First source
+            (72, 49, 545),
+            (71, 49, 549),
+            (71, 47, 751),
+            (72, 45, 543),
+            # close line, should be merged
+            (74, 44, 546),
+            (51, 44, 360),
+            (51, 44, 564),
+            (3, 15, 589),
+            (3, 15, 597),
+            (3, 15, 601),
+            # in a segmap region
+            (24, 12, 733),
+            (24, 15, 736),
+            (29, 11, 740),
+            (20, 10, 749),
+        ],
+        names=['x0', 'y0', 'z0'],
+    )
     inputs['area'] = segmap[inputs['y0'], inputs['x0']]
 
     out = spatiospectral_merging(inputs, tol_spat=3, tol_spec=5)
 
-    dt = [('x0', int), ('y0', int), ('z0', int),
-          ('area', int), ('imatch', int), ('imatch2', int)]
-    expected = np.array([
-        (72, 49, 545, 0, 0, 0),
-        (71, 49, 549, 0, 0, 0),
-        (71, 47, 751, 0, 0, 0),
-        (72, 45, 543, 0, 0, 0),
-        (74, 44, 546, 0, 0, 0),
-        (51, 44, 360, 0, 1, 1),
-        (51, 44, 564, 0, 1, 1),
-        (3,  15, 589, 0, 2, 2),
-        (3,  15, 597, 0, 2, 2),
-        (3,  15, 601, 0, 2, 2),
-        (24, 12, 733, 1, 3, 3),
-        (24, 15, 736, 1, 3, 4),
-        (29, 11, 740, 1, 3, 5),
-        (20, 10, 749, 1, 6, 6)
-    ], dtype=dt)
+    dt = [
+        ('x0', int),
+        ('y0', int),
+        ('z0', int),
+        ('area', int),
+        ('imatch', int),
+        ('imatch2', int),
+    ]
+    expected = np.array(
+        [
+            (72, 49, 545, 0, 0, 0),
+            (71, 49, 549, 0, 0, 0),
+            (71, 47, 751, 0, 0, 0),
+            (72, 45, 543, 0, 0, 0),
+            (74, 44, 546, 0, 0, 0),
+            (51, 44, 360, 0, 1, 1),
+            (51, 44, 564, 0, 1, 1),
+            (3, 15, 589, 0, 2, 2),
+            (3, 15, 597, 0, 2, 2),
+            (3, 15, 601, 0, 2, 2),
+            (24, 12, 733, 1, 3, 3),
+            (24, 15, 736, 1, 3, 4),
+            (29, 11, 740, 1, 3, 5),
+            (20, 10, 749, 1, 6, 6),
+        ],
+        dtype=dt,
+    )
 
     assert np.array_equal(out.as_array(), expected)

@@ -57,6 +57,7 @@ __all__ = (
 
 def timeit(f):
     """Decorator which prints the execution time of a function."""
+
     @wraps(f)
     def timed(*args, **kw):
         logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ def timeit(f):
         result = f(*args, **kw)
         logger.debug('%s executed in %0.1fs', f.__name__, time() - t0)
         return result
+
     return timed
 
 
@@ -134,7 +136,7 @@ def DCTMAT(nl, order):
     array: DCT Matrix
 
     """
-    yy, xx = np.mgrid[:nl, :order + 1]
+    yy, xx = np.mgrid[:nl, : order + 1]
     D0 = np.sqrt(2 / nl) * np.cos((yy + 0.5) * (np.pi / nl) * xx)
     D0[:, 0] *= 1 / np.sqrt(2)
     return D0
@@ -182,8 +184,10 @@ def dct_residual(w_raw, order, var, approx, mask):
         # Looping on spectra and using multidot is ~6x faster:
         # D0 is typically 3681x11 elements, so it is much more efficient
         # to compute D0^t.S first (note the array is reshaped below)
-        cont = [multi_dot([D0, D0.T, w_raw[:, y, x]])
-                for y, x in progressbar(np.ndindex(shape), total=nspec)]
+        cont = [
+            multi_dot([D0, D0.T, w_raw[:, y, x]])
+            for y, x in progressbar(np.ndindex(shape), total=nspec)
+        ]
 
         # For reference, this is identical to the following scipy version,
         # though scipy is 2x slower than tensordot (probably because it
@@ -218,13 +222,13 @@ def dct_residual(w_raw, order, var, approx, mask):
         valid = ~np.any(mask, axis=0)
 
         from numpy.linalg import inv
+
         cont = []
         for y, x in progressbar(np.ndindex(shape), total=nspec):
             if valid[y, x]:
-                res = multi_dot([D0,
-                                 inv(np.dot(D0T / var[:, y, x], D0)),
-                                 D0T,
-                                 w_raw_var[:, y, x]])
+                res = multi_dot(
+                    [D0, inv(np.dot(D0T / var[:, y, x], D0)), D0T, w_raw_var[:, y, x]]
+                )
             else:
                 res = multi_dot([D0, D0.T, w_raw[:, y, x]])
             cont.append(res)
@@ -254,8 +258,7 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
     """
     # test threshold : uses a Gaussian approximation of the test statistic
     # under H0
-    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa,
-                                                              bins=bins)
+    histO2, frecO2, gamma, mea, std = compute_thresh_gaussfit(data, pfa, bins=bins)
 
     # threshold - erosion and dilation to clean ponctual "source"
     mask = data > gamma
@@ -273,8 +276,9 @@ def compute_segmap_gauss(data, pfa, fwhm_fsf=0, bins='fd'):
     return gamma, ndi_label(mask)[0]
 
 
-def compute_deblended_segmap(image, npixels=5, snr=3, dilate_size=11,
-                             maxiters=5, sigma=3, fwhm=3.0, kernelsize=5):
+def compute_deblended_segmap(
+    image, npixels=5, snr=3, dilate_size=11, maxiters=5, sigma=3, fwhm=3.0, kernelsize=5
+):
     """Compute segmentation map using photutils.
 
     The segmentation map is computed with the following steps:
@@ -311,34 +315,40 @@ def compute_deblended_segmap(image, npixels=5, snr=3, dilate_size=11,
     """
     from astropy.convolution import Gaussian2DKernel
     from photutils import make_source_mask, detect_sources
+
     data = image.data
-    mask = make_source_mask(data, snr=snr, npixels=npixels,
-                            dilate_size=dilate_size)
+    mask = make_source_mask(data, snr=snr, npixels=npixels, dilate_size=dilate_size)
     bkg_mean, bkg_median, bkg_rms = sigma_clipped_stats(
-        data, sigma=sigma, mask=mask, maxiters=maxiters)
+        data, sigma=sigma, mask=mask, maxiters=maxiters
+    )
     threshold = bkg_median + sigma * bkg_rms
 
     logger = logging.getLogger(__name__)
-    logger.info('Background Median %.2f RMS %.2f Threshold %.2f',
-                bkg_median, bkg_rms, threshold)
+    logger.info(
+        'Background Median %.2f RMS %.2f Threshold %.2f', bkg_median, bkg_rms, threshold
+    )
 
     sig = fwhm * gaussian_fwhm_to_sigma
     kernel = Gaussian2DKernel(sig, x_size=kernelsize, y_size=kernelsize)
     kernel.normalize()
-    segm = detect_sources(data, threshold, npixels=npixels,
-                          filter_kernel=kernel)
+    segm = detect_sources(data, threshold, npixels=npixels, filter_kernel=kernel)
 
-    segm_deblend = phot_deblend_sources(image, segm, npixels=npixels,
-                                        filter_kernel=kernel, mode='linear')
+    segm_deblend = phot_deblend_sources(
+        image, segm, npixels=npixels, filter_kernel=kernel, mode='linear'
+    )
     return segm_deblend
 
 
 def phot_deblend_sources(img, segmap, **kwargs):
     """Wrapper to catch warnings from deblend_sources."""
     from photutils import deblend_sources
+
     with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=AstropyUserWarning,
-                                message='.*contains negative values.*')
+        warnings.filterwarnings(
+            'ignore',
+            category=AstropyUserWarning,
+            message='.*contains negative values.*',
+        )
         deblend = deblend_sources(img.data, segmap, **kwargs)
     return Image(data=deblend.data, wcs=img.wcs, mask=img.mask, copy=False)
 
@@ -367,7 +377,7 @@ def createradvar(cu, ot):
     for n in range(N):
         tmp = cu + ot[n, :, :]
         y, x = np.where(tmp > 0)
-        r = np.sqrt((y - y.mean())**2 + (x - x.mean())**2)
+        r = np.sqrt((y - y.mean()) ** 2 + (x - x.mean()) ** 2)
         out[n] = np.var(r)
     return out
 
@@ -498,7 +508,7 @@ def area_segmentation_square_fusion(nexpmap, MinS, MaxS, NbSubcube, Ny, Nx):
 
                 for n in range(labtmax):
                     label_tmp = np.zeros((Ny, Nx))
-                    label_tmp[y1:y2, x1:x2] = (labtest == (n + 1))
+                    label_tmp[y1:y2, x1:x2] = labtest == (n + 1)
                     label.append(label_tmp)
 
     label = np.array(label)
@@ -606,7 +616,7 @@ def area_segmentation_convex_fusion(label, src):
 
             # in full size
             label_out = np.zeros((label.shape[1], label.shape[2]))
-            label_out[y_0:y_0 + sny, x_0:x_0 + snx] = lab_temp
+            label_out[y_0 : y_0 + sny, x_0 : x_0 + snx] = lab_temp
             label_out *= lab
             label_fin.append(label_out)
 
@@ -667,8 +677,8 @@ def Convexline(points, snx, sny):
     x = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
     y = np.linspace(-dxy, dxy, 1 + (dxy) * 2)
     xv, yv = np.meshgrid(x, y)
-    r = np.sqrt(xv**2 + yv**2)
-    mask = (np.abs(r) <= radius)
+    r = np.sqrt(xv ** 2 + yv ** 2)
+    mask = np.abs(r) <= radius
 
     # to close the lines
     conv_lab = fftconvolve(tmp, mask, mode='same') > 1e-9
@@ -676,7 +686,7 @@ def Convexline(points, snx, sny):
     lab_out = conv_lab.copy()
     for n in range(conv_lab.shape[0]):
         ind = np.where(conv_lab[n, :] == 1)[0]
-        lab_out[n, ind[0]:ind[-1]] = 1
+        lab_out[n, ind[0] : ind[-1]] = 1
 
     return lab_out
 
@@ -752,8 +762,9 @@ def area_segmentation_final(label, MinS, MaxS):
 
 
 @timeit
-def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
-                           threshold_test, itermax, testO2):
+def Compute_GreedyPCA_area(
+    NbArea, cube_std, areamap, Noise_population, threshold_test, itermax, testO2
+):
     """Function to compute the PCA on each zone of a data cube.
 
     Parameters
@@ -790,7 +801,7 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
 
     for area_ind in area_iter:
         # limits of each spatial zone
-        ksel = (areamap == area_ind)
+        ksel = areamap == area_ind
 
         # Data in this spatio-spectral zone
         cube_temp = cube_std[:, ksel]
@@ -798,7 +809,8 @@ def Compute_GreedyPCA_area(NbArea, cube_std, areamap, Noise_population,
         thr = threshold_test[area_ind - 1]
         test = testO2[area_ind - 1]
         cube_faint[:, ksel], mO2, kstop = Compute_GreedyPCA(
-            cube_temp, test, thr, Noise_population, itermax)
+            cube_temp, test, thr, Noise_population, itermax
+        )
         mapO2[ksel] = mO2
         nstop += kstop
 
@@ -905,7 +917,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
 
             # orthogonal projection with background.
             x_red -= orthogonal_projection(b, x_red)
-            x_red /= np.nansum(b**2)
+            x_red /= np.nansum(b ** 2)
 
             # sparse svd if nb spectrum > 1 else normal svd
             if x_red.shape[1] == 1:
@@ -955,7 +967,7 @@ def O2test(arr):
         result of the test.
     """
     # np.einsum('ij,ij->j', arr, arr) / arr.shape[0]
-    return np.mean(arr**2, axis=0)
+    return np.mean(arr ** 2, axis=0)
 
 
 def compute_thresh_gaussfit(data, pfa, bins='fd'):
@@ -984,14 +996,13 @@ def compute_thresh_gaussfit(data, pfa, bins='fd'):
     histO2, frecO2 = np.histogram(data, bins=bins, density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
-    ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind])**2)
+    ind2 = np.argmin((histO2[ind] / 2 - histO2[:ind]) ** 2)
     fwhm = mod - frecO2[ind2]
     sigma = fwhm / np.sqrt(2 * np.log(2))
 
     coef = stats.norm.ppf(pfa)
     thresO2 = mod - sigma * coef
-    logger.debug('1st estimation mean/std/threshold: %f/%f/%f',
-                 mod, sigma, thresO2)
+    logger.debug('1st estimation mean/std/threshold: %f/%f/%f', mod, sigma, thresO2)
 
     x = (frecO2[1:] + frecO2[:-1]) / 2
     g1 = Gaussian1D(amplitude=histO2.max(), mean=mod, stddev=sigma)
@@ -1029,11 +1040,13 @@ def _convolve_fsf(psf, cube, weights=None):
 def _convolve_profile(Dico, cube_fft, norm_fft, fshape, n_jobs, parallel):
     # Second cube of correlation values
     dico_fft = fft.rfftn(Dico, fshape)[:, None] * cube_fft
-    cube_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
-                                      func=fft.irfftn)
+    cube_profile = _convolve_spectral(
+        parallel, n_jobs, dico_fft, fshape, func=fft.irfftn
+    )
     dico_fft = fft.rfftn(Dico ** 2, fshape)[:, None] * norm_fft
-    norm_profile = _convolve_spectral(parallel, n_jobs, dico_fft, fshape,
-                                      func=fft.irfftn)
+    norm_profile = _convolve_spectral(
+        parallel, n_jobs, dico_fft, fshape, func=fft.irfftn
+    )
 
     norm_profile[norm_profile <= 0] = np.inf
     np.sqrt(norm_profile, out=norm_profile)
@@ -1048,8 +1061,9 @@ def _convolve_spectral(parallel, nslices, arr, shape, func=fft.rfftn):
 
 
 @timeit
-def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
-                         pcut=None, pmeansub=True):
+def Correlation_GLR_test(
+    cube, fsf, weights, profiles, nthreads=1, pcut=None, pmeansub=True
+):
     """Compute the cube of GLR test values with the given PSF and
     dictionary of spectral profiles.
 
@@ -1084,9 +1098,11 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     Nz, Ny, Nx = cube.shape
 
     # Spatial convolution of the weighted data with the zero-mean FSF
-    logger.info('Step 1/3 and 2/3: '
-                'Spatial convolution of weighted data with the zero-mean FSF, '
-                'Computing Spatial part of the norm of the 3D atoms')
+    logger.info(
+        'Step 1/3 and 2/3: '
+        'Spatial convolution of weighted data with the zero-mean FSF, '
+        'Computing Spatial part of the norm of the 3D atoms'
+    )
     if weights is None:  # one FSF
         fsf = [fsf]
         weights = [None]
@@ -1105,10 +1121,14 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
         for nf in fields:
             # convolve spatially each spectral channel by the FSF, and do the
             # same for the norm (inverse variance)
-            res = parallel(progressbar([
-                delayed(_convolve_fsf)(fsf[nf][i], cube[i],
-                                       weights=weights[nf])
-                for i in range(Nz)]))
+            res = parallel(
+                progressbar(
+                    [
+                        delayed(_convolve_fsf)(fsf[nf][i], cube[i], weights=weights[nf])
+                        for i in range(Nz)
+                    ]
+                )
+            )
             res = [np.stack(arr) for arr in zip(*res)]
             if nf == 0:
                 cube_fsf, norm_fsf = res
@@ -1128,7 +1148,7 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
         if pcut is not None:
             lpeak = prof.argmax()
             lw = np.max(np.abs(np.where(prof >= pcut)[0][[0, -1]] - lpeak))
-            prof = prof[lpeak - lw:lpeak + lw + 1]
+            prof = prof[lpeak - lw : lpeak + lw + 1]
         prof /= np.linalg.norm(prof)
         if pmeansub:
             prof -= prof.mean()
@@ -1137,11 +1157,13 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     # compute the optimal shape for FFTs (on the wavelength axis).
     # For profiles with different shapes, we need to know the indices to
     # extract the signal from the inverse fft.
-    s1 = np.array(cube_fsf.shape)                          # cube shape
+    s1 = np.array(cube_fsf.shape)  # cube shape
     s2 = np.array([(d.shape[0], 1, 1) for d in prof_cut])  # profiles shape
-    fftshape = s1 + s2 - 1                                 # fft shape
-    fshape = [fftpack.helper.next_fast_len(int(d))         # optimal fft shape
-              for d in fftshape.max(axis=0)[:1]]
+    fftshape = s1 + s2 - 1  # fft shape
+    fshape = [
+        fftpack.helper.next_fast_len(int(d))  # optimal fft shape
+        for d in fftshape.max(axis=0)[:1]
+    ]
 
     # and now computes the indices to extract the cube from the inverse fft.
     startind = (fftshape - s1) // 2
@@ -1151,10 +1173,12 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     # Compute the FFTs of the cube and norm cube, splitting them on multiple
     # threads if needed
     with Parallel(n_jobs=nthreads, backend='threading') as parallel:
-        cube_fft = _convolve_spectral(parallel, nthreads, cube_fsf, fshape,
-                                      func=fft.rfftn)
-        norm_fft = _convolve_spectral(parallel, nthreads, norm_fsf, fshape,
-                                      func=fft.rfftn)
+        cube_fft = _convolve_spectral(
+            parallel, nthreads, cube_fsf, fshape, func=fft.rfftn
+        )
+        norm_fft = _convolve_spectral(
+            parallel, nthreads, norm_fsf, fshape, func=fft.rfftn
+        )
 
     cube_fsf = norm_fsf = res = None
 
@@ -1169,8 +1193,9 @@ def Correlation_GLR_test(cube, fsf, weights, profiles, nthreads=1,
     # and the profile number with the max correl.
     with Parallel(n_jobs=nthreads, backend='threading') as parallel:
         for k in progressbar(range(len(prof_cut))):
-            cube_profile = _convolve_profile(prof_cut[k], cube_fft, norm_fft,
-                                             fshape, nthreads, parallel)
+            cube_profile = _convolve_profile(
+                prof_cut[k], cube_fft, norm_fft, fshape, nthreads, parallel
+            )
             cube_profile = cube_profile[cslice[k]]
             profile[cube_profile > correl] = k
             np.maximum(correl, cube_profile, out=correl)
@@ -1207,14 +1232,14 @@ def compute_local_max(correl, correl_min, mask, size=3):
     if np.isscalar(size):
         size = (size, size, size)
     local_max = maximum_filter(correl, size=size)
-    local_mask = (correl == local_max)
+    local_mask = correl == local_max
     local_mask[mask] = False
     local_max *= local_mask
 
     # local maxima of minus minimum correlation
-    minus_correl_min = - correl_min
+    minus_correl_min = -correl_min
     local_min = maximum_filter(minus_correl_min, size=size)
-    local_mask = (minus_correl_min == local_min)
+    local_mask = minus_correl_min == local_min
     local_mask[mask] = False
     local_min *= local_mask
 
@@ -1256,12 +1281,10 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
     #   spatiospectral_merging), while n is the detection currently processed
     #   in the recursive call
     matched = cat['matched']
-    spatdist = np.hypot(cat['x0'][n] - cat['x0'],
-                        cat['y0'][n] - cat['y0'])
+    spatdist = np.hypot(cat['x0'][n] - cat['x0'], cat['y0'][n] - cat['y0'])
     spatdist[matched] = np.inf
 
-    cu_spat = np.hypot(cat['x0'][id_cu] - cat['x0'],
-                       cat['y0'][id_cu] - cat['y0'])
+    cu_spat = np.hypot(cat['x0'][id_cu] - cat['x0'], cat['y0'][id_cu] - cat['y0'])
     cu_spat[matched] = np.inf
 
     ind = np.where(spatdist < tol_spat)[0]
@@ -1272,7 +1295,7 @@ def itersrc(cat, tol_spat, tol_spec, n, id_cu):
         if not matched[indn]:
             if cu_spat[indn] > tol_spat * np.sqrt(2):
                 # check spectral content
-                dz = np.sqrt((cat['z0'][indn] - cat['z0'][id_cu])**2)
+                dz = np.sqrt((cat['z0'][indn] - cat['z0'][id_cu]) ** 2)
                 if dz < tol_spec:
                     cat[indn]['matched'] = True
                     cat[indn]['imatch'] = id_cu
@@ -1307,9 +1330,9 @@ def spatiospectral_merging(tbl, tol_spat, tol_spec):
 
     """
     Nz = len(tbl)
-    tbl['_id'] = np.arange(Nz)                 # id of the detection
+    tbl['_id'] = np.arange(Nz)  # id of the detection
     tbl['matched'] = np.zeros(Nz, dtype=bool)  # is the detection matched ?
-    tbl['imatch'] = np.arange(Nz)              # id of the matched detection
+    tbl['imatch'] = np.arange(Nz)  # id of the matched detection
 
     for row in tbl:
         if not row['matched']:
@@ -1345,7 +1368,7 @@ def spatiospectral_merging(tbl, tol_spat, tol_spec):
                             zin = zout[iout == cu]
                             zot = zout[iout == otg]
                             difz = zin[np.newaxis, :].T - zot[np.newaxis, :]
-                            if np.sqrt(difz**2).min() < tol_spec:
+                            if np.sqrt(difz ** 2).min() < tol_spec:
                                 # if the minimum z distance is less than
                                 # tol_spec, then merge the sources
                                 iout[iout == otg] = cu
@@ -1355,8 +1378,9 @@ def spatiospectral_merging(tbl, tol_spat, tol_spec):
 
 
 @timeit
-def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
-                             segmap=None, threshlist=None):
+def Compute_threshold_purity(
+    purity, cube_local_max, cube_local_min, segmap=None, threshlist=None
+):
     """Compute threshold values corresponding to a given purity.
 
     Parameters
@@ -1417,22 +1441,29 @@ def Compute_threshold_purity(purity, cube_local_max, cube_local_min,
     n0 = np.array(n0) * (L1 / L0)
     n1 = np.array(n1)
     est_purity = 1 - n0 / n1
-    res = Table([threshlist, est_purity, n0.astype(int), n1],
-                names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'))
+    res = Table(
+        [threshlist, est_purity, n0.astype(int), n1],
+        names=('Tval_r', 'Pval_r', 'Det_m', 'Det_M'),
+    )
     res['Tval_r'].format = '.2f'
     res['Pval_r'].format = '.2f'
     res.sort('Tval_r')
     logger.debug("purity values:\n%s", res)
 
     if est_purity[-1] < purity:
-        logger.warning('Maximum computed purity %.2f is below %.2f',
-                       est_purity[-1], purity)
+        logger.warning(
+            'Maximum computed purity %.2f is below %.2f', est_purity[-1], purity
+        )
         threshold = np.inf
     else:
         threshold = np.interp(purity, res['Pval_r'], res['Tval_r'])
         detect = np.interp(threshold, res['Tval_r'], res['Det_M'])
-        logger.info('Interpolated Threshold %.2f Detection %d for Purity %.2f',
-                    threshold, detect, purity)
+        logger.info(
+            'Interpolated Threshold %.2f Detection %d for Purity %.2f',
+            threshold,
+            detect,
+            purity,
+        )
 
     # make sure to return float, not np.float64
     return float(threshold), res
@@ -1576,8 +1607,22 @@ def method_PCA_wgt(data_in, var_in, psf_in, order_dct):
     return estimated_line, estimated_var
 
 
-def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
-                 horiz_psf, criteria, order_dct):
+def GridAnalysis(
+    data,
+    var,
+    psf,
+    weight,
+    horiz,
+    size_grid,
+    y0,
+    x0,
+    z0,
+    ny,
+    nx,
+    horiz_psf,
+    criteria,
+    order_dct,
+):
     """Compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
@@ -1638,8 +1683,8 @@ def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
     ind_max = slice(max(0, z0 - 5), min(nl, z0 + 6))
     sizpsf = psf.shape[1] if weight is None else psf[0].shape[1]
 
-    lin_est = np.zeros((nl, ) + shape)
-    var_est = np.zeros((nl, ) + shape)
+    lin_est = np.zeros((nl,) + shape)
+    var_est = np.zeros((nl,) + shape)
     # half size psf
     longxy = sizpsf // 2
     inds = slice(longxy - horiz_psf, longxy + 1 + horiz_psf)
@@ -1653,12 +1698,13 @@ def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
     for dx in dxl:
         for dy in dyl:
             # extract data
-            r1 = data[:, dy:dy + sizpsf, dx:dx + sizpsf]
-            v1 = var[:, dy:dy + sizpsf, dx:dx + sizpsf]
+            r1 = data[:, dy : dy + sizpsf, dx : dx + sizpsf]
+            v1 = var[:, dy : dy + sizpsf, dx : dx + sizpsf]
             if weight is not None:
-                wgt = np.array(weight)[:, dy:sizpsf + dy, dx:sizpsf + dx]
-                psf = np.sum(np.repeat(wgt[:, np.newaxis, :, :], nl,
-                                       axis=1) * psf, axis=0)
+                wgt = np.array(weight)[:, dy : sizpsf + dy, dx : sizpsf + dx]
+                psf = np.sum(
+                    np.repeat(wgt[:, np.newaxis, :, :], nl, axis=1) * psf, axis=0
+                )
 
             # estimate Full Line and theoretic variance
             deconv_met, varest_met = method_PCA_wgt(r1, v1, psf, order_dct)
@@ -1680,14 +1726,14 @@ def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
                 LC = conv_wgt(deconv_met[ind_hrz], psf[ind_hrz])
                 LCred = LC[:, inds, inds]
                 r1red = r1[ind_hrz, inds, inds]
-                mse[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+                mse[dy, dx] = np.sum((r1red - LCred) ** 2) / np.sum(r1red ** 2)
 
             # FIXME: if horiz=5, this is the same as above...
             ind_z5 = np.arange(max(0, maxz - 5), min(maxz + 6, nl))
             LC = conv_wgt(deconv_met[ind_z5], psf[ind_z5, :, :])
             LCred = LC[:, inds, inds]
             r1red = r1[ind_z5, inds, inds]
-            mse_5[dy, dx] = np.sum((r1red - LCred)**2) / np.sum(r1red**2)
+            mse_5[dy, dx] = np.sum((r1red - LCred) ** 2) / np.sum(r1red ** 2)
 
             # compute flux
             if criteria == 'flux':
@@ -1711,8 +1757,15 @@ def GridAnalysis(data, var, psf, weight, horiz, size_grid, y0, x0, z0, ny, nx,
     estimated_line = lin_est[:, wy, wx]
     estimated_variance = var_est[:, wy, wx]
 
-    return (flux_est_5, MSE_5, estimated_line.ravel(),
-            estimated_variance.ravel(), int(y), int(x), int(z))
+    return (
+        flux_est_5,
+        MSE_5,
+        estimated_line.ravel(),
+        estimated_variance.ravel(),
+        int(y),
+        int(x),
+        int(z),
+    )
 
 
 def peakdet(v):
@@ -1722,13 +1775,25 @@ def peakdet(v):
     # take the maximum and closest from the center
     imax = v.size // 2
     if len(ind) > 0:
-        imax = ind[np.argmin((ind - imax)**2)]
+        imax = ind[np.argmin((ind - imax) ** 2)]
     return imax
 
 
 @timeit
-def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
-                    criteria='flux', order_dct=30, horiz_psf=1, horiz=5):
+def estimation_line(
+    Cat1,
+    raw,
+    var,
+    psf,
+    wght,
+    wcs,
+    wave,
+    size_grid=1,
+    criteria='flux',
+    order_dct=30,
+    horiz_psf=1,
+    horiz=5,
+):
     """Compute the estimated emission line and the optimal
     coordinates for each detected lines in a spatio-spectral grid.
 
@@ -1785,7 +1850,7 @@ def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
     # desired shape
     margin = 2 * size_grid
     shape = (psf_shape[0] + margin, psf_shape[1] + margin)
-    cshape = (raw.shape[0], ) + shape
+    cshape = (raw.shape[0],) + shape
 
     res = []
     for src in progressbar(Cat1):
@@ -1810,8 +1875,22 @@ def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
                     red_wgt.append(w_tmp)
                     red_psf.append(psf[n])
 
-        rg = GridAnalysis(red_dat, red_var, red_psf, red_wgt, horiz, size_grid,
-                          y, x, z, ny, nx, horiz_psf, criteria, order_dct)
+        rg = GridAnalysis(
+            red_dat,
+            red_var,
+            red_psf,
+            red_wgt,
+            horiz,
+            size_grid,
+            y,
+            x,
+            z,
+            ny,
+            nx,
+            horiz_psf,
+            criteria,
+            order_dct,
+        )
         res.append(rg)
 
     flux5, res_min5, lin_est, var_est, y_grid, x_grid, z_grid = zip(*res)
@@ -1830,8 +1909,9 @@ def estimation_line(Cat1, raw, var, psf, wght, wcs, wave, size_grid=1,
     col_y = Column(name='y', data=y_grid)
     col_z = Column(name='z', data=z_grid)
 
-    Cat2.add_columns([col_x, col_y, col_z, col_res, col_flux, col_num],
-                     indexes=[4, 5, 6, 8, 8, 8])
+    Cat2.add_columns(
+        [col_x, col_y, col_z, col_res, col_flux, col_num], indexes=[4, 5, 6, 8, 8, 8]
+    )
 
     return Cat2, lin_est, var_est
 
@@ -1864,16 +1944,21 @@ def purity_estimation(cat, Pval, Pval_comp):
     ksel = cat['comp'] == 0
     if np.count_nonzero(ksel) > 0:
         tglr = cat['T_GLR'][ksel]
-        f = interp1d(Pval['Tval_r'], Pval['Pval_r'],
-                     bounds_error=False, fill_value="extrapolate")
+        f = interp1d(
+            Pval['Tval_r'], Pval['Pval_r'], bounds_error=False, fill_value="extrapolate"
+        )
         purity[ksel] = f(tglr.data)
 
     # comp=1
     ksel = cat['comp'] == 1
     if np.count_nonzero(ksel) > 0:
         tglr = cat['STD'][ksel]
-        f = interp1d(Pval_comp['Tval_r'], Pval_comp['Pval_r'],
-                     bounds_error=False, fill_value="extrapolate")
+        f = interp1d(
+            Pval_comp['Tval_r'],
+            Pval_comp['Pval_r'],
+            bounds_error=False,
+            fill_value="extrapolate",
+        )
         purity[ksel] = f(tglr.data)
 
     # The purity by definition cannot be > 1 and < 0, if the interpolation
@@ -1926,8 +2011,8 @@ def unique_sources(table):
 
     result_rows = []
     for key, group in progressbar(
-            zip(table_by_id.groups.keys, table_by_id.groups),
-            total=len(table_by_id.groups)):
+        zip(table_by_id.groups.keys, table_by_id.groups), total=len(table_by_id.groups)
+    ):
         group_id = key['ID']
 
         ra_waverage = np.average(group['ra'], weights=group['flux'])
@@ -1944,14 +2029,34 @@ def unique_sources(table):
         comp = group['comp'][0]  # FIXME: not necessarily true
         line_merged_flag = np.any(group["line_merged_flag"])
 
-        result_rows.append([group_id, ra_waverage, dec_waverage, x_waverage,
-                            y_waverage, n_lines, seg_label, comp,
-                            line_merged_flag])
+        result_rows.append(
+            [
+                group_id,
+                ra_waverage,
+                dec_waverage,
+                x_waverage,
+                y_waverage,
+                n_lines,
+                seg_label,
+                comp,
+                line_merged_flag,
+            ]
+        )
 
     source_table = Table(
         rows=result_rows,
-        names=["ID", "ra", "dec", "x", "y", "n_lines", "seg_label", "comp",
-               "line_merged_flag"])
+        names=[
+            "ID",
+            "ra",
+            "dec",
+            "x",
+            "y",
+            "n_lines",
+            "seg_label",
+            "comp",
+            "line_merged_flag",
+        ],
+    )
     source_table.meta["CAT3_TS"] = table.meta["CAT3_TS"]
 
     return source_table
@@ -2088,10 +2193,24 @@ def merge_similar_lines(table, *, z_pix_threshold=5):
     return table
 
 
-def create_masks(line_table, source_table, profile_fwhm, cube_correl,
-                 threshold_correl, cube_std, threshold_std, segmap, fwhm,
-                 out_dir, *, mask_size=25, min_sky_npixels=100,
-                 seg_thres_factor=.5, fwhm_factor=2, plot_problems=True):
+def create_masks(
+    line_table,
+    source_table,
+    profile_fwhm,
+    cube_correl,
+    threshold_correl,
+    cube_std,
+    threshold_std,
+    segmap,
+    fwhm,
+    out_dir,
+    *,
+    mask_size=25,
+    min_sky_npixels=100,
+    seg_thres_factor=0.5,
+    fwhm_factor=2,
+    plot_problems=True,
+):
     """Create the mask of each source.
 
     This function creates the masks and sky masks of the sources in the line
@@ -2155,12 +2274,12 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
     # outside the segment.  We replace ra, dec, and z by the initial values.
     line_table = line_table.copy()
     line_table['dec'], line_table['ra'] = cube_correl.wcs.pix2sky(
-        np.array([line_table['y0'], line_table['x0']]).T).T
+        np.array([line_table['y0'], line_table['x0']]).T
+    ).T
     line_table['z'] = line_table['z0']
     # We also add a fwhm column containing the FWHM of the line profile as
     # it is used for mask creation.
-    line_table['fwhm'] = [profile_fwhm[profile]
-                          for profile in line_table['profile']]
+    line_table['fwhm'] = [profile_fwhm[profile] for profile in line_table['profile']]
 
     # Convert segmap to sky map (1 where sky)
     skymap = segmap.copy()
@@ -2168,8 +2287,9 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
 
     by_id = line_table.group_by('ID')
 
-    for key, group in progressbar(zip(by_id.groups.keys, by_id.groups),
-                                  total=len(by_id.groups)):
+    for key, group in progressbar(
+        zip(by_id.groups.keys, by_id.groups), total=len(by_id.groups)
+    ):
         source_id = key['ID']
         source_x, source_y = source_table.loc[source_id]['x', 'y']
         logger.debug("Making mask of source %s.", source_id)
@@ -2182,31 +2302,50 @@ def create_masks(line_table, source_table, profile_fwhm, cube_correl,
             threshold = threshold_std * seg_thres_factor
 
         gen_mask_return = gen_source_mask(
-            source_id, source_x, source_y,
-            lines=group, detection_cube=detection_cube, threshold=threshold,
-            cont_sky=skymap, fwhm=fwhm, out_dir=out_dir, mask_size=mask_size,
-            min_sky_npixels=min_sky_npixels, fwhm_factor=fwhm_factor
+            source_id,
+            source_x,
+            source_y,
+            lines=group,
+            detection_cube=detection_cube,
+            threshold=threshold,
+            cont_sky=skymap,
+            fwhm=fwhm,
+            out_dir=out_dir,
+            mask_size=mask_size,
+            min_sky_npixels=min_sky_npixels,
+            fwhm_factor=fwhm_factor,
         )
 
         if gen_mask_return is not None:
-            logger.warning("The source %s mask is problematic. You may want "
-                           "to check source-mask-%0.5d.fits", gen_mask_return,
-                           gen_mask_return)
+            logger.warning(
+                "The source %s mask is problematic. You may want "
+                "to check source-mask-%0.5d.fits",
+                gen_mask_return,
+                gen_mask_return,
+            )
             with open(f"{out_dir}/problematic_masks.txt", 'a') as out:
                 out.write(f"{gen_mask_return}\n")
             if plot_problems:
                 gen_mask_return = gen_source_mask(
-                    source_id, source_x, source_y,
-                    lines=group, detection_cube=detection_cube,
-                    threshold=threshold, cont_sky=skymap, fwhm=fwhm,
-                    out_dir=out_dir, mask_size=mask_size,
-                    min_sky_npixels=min_sky_npixels, fwhm_factor=fwhm_factor,
-                    verbose=True
+                    source_id,
+                    source_x,
+                    source_y,
+                    lines=group,
+                    detection_cube=detection_cube,
+                    threshold=threshold,
+                    cont_sky=skymap,
+                    fwhm=fwhm,
+                    out_dir=out_dir,
+                    mask_size=mask_size,
+                    min_sky_npixels=min_sky_npixels,
+                    fwhm_factor=fwhm_factor,
+                    verbose=True,
                 )
 
 
-def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
-                        threshmax=7, plot=False, Pval=None):
+def compute_true_purity(
+    cube_local_max, refcat, maxdist=4.5, threshmin=4, threshmax=7, plot=False, Pval=None
+):
     """Compute the true purity using a reference catalog."""
 
     ref = Table.read(refcat)
@@ -2231,36 +2370,44 @@ def compute_true_purity(cube_local_max, refcat, maxdist=4.5, threshmin=4,
         nmiss = nref - len(set(itertools.chain.from_iterable(true)))
         res.append((thr, ndetect, ntrue, ndetect - ntrue, nmiss))
 
-    tbl = Table(rows=res, names=['thresh', 'ndetect', 'ntrue', 'nfalse',
-                                 'nmiss'])
+    tbl = Table(rows=res, names=['thresh', 'ndetect', 'ntrue', 'nfalse', 'nmiss'])
     tbl['purity'] = 1 - tbl['nfalse'] / tbl['ndetect']
 
     if plot:
         fig, ax = plt.subplots(figsize=(7, 7))
-        ax.plot(tbl['thresh'], tbl['purity'], drawstyle='steps-mid',
-                label='true purity')
+        ax.plot(
+            tbl['thresh'], tbl['purity'], drawstyle='steps-mid', label='true purity'
+        )
 
         if Pval is None:
             print('a Pval table is required to plot the estimated purity')
         else:
             ind = (Pval['Tval_r'] >= threshmin) & (Pval['Tval_r'] <= threshmax)
-            ax.plot(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
-                    drawstyle='steps-mid', label='estimated purity')
+            ax.plot(
+                Pval['Tval_r'][ind],
+                Pval['Pval_r'][ind],
+                drawstyle='steps-mid',
+                label='estimated purity',
+            )
             # err_est_purity = (np.sqrt(Pval['Det_m']) / Pval['Det_m'] +
             #                   np.sqrt(Pval['Det_M']) / Pval['Det_m']**2)
             # ax.errorbar(Pval['Tval_r'][ind], Pval['Pval_r'][ind],
             #             err_est_purity[ind], fmt='o', label='Estimated Purity')
 
-        ax.plot(tbl['thresh'], 1 - tbl['nmiss'] / nref, drawstyle='steps-mid',
-                label='completeness')
+        ax.plot(
+            tbl['thresh'],
+            1 - tbl['nmiss'] / nref,
+            drawstyle='steps-mid',
+            label='completeness',
+        )
         ax.set_ylim((0, 1))
         ax.set_ylabel('purity / completeness')
 
         ax3 = ax.twinx()
-        ax3.plot(tbl['thresh'], tbl['ntrue'], '-.', color='gray',
-                 drawstyle='steps-mid')
-        ax3.plot(tbl['thresh'], tbl['nfalse'], '--', color='gray',
-                 drawstyle='steps-mid')
+        ax3.plot(tbl['thresh'], tbl['ntrue'], '-.', color='gray', drawstyle='steps-mid')
+        ax3.plot(
+            tbl['thresh'], tbl['nfalse'], '--', color='gray', drawstyle='steps-mid'
+        )
         ax3.set_yscale('log')
         fig.legend(ncol=2, loc='upper center')
 

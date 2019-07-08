@@ -59,9 +59,11 @@ __all__ = (
 
 
 def _format_cat(cat):
-    columns = {'.1f': ('flux', ),
-               '.2f': ('lbda', 'T_GLR', 'STD'),
-               '.3f': ('ra', 'dec', 'residual', 'purity')}
+    columns = {
+        '.1f': ('flux',),
+        '.2f': ('lbda', 'T_GLR', 'STD'),
+        '.3f': ('ra', 'dec', 'residual', 'purity'),
+    }
     for fmt, colnames in columns.items():
         for name in colnames:
             if name in cat.colnames:
@@ -92,12 +94,11 @@ def load_spectra(filename):
     with fits.open(filename) as hdul:
         for i in range(1, len(hdul), 2):
             spec_id = int(hdul[i].name[4:])
-            spectra[spec_id] = Spectrum(hdulist=hdul, ext=(i, i+1))
+            spectra[spec_id] = Spectrum(hdulist=hdul, ext=(i, i + 1))
     return spectra
 
 
 class LogMixin:
-
     def _logdebug(self, *args):
         self.logger.debug(*args)
 
@@ -110,6 +111,7 @@ class LogMixin:
 
 class Status(Enum):
     """Step processing status."""
+
     NOTRUN = 'not run yet'
     RUN = 'run'
     DUMPED = 'dumped outputs'
@@ -124,6 +126,7 @@ class DataObj:
     file associated to the data is set to its value.
 
     """
+
     def __init__(self, kind):
         # Note: self.label is set by the metaclass
         self.kind = kind
@@ -171,6 +174,7 @@ class StepMeta(type):
       the instance.
 
     """
+
     def __new__(cls, name, bases, attrs):
         descr = []
         for n, inst in attrs.items():
@@ -205,7 +209,8 @@ class Step(LogMixin, metaclass=StepMeta):
 
     def __repr__(self):
         return 'Step {:02d}: <{}(status: {})>'.format(
-            self.idx, self.__class__.__name__, self.status.name)
+            self.idx, self.__class__.__name__, self.status.name
+        )
 
     @property
     def status(self):
@@ -232,11 +237,15 @@ class Step(LogMixin, metaclass=StepMeta):
         for name, p in sig.parameters.items():
             if name == 'orig':  # hide the orig param
                 continue
-            annotation = ((' - ' + p.annotation)
-                          if p.annotation is not p.empty else '')
+            annotation = (' - ' + p.annotation) if p.annotation is not p.empty else ''
             default = p.default if p.default is not p.empty else ''
-            self._logdebug('   - %s = %r (default: %r)%s', name,
-                           kwargs.get(name, ''), default, annotation)
+            self._logdebug(
+                '   - %s = %r (default: %r)%s',
+                name,
+                kwargs.get(name, ''),
+                default,
+                annotation,
+            )
             self.param[name] = kwargs.get(name, p.default)
 
         # Manage dependencies between steps
@@ -244,8 +253,9 @@ class Step(LogMixin, metaclass=StepMeta):
             for req in self.require:
                 step = self.orig.steps[req]
                 if step.status not in (Status.RUN, Status.DUMPED):
-                    raise RuntimeError('step {:02d} must be run before'
-                                       .format(step.idx))
+                    raise RuntimeError(
+                        'step {:02d} must be run before'.format(step.idx)
+                    )
 
         try:
             self.run(self.orig, *args, **kwargs)
@@ -261,8 +271,14 @@ class Step(LogMixin, metaclass=StepMeta):
 
     def store_cube(self, name, data, **kwargs):
         """Create a MPDAF Cube and store it as an attribute."""
-        cube = Cube(data=data, wave=self.orig.wave, wcs=self.orig.wcs,
-                    mask=np.ma.nomask, copy=False, **kwargs)
+        cube = Cube(
+            data=data,
+            wave=self.orig.wave,
+            wcs=self.orig.wcs,
+            mask=np.ma.nomask,
+            copy=False,
+            **kwargs,
+        )
         setattr(self, name, cube)
 
     def store_image(self, name, data, **kwargs):
@@ -283,21 +299,24 @@ class Step(LogMixin, metaclass=StepMeta):
             obj = getattr(self, name)
             if obj is not None:
                 outf = '{}/{}.{}'.format(
-                    outpath, name, 'txt' if kind == 'array' else 'fits')
+                    outpath, name, 'txt' if kind == 'array' else 'fits'
+                )
                 self.logger.debug('   - %s [%s]', name, kind)
                 if kind in ('cube', 'image'):
                     try:
                         obj.write(outf, convert_float32=False)
                     except TypeError:
-                        warnings.warn('MPDAF version too old to support '
-                                      'the new type conversion parameter, '
-                                      'data will be saved as float32.')
+                        warnings.warn(
+                            'MPDAF version too old to support '
+                            'the new type conversion parameter, '
+                            'data will be saved as float32.'
+                        )
                         obj.write(outf)
-                elif kind in ('table', ):
+                elif kind in ('table',):
                     obj.write(outf, overwrite=True)
-                elif kind in ('array', ):
+                elif kind in ('array',):
                     np.savetxt(outf, obj)
-                elif kind in ('spectra', ):
+                elif kind in ('spectra',):
                     save_spectra(obj, outf)
 
                 # now set the value to the path of the written file, which
@@ -319,8 +338,9 @@ class Step(LogMixin, metaclass=StepMeta):
         for name, kind in self._dataobjs:
             # we just set the paths here, the data will be loaded only if
             # the attribute is accessed.
-            outf = '{}/{}.{}'.format(outpath, name,
-                                     'txt' if kind == 'array' else 'fits')
+            outf = '{}/{}.{}'.format(
+                outpath, name, 'txt' if kind == 'array' else 'fits'
+            )
             setattr(self, name, outf)
 
 
@@ -386,11 +406,20 @@ class Preprocessing(Step):
     cube_std_local_min = DataObj('cube')
     cube_std_local_max = DataObj('cube')
 
-    def run(self, orig, dct_order=10, dct_approx=False, pfasegcont=0.01,
-            pfasegres=0.01, local_max_size=3, bins='fd'):
+    def run(
+        self,
+        orig,
+        dct_order=10,
+        dct_approx=False,
+        pfasegcont=0.01,
+        pfasegres=0.01,
+        local_max_size=3,
+        bins='fd',
+    ):
         self._loginfo('DCT computation')
-        cont_dct = dct_residual(orig.cube_raw, dct_order, orig.var, dct_approx,
-                                orig.mask)
+        cont_dct = dct_residual(
+            orig.cube_raw, dct_order, orig.var, dct_approx, orig.mask
+        )
         data = orig.cube_raw - cont_dct  # compute faint_dct
         data[orig.mask] = np.nan
 
@@ -411,9 +440,11 @@ class Preprocessing(Step):
 
         self._loginfo('Compute local maximum of std cube values')
         cube_local_max, cube_local_min = compute_local_max(
-            data, data, orig.mask, local_max_size)
-        self._loginfo('Save self.cube_local_max/self.cube_local_min from '
-                      'max/min correlations')
+            data, data, orig.mask, local_max_size
+        )
+        self._loginfo(
+            'Save self.cube_local_max/self.cube_local_min from ' 'max/min correlations'
+        )
         self.store_cube('cube_std_local_max', cube_local_max)
         self.store_cube('cube_std_local_min', cube_local_min)
 
@@ -427,24 +458,23 @@ class Preprocessing(Step):
         self._loginfo('Segmentation based on the continuum')
         # Test statistic for each spaxels - use log here as it gives a more
         # gaussian distribution
-        map1 = np.log10(np.sum(cont_dct**2, axis=0))
-        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm,
-                                                bins=bins)
-        self._loginfo('Found %d regions, threshold=%.2f',
-                      len(np.unique(map_cont)) - 1, thresh)
+        map1 = np.log10(np.sum(cont_dct ** 2, axis=0))
+        thresh, map_cont = compute_segmap_gauss(map1, pfasegcont, mean_fwhm, bins=bins)
+        self._loginfo(
+            'Found %d regions, threshold=%.2f', len(np.unique(map_cont)) - 1, thresh
+        )
         self.store_image('segmap_cont', map_cont)
 
         self._loginfo('Segmentation based on the residual')
         map2 = O2test(data)
-        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm,
-                                               bins=bins)
-        self._loginfo('Found %d regions, threshold=%.2f',
-                      len(np.unique(map_res)) - 1, thresh)
+        thresh, map_res = compute_segmap_gauss(map2, pfasegres, mean_fwhm, bins=bins)
+        self._loginfo(
+            'Found %d regions, threshold=%.2f', len(np.unique(map_res)) - 1, thresh
+        )
 
         self._loginfo('Merging both maps')
         segmap, nlabels = ndi.label((map_cont > 0) | (map_res > 0))
-        self._loginfo('Segmap saved in self.segmap_merged (%d regions)',
-                      nlabels)
+        self._loginfo('Segmap saved in self.segmap_merged (%d regions)', nlabels)
         self.store_image('segmap_merged', segmap)
 
 
@@ -480,21 +510,27 @@ class CreateAreas(Step):
     desc = 'Areas creation'
     areamap = DataObj('image')
 
-    def run(self, orig, pfa: "pfa of the test"=.2,
-            minsize: "min area size"=100, maxsize: "max area size"=None):
+    def run(
+        self,
+        orig,
+        pfa: "pfa of the test" = 0.2,
+        minsize: "min area size" = 100,
+        maxsize: "max area size" = None,
+    ):
         nexpmap = (np.sum(~orig.mask, axis=0) > 0).astype(np.int)
-        NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize**2))))
+        NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize ** 2))))
         if NbSubcube > 1:
             if maxsize is None:
                 maxsize = minsize * 2
 
-            MinSize = minsize**2
-            MaxSize = maxsize**2
+            MinSize = minsize ** 2
+            MaxSize = maxsize ** 2
 
             self._loginfo('First segmentation of %d^2 square', NbSubcube)
             self._logdebug('Squares segmentation and fusion')
             square_cut_fus = area_segmentation_square_fusion(
-                nexpmap, MinSize, MaxSize, NbSubcube, orig.Ny, orig.Nx)
+                nexpmap, MinSize, MaxSize, NbSubcube, orig.Ny, orig.Nx
+            )
 
             self._logdebug('Sources fusion')
             square_src_fus, src = area_segmentation_sources_fusion(
@@ -566,22 +602,33 @@ class ComputePCAThreshold(Step):
     # binO2 = DataObj('array')
     require = ('preprocessing', 'areas')
 
-    def run(self, orig, pfa_test: 'pfa of the test'=.01):
+    def run(self, orig, pfa_test: 'pfa of the test' = 0.01):
         results = []
         for area_ind in range(1, orig.nbAreas + 1):
             # limits of each spatial zone
-            ksel = (orig.areamap._data == area_ind)
+            ksel = orig.areamap._data == area_ind
 
             # Data in this spatio-spectral zone
             cube_temp = orig.cube_std._data[:, ksel]
 
             res = Compute_PCA_threshold(cube_temp, pfa_test)
             results.append(res)
-            self._loginfo('Area %d, estimation mean/std/threshold: %f/%f/%f',
-                          area_ind, res[4], res[5], res[3])
+            self._loginfo(
+                'Area %d, estimation mean/std/threshold: %f/%f/%f',
+                area_ind,
+                res[4],
+                res[5],
+                res[3],
+            )
 
-        (orig.testO2, orig.histO2, orig.binO2, self.thresO2, self.meaO2,
-         self.stdO2) = zip(*results)
+        (
+            orig.testO2,
+            orig.histO2,
+            orig.binO2,
+            self.thresO2,
+            self.meaO2,
+            self.stdO2,
+        ) = zip(*results)
 
 
 class ComputeGreedyPCA(Step):
@@ -630,24 +677,39 @@ class ComputeGreedyPCA(Step):
     mapO2 = DataObj('image')
     require = ('preprocessing', 'areas', 'compute_PCA_threshold')
 
-    def run(self, orig, Noise_population=50,
-            itermax: 'Max number of iterations'=100, threshold_list=None):
+    def run(
+        self,
+        orig,
+        Noise_population=50,
+        itermax: 'Max number of iterations' = 100,
+        threshold_list=None,
+    ):
         thr = orig.thresO2 if threshold_list is None else threshold_list
         orig.param['threshold_list'] = thr
-        self._loginfo('   - List of threshold = %s',
-                      ' '.join("%.2f" % x for x in thr))
+        self._loginfo('   - List of threshold = %s', ' '.join("%.2f" % x for x in thr))
         self._loginfo('Compute greedy PCA on each zone')
         faint, mapO2, nstop = Compute_GreedyPCA_area(
-            orig.nbAreas, orig.cube_std._data, orig.areamap._data,
-            Noise_population, thr, itermax, orig.testO2)
+            orig.nbAreas,
+            orig.cube_std._data,
+            orig.areamap._data,
+            Noise_population,
+            thr,
+            itermax,
+            orig.testO2,
+        )
         if nstop > 0:
-            self._logwarning('The iterations have been reached the limit '
-                             'of %d in %d cases', itermax, nstop)
+            self._logwarning(
+                'The iterations have been reached the limit ' 'of %d in %d cases',
+                itermax,
+                nstop,
+            )
 
         self._loginfo('Save the faint signal in self.cube_faint')
         self.store_cube('cube_faint', faint)
-        self._loginfo('Save the numbers of iterations used by the'
-                      ' testO2 for each spaxel in self.mapO2')
+        self._loginfo(
+            'Save the numbers of iterations used by the'
+            ' testO2 for each spaxel in self.mapO2'
+        )
         self.store_image('mapO2', mapO2)
 
 
@@ -698,7 +760,7 @@ class ComputeTGLR(Step):
     cube_local_max = DataObj('cube')
     maxmap = DataObj('image')
     minmap = DataObj('image')
-    require = ('compute_greedy_PCA', )
+    require = ('compute_greedy_PCA',)
 
     def run(self, orig, size=3, ncpu=1, pcut=1e-8, pmeansub=True):
         if ncpu > 1:
@@ -707,22 +769,31 @@ class ComputeTGLR(Step):
             except ImportError:
                 pass
             else:
-                warnings.warn('using multiprocessing (ncpu>1) is not possible '
-                              'with the mkl_fft package, it will crash')
+                warnings.warn(
+                    'using multiprocessing (ncpu>1) is not possible '
+                    'with the mkl_fft package, it will crash'
+                )
 
         # TGLR computing (normalized correlations)
         self._loginfo('Correlation')
         correl, profile, correl_min = Correlation_GLR_test(
-            orig.cube_faint._data, orig.PSF, orig.wfields, orig.profiles,
-            nthreads=ncpu, pcut=pcut, pmeansub=pmeansub)
+            orig.cube_faint._data,
+            orig.PSF,
+            orig.wfields,
+            orig.profiles,
+            nthreads=ncpu,
+            pcut=pcut,
+            pmeansub=pmeansub,
+        )
 
         self._loginfo('Save the TGLR value in self.cube_correl')
         correl[orig.mask] = 0
         self.store_cube('cube_correl', correl)
         self.store_cube('cube_correl_min', correl_min)
 
-        self._loginfo('Save the number of profile associated to the TGLR'
-                      ' in self.cube_profile')
+        self._loginfo(
+            'Save the number of profile associated to the TGLR' ' in self.cube_profile'
+        )
         profile[orig.mask] = 0
         self.store_cube('cube_profile', profile)
 
@@ -730,10 +801,10 @@ class ComputeTGLR(Step):
         self.store_image('maxmap', np.amax(correl, axis=0))
         self.store_image('minmap', np.amin(correl_min, axis=0))
 
-        self._loginfo('Compute p-values of local maximum of correlation '
-                      'values')
-        cube_local_max, cube_local_min = compute_local_max(correl, correl_min,
-                                                           orig.mask, size)
+        self._loginfo('Compute p-values of local maximum of correlation ' 'values')
+        cube_local_max, cube_local_min = compute_local_max(
+            correl, correl_min, orig.mask, size
+        )
         self._loginfo('Save self.cube_local_max from max correlations')
         self.store_cube('cube_local_max', cube_local_max)
         self._loginfo('Save self.cube_local_min from min correlations')
@@ -782,35 +853,48 @@ class ComputePurityThreshold(Step):
     Pval = DataObj('table')
     Pval_comp = DataObj('table')
     segmap_purity = DataObj('image')
-    require = ('compute_TGLR', )
+    require = ('compute_TGLR',)
 
-    def run(self, orig, purity=.9, purity_std=None, threshlist=None,
-            pfasegfinal=1e-5, bins='fd'):
+    def run(
+        self,
+        orig,
+        purity=0.9,
+        purity_std=None,
+        threshlist=None,
+        pfasegfinal=1e-5,
+        bins='fd',
+    ):
         if purity_std is None:
             purity_std = purity
         orig.param.update(dict(purity=purity, purity_std=purity_std))
 
         # compute another segmap on the maxmap and merge with
         # self.segmap_merged
-        thresh, map_res = compute_segmap_gauss(self.orig.maxmap._data,
-                                               pfasegfinal, 0, bins=bins)
-        segmap, nlabels = ndi.label((map_res > 0) |
-                                    (orig.segmap_merged._data > 0))
+        thresh, map_res = compute_segmap_gauss(
+            self.orig.maxmap._data, pfasegfinal, 0, bins=bins
+        )
+        segmap, nlabels = ndi.label((map_res > 0) | (orig.segmap_merged._data > 0))
         self.store_image('segmap_purity', segmap)
 
         self._loginfo('Estimation of threshold with purity = %.2f', purity)
         # purity computed on the background area using the segmap
         threshold, self.Pval = Compute_threshold_purity(
-            purity, orig.cube_local_max._data, orig.cube_local_min._data,
-            segmap, threshlist=threshlist)
+            purity,
+            orig.cube_local_max._data,
+            orig.cube_local_min._data,
+            segmap,
+            threshlist=threshlist,
+        )
         orig.param['threshold'] = threshold
         self._loginfo('Threshold: %.2f ', threshold)
 
-        self._loginfo('Estimation of threshold std with purity = %.2f',
-                      purity_std)
+        self._loginfo('Estimation of threshold std with purity = %.2f', purity_std)
         threshold_std, self.Pval_comp = Compute_threshold_purity(
-            purity_std, orig.cube_std_local_max._data,
-            orig.cube_std_local_min._data, threshlist=threshlist)
+            purity_std,
+            orig.cube_std_local_max._data,
+            orig.cube_std_local_min._data,
+            threshlist=threshlist,
+        )
         orig.param['threshold_std'] = threshold_std
         self._loginfo('Threshold: %.2f ', threshold_std)
 
@@ -860,8 +944,16 @@ class Detection(Step):
         zm, ym, xm = np.where(self.orig.cube_local_min._data > thresh)
         return zm, ym, xm
 
-    def run(self, orig, threshold=None, threshold_std=None, tol_spat=3,
-            tol_spec=5, maxdist_lines=2.5, segmap=None):
+    def run(
+        self,
+        orig,
+        threshold=None,
+        threshold_std=None,
+        tol_spat=3,
+        tol_spec=5,
+        maxdist_lines=2.5,
+        segmap=None,
+    ):
         if threshold is not None:
             orig.threshold_correl = threshold
         if threshold_std is not None:
@@ -896,11 +988,13 @@ class Detection(Step):
 
         # merging: remove detections in std close to the ones in correl
         kdt_cor = cKDTree(np.array([cat['x0'], cat['y0'], cat['z0']]).T)
-        kdt_std = cKDTree(np.array([cat_std['x0'], cat_std['y0'],
-                                    cat_std['z0']]).T)
+        kdt_std = cKDTree(np.array([cat_std['x0'], cat_std['y0'], cat_std['z0']]).T)
         # find matches in std that are close to correl detections
-        matched = set(itertools.chain.from_iterable(
-            kdt_cor.query_ball_tree(kdt_std, maxdist_lines)))
+        matched = set(
+            itertools.chain.from_iterable(
+                kdt_cor.query_ball_tree(kdt_std, maxdist_lines)
+            )
+        )
         unmatched = list(set(range(len(cat_std))) - matched)
 
         cat_std = cat_std[unmatched]
@@ -910,13 +1004,14 @@ class Detection(Step):
             self.logger.info('Overriding segmap_cont with the given one')
             self.segmap_label = Image(segmap)
             if self.segmap_label.shape != orig.shape[1:]:
-                raise ValueError('segmap does not have the same shape as the '
-                                 'processed cube')
+                raise ValueError(
+                    'segmap does not have the same shape as the ' 'processed cube'
+                )
         else:
-            self.logger.info('Using segmap_cont with an additional deblending'
-                             ' step')
+            self.logger.info('Using segmap_cont with an additional deblending' ' step')
             self.segmap_label = phot_deblend_sources(
-                orig.ima_dct, orig.segmap_cont.data, npixels=5, mode='linear')
+                orig.ima_dct, orig.segmap_cont.data, npixels=5, mode='linear'
+            )
 
         cat = _format_cat(vstack([cat, cat_std]).filled())
         cat['area'] = self.segmap_label._data[cat['y0'], cat['x0']]
@@ -952,8 +1047,13 @@ class Detection(Step):
         nl = len(cat)
         dl = len(cat_comp)
         self.Cat1 = cat
-        self._loginfo('Save the catalog in self.Cat1'
-                      ' (%d [+%s] sources, %d [+%d] lines)', ns, ds, nl, dl)
+        self._loginfo(
+            'Save the catalog in self.Cat1' ' (%d [+%s] sources, %d [+%d] lines)',
+            ns,
+            ds,
+            nl,
+            dl,
+        )
 
 
 class ComputeSpectra(Step):
@@ -988,30 +1088,42 @@ class ComputeSpectra(Step):
     desc = 'Lines estimation'
     Cat2 = DataObj('table')
     spectra = DataObj('spectra')
-    require = ('detection', )
+    require = ('detection',)
 
     def run(self, orig, grid_dxy=0, spectrum_size_fwhm=6):
         self.Cat2, line_est, line_var = estimation_line(
-            orig.Cat1, orig.cube_raw, orig.var, orig.PSF,
-            orig.wfields, orig.wcs, orig.wave, size_grid=grid_dxy,
-            criteria='flux', order_dct=30, horiz_psf=1, horiz=5
+            orig.Cat1,
+            orig.cube_raw,
+            orig.var,
+            orig.PSF,
+            orig.wfields,
+            orig.wcs,
+            orig.wave,
+            size_grid=grid_dxy,
+            criteria='flux',
+            order_dct=30,
+            horiz_psf=1,
+            horiz=5,
         )
         _format_cat(self.Cat2)
 
-        self._loginfo('Save the updated catalog in self.Cat2 (%d lines)',
-                      len(self.Cat2))
+        self._loginfo(
+            'Save the updated catalog in self.Cat2 (%d lines)', len(self.Cat2)
+        )
 
         # Radius for spectrum trimming
-        radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm
-                         / 2).astype(int)
+        radius = np.ceil(np.array(orig.FWHM_profiles) * spectrum_size_fwhm / 2).astype(
+            int
+        )
 
         self.spectra = OrderedDict()
         for row, data, vari in zip(self.Cat2, line_est, line_var):
             profile, z, num_line = row['profile', 'z', 'num_line']
             z_min = z - radius[profile]
             z_max = z + radius[profile]
-            sp = Spectrum(data=data, var=vari, wave=orig.wave,
-                          mask=np.ma.nomask, copy=False)
+            sp = Spectrum(
+                data=data, var=vari, wave=orig.wave, mask=np.ma.nomask, copy=False
+            )
             self.spectra[num_line] = sp.subspec(z_min, z_max, unit=None)
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
@@ -1043,24 +1155,31 @@ class CleanResults(Step):
     desc = 'Results cleaning'
     Cat3_lines = DataObj('table')
     Cat3_sources = DataObj('table')
-    require = ('compute_spectra', )
+    require = ('compute_spectra',)
 
     def run(self, orig, merge_lines_z_threshold=5):
         self.Cat3_lines = merge_similar_lines(
-            orig.Cat2, z_pix_threshold=merge_lines_z_threshold)
+            orig.Cat2, z_pix_threshold=merge_lines_z_threshold
+        )
         self.Cat3_sources = unique_sources(orig.Cat3_lines)
         # add some statistics to Cat3_lines and Cat3_sources
-        self.Cat3_sources = add_tglr_stat(self.Cat3_sources, self.Cat3_lines,
-                                          orig.cube_correl.data, orig.cube_std.data)
+        self.Cat3_sources = add_tglr_stat(
+            self.Cat3_sources,
+            self.Cat3_lines,
+            orig.cube_correl.data,
+            orig.cube_std.data,
+        )
 
-        self._loginfo('Save the unique source catalog in self.Cat3_sources'
-                      ' (%d sources)', len(orig.Cat3_sources))
-        self._loginfo('Save the cleaned lines in self.Cat3_lines (%d lines)',
-                      len(orig.Cat3_lines))
+        self._loginfo(
+            'Save the unique source catalog in self.Cat3_sources' ' (%d sources)',
+            len(orig.Cat3_sources),
+        )
+        self._loginfo(
+            'Save the cleaned lines in self.Cat3_lines (%d lines)', len(orig.Cat3_lines)
+        )
         nb_line_merged = np.sum(orig.Cat3_lines['merged_in'] != -9999)
         if nb_line_merged:
-            self._loginfo('%d lines were merged in nearby lines',
-                          nb_line_merged)
+            self._loginfo('%d lines were merged in nearby lines', nb_line_merged)
 
 
 class CreateMasks(Step):
@@ -1096,11 +1215,19 @@ class CreateMasks(Step):
 
     name = 'create_masks'
     desc = 'Mask creation'
-    require = ('clean_results', )
+    require = ('clean_results',)
 
-    def run(self, orig, path=None, overwrite=True, mask_size=25,
-            min_sky_npixels=100, seg_thres_factor=.5, fwhm_factor=2,
-            plot_problems=False):
+    def run(
+        self,
+        orig,
+        path=None,
+        overwrite=True,
+        mask_size=25,
+        min_sky_npixels=100,
+        seg_thres_factor=0.5,
+        fwhm_factor=2,
+        plot_problems=False,
+    ):
         if path is None:
             out_dir = '%s/masks' % orig.outpath
         else:
@@ -1131,7 +1258,8 @@ class CreateMasks(Step):
             min_sky_npixels=min_sky_npixels,
             seg_thres_factor=seg_thres_factor,
             fwhm_factor=fwhm_factor,
-            plot_problems=plot_problems)
+            plot_problems=plot_problems,
+        )
 
 
 class SaveSources(Step):
@@ -1160,8 +1288,18 @@ class SaveSources(Step):
     name = 'save_sources'
     desc = 'Save sources'
 
-    def run(self, orig, version, *, path=None, n_jobs=1, author="",
-            nb_fwhm=2, expmap_filename=None, overwrite=True):
+    def run(
+        self,
+        orig,
+        version,
+        *,
+        path=None,
+        n_jobs=1,
+        author="",
+        nb_fwhm=2,
+        expmap_filename=None,
+        overwrite=True,
+    ):
 
         if path is None:
             outpath = orig.outpath
@@ -1181,6 +1319,7 @@ class SaveSources(Step):
         orig.write()
 
         from .source_creation import create_all_sources
+
         create_all_sources(
             cat3_sources=orig.Cat3_sources,
             cat3_lines=orig.Cat3_lines,
@@ -1192,7 +1331,8 @@ class SaveSources(Step):
             spectra_fits_filename=os.path.join(outpath, 'spectra.fits'),
             segmaps={
                 "LABEL": os.path.join(outpath, 'segmap_label.fits'),
-                "MERGED": os.path.join(outpath, 'segmap_merged.fits')},
+                "MERGED": os.path.join(outpath, 'segmap_merged.fits'),
+            },
             version=version,
             profile_fwhm=orig.FWHM_profiles,
             out_tpl=os.path.join(out_dir, 'source-%0.5d.fits'),
@@ -1220,5 +1360,5 @@ STEPS = [
     ComputeSpectra,
     CleanResults,
     CreateMasks,
-    SaveSources
+    SaveSources,
 ]
