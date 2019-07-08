@@ -462,10 +462,10 @@ class CreateAreas(Step):
         PFA of the segmentation test to estimates sources with
         strong continuum
     minsize : int
-        Lenght in pixel of the side of typical surface wanted
+        Length in pixel of the side of typical surface wanted
         enough big area to satisfy the PCA
     maxsize : int
-        Lenght in pixel of the side of maximum surface wanted
+        Length in pixel of the side of maximum surface wanted
 
     Returns
     -------
@@ -609,12 +609,10 @@ class ComputeGreedyPCA(Step):
     itermax : int
         Maximum number of iterations
     threshold_list : list
-        User given list of threshold (not pfa) to apply
-        on each area, the list is of lenght nbAreas
-        or of lenght 1. Before using this option
-        make sure to have good correspondance between
-        the Areas and the threshold in list.
-        Use: self.plot_areas() to be sure.
+        User given list of threshold (not pfa) to apply on each area, the list
+        is of length nbAreas or of length 1. Before using this option make sure
+        to have good correspondence between the Areas and the threshold in
+        list.  Use: self.plot_areas() to be sure.
 
     Returns
     -------
