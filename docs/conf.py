@@ -120,3 +120,12 @@ intersphinx_mapping = {
     # 'matplotlib': ('https://matplotlib.org/', None),
     'astropy': ('http://docs.astropy.org/en/stable/', None),
 }
+
+automodsumm_inherited_members = True
+numpydoc_show_class_members = False
+
+
+# -- Options for todo extension ----------------------------------------------
+
+# If true, `todo` and `todoList` produce output, else they produce nothing.
+# todo_include_todos = True

@@ -6,6 +6,8 @@ from astropy import units as u
 from matplotlib import pyplot as plt
 from photutils import detect_sources
 
+__all__ = ('gen_source_mask', )
+
 
 def _touches_edge(array):
     """Return true if any of the border pixels is 1."""

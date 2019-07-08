@@ -15,6 +15,8 @@ from mpdaf.tools import progressbar
 
 from .version import __version__ as origin_version
 
+__all__ = ('create_source', 'create_all_sources')
+
 
 def create_source(source_id, source_table, source_lines, origin_params,
                   cube_cor_filename, cube_std_filename, mask_filename,

@@ -20,29 +20,13 @@ done also by Roland Bacon (CRAL), which also produced simulated cubes.
 
 The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 
-.. contents::
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
 
-Installation
-============
-
-ORIGIN requires the following packages:
-
-* Numpy
-* Astropy
-* SciPy
-* MPDAF
-* Joblib
-* tqdm
-* PyYAML
-* Matplotlib
-
-The last stable release of ORIGIN can be installed simply with pip::
-
-    pip install origin
-
-Or into the user path with::
-
-    pip install --user origin
+   installation
+   api
+   changelog
 
 How it works
 ============
@@ -53,14 +37,3 @@ Usage
 =====
 
 TODO Put example notebook.
-
-Changelog
-=========
-
-.. include:: ../CHANGELOG
-
-API
-===
-
-.. .. automodapi:: origin
-..    :no-heading:

@@ -35,6 +35,25 @@ from scipy.spatial import ConvexHull, cKDTree
 
 from .source_masks import gen_source_mask
 
+__all__ = (
+    'add_tglr_stat',
+    'compute_deblended_segmap',
+    'Compute_GreedyPCA',
+    'compute_local_max',
+    'compute_segmap_gauss',
+    'compute_thresh_gaussfit',
+    'Compute_threshold_purity',
+    'compute_true_purity',
+    'Correlation_GLR_test',
+    'create_masks',
+    'estimation_line',
+    'merge_similar_lines',
+    'purity_estimation',
+    'spatial_segmentation',
+    'spatiospectral_merging',
+    'unique_sources',
+)
+
 
 def timeit(f):
     """Decorator which prints the execution time of a function."""
@@ -322,6 +341,7 @@ def phot_deblend_sources(img, segmap, **kwargs):
                                 message='.*contains negative values.*')
         deblend = deblend_sources(img.data, segmap, **kwargs)
     return Image(data=deblend.data, wcs=img.wcs, mask=img.mask, copy=False)
+
 
 def createradvar(cu, ot):
     """Compute the compactness of areas using variance of position.

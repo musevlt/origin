@@ -41,6 +41,22 @@ from .lib_origin import (
     unique_sources,
 )
 
+__all__ = (
+    'Preprocessing',
+    'CreateAreas',
+    'ComputePCAThreshold',
+    'ComputeGreedyPCA',
+    'ComputeTGLR',
+    'ComputePurityThreshold',
+    'Detection',
+    'ComputeSpectra',
+    'CleanResults',
+    'CreateMasks',
+    'SaveSources',
+    'Step',
+    'STEPS',
+)
+
 
 def _format_cat(cat):
     columns = {'.1f': ('flux', ),
@@ -113,6 +129,9 @@ class DataObj:
         self.kind = kind
 
     def __get__(self, obj, owner=None):
+        if obj is None:
+            return
+
         try:
             val = obj.__dict__[self.label]
         except KeyError:
