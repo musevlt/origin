@@ -1,3 +1,9 @@
+.. image:: https://travis-ci.org/musevlt/origin.svg?branch=master
+  :target: https://travis-ci.org/musevlt/origin
+
+.. image:: https://codecov.io/gh/musevlt/origin/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/musevlt/origin
+
 ORIGIN is a Python software for the blind detection of faint emission line
 galaxies in MUSE datacubes.
 
