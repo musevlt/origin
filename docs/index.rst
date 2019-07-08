@@ -25,15 +25,6 @@ The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
    :caption: Contents:
 
    installation
+   usage
    api
    changelog
-
-How it works
-============
-
-Brief description, TODO.
-
-Usage
-=====
-
-TODO Put example notebook.
