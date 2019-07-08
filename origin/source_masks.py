@@ -108,7 +108,10 @@ def _create_mask(source_id, ra, dec, lines, detection_cube, threshold,
 
         try:
             seg_line = segmap.data[y_line, x_line]
-        except IndexError:
+        except (AttributeError, IndexError):
+            # photutils 0.7+ returns None when no sources are detected
+            # (-> AttributeError)
+            #
             # The line position is outside of the mask coverage. We must try
             # with a larger mask.
             is_wrong = True
