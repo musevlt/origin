@@ -157,7 +157,10 @@ def create_source(source_id, source_table, source_lines, origin_params,
                 source.header[keyword % idx] = (float("%0.2f" % threshold),
                                                 description)
         elif param in params:
-            source.header[keyword] = params[param], description
+            if params[param] is None:
+                source.header[keyword] = '', description
+            else:
+                source.header[keyword] = params[param], description
         else:
             logger.debug("Parameter %s absent of the parameter list.", param)
 
