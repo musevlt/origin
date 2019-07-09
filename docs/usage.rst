@@ -6,17 +6,20 @@ steps.  It is possible to save the outputs after each step and to reload
 a session to continue the processing.
 
 From the user side, everything can be done through the `~origin.ORIGIN` object.
-To Instantiate this object, we need to pass it a MUSE datacube. Here for the
+To instantiate this object, we need to pass it a MUSE datacube. Here for the
 example we will use the MUSE cube stored in the ``origin`` package, which is
-used for the unit tests::
+also used for the unit tests::
 
     >>> import origin
     >>> import os
     >>> origdir = os.path.dirname(origin.__file__)
     >>> CUBE = os.path.join(origdir, '..', 'tests', 'minicube.fits')
 
-We also must give it a ``name``, this is the "session" name which is used as
-the directory name in which outputs will be saved (in the current directory,
+(This supposes that you use a full copy of the git repository, as the tests are
+not included in the Python package).
+
+We also must give it a ``name``, this is the "session" name which is used as the
+directory name in which outputs will be saved (inside the current directory,
 which can be overridden with the ``path`` argument)::
 
     >>> orig = origin.ORIGIN(CUBE, name='origtest', loglevel='INFO')
@@ -26,9 +29,51 @@ which can be overridden with the ``path`` argument)::
     INFO : mean FWHM of the FSFs = 3.32 pixels
     INFO : 00 Done
 
-During the instantiation it will also read the FSF information.
+Profiles and FSF
+----------------
 
-**TODO**: explain how to give this info
+During the instantiation it will read the dictionary of profiles and the
+FSF information. The FSF model can be read from the cube with MPDAF's `FSF
+models`_ (`mpdaf.MUSE.FSFModel`) or it can be provided as parameter. It is also
+possible to use a Fieldmap_ for the case of mosaics where the FSF varies on the
+field.
+
+Session save and restore
+------------------------
+
+At any point it is possible to save the current state with
+`~origin.ORIGIN.write`::
+
+    >>> orig.write()
+    INFO : Writing...
+    INFO : Current session saved in ./origtest
+
+This uses the ``name`` of the object as output directory::
+
+    >>> orig.name
+    'origtest'
+
+In this output directory, all the step outputs are saved, as well as a log file
+(``{name}.log``) and a YAML file with all the parameters used in the various
+steps (``{name}.yaml``).
+
+A session can then be reloaded with `~origin.ORIGIN.load`::
+
+    >>> import origin
+    >>> orig = origin.ORIGIN.load('origtest')
+    INFO : Step 00 - Initialization (ORIGIN ...)
+    INFO : Read the Data Cube ...
+    INFO : Compute FSFs from the datacube FITS header keywords
+    INFO : mean FWHM of the FSFs = 3.32 pixels
+    INFO : 00 Done
+
+Another interesting point with the session feature is that saving the current
+state will unload the data from the memory. When running the steps, various data
+objects (cubes, images, tables) are added as attributes to the step classes, and
+saving the session will dump these objects to disk and free the memory.
+
+Steps
+-----
 
 The steps are implemented as subclasses of the `~origin.Step` class, and can be
 run directly through the `~origin.ORIGIN` object.
@@ -95,3 +140,8 @@ Step 10: `~origin.CreateMasks`
 
 Step 11: `~origin.SaveSources`
     Create the source file for each source.
+
+
+
+.. _FSF models: https://mpdaf.readthedocs.io/en/stable/muse.html#muse-fsf-models
+.. _Fieldmap: https://mpdaf.readthedocs.io/en/stable/muse.html#muse-mosaic-field-map

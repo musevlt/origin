@@ -36,7 +36,8 @@ CURDIR = os.path.dirname(os.path.abspath(__file__))
 class ORIGIN(steps.LogMixin):
     """ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
-    An Origin object is mainly composed by:
+    This is the main class to interact with all the steps.  An Origin object is
+    mainly composed by:
     - cube data (raw data and covariance)
     - 1D dictionary of spectral profiles
     - MUSE PSF
@@ -122,25 +123,25 @@ class ORIGIN(steps.LogMixin):
         Local maxima from min correlation (step05).
     threshold : float
         Estimated threshold (step06).
-    Pval : astropy.table.Table
+    Pval : `astropy.table.Table`
         Table with the purity results for each threshold (step06):
         - PVal_r : The purity function
         - index_pval : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
-    Cat0 : astropy.Table
+    Cat0 : `astropy.table.Table`
         Catalog returned by step07
-    Pval_comp : astropy.table.Table
+    Pval_comp : `astropy.table.Table`
         Table with the purity results for each threshold in compl (step08):
         - PVal_r : The purity function
         - index_pval : index value to plot
         - Det_m : Number of detections (-DATA)
         - Det_M : Number of detections (+DATA)
-    Cat1 : astropy.Table
+    Cat1 : `astropy.table.Table`
         Catalog returned by step08
     spectra : list of `~mpdaf.obj.Spectrum`
         Estimated lines. Result of step09.
-    Cat2 : astropy.Table
+    Cat2 : `astropy.table.Table`
         Catalog returned by step09.
 
     """
@@ -432,7 +433,7 @@ class ORIGIN(steps.LogMixin):
         for step in obj.steps.values():
             step.load(obj.outpath)
 
-        # step3
+        # special case for step3
         NbAreas = param.get("nbareas")
         if NbAreas is not None:
             if os.path.isfile("%s/testO2_1.txt" % folder):
@@ -463,7 +464,7 @@ class ORIGIN(steps.LogMixin):
     def status(self):
         """Prints the processing status."""
         for name, step in self.steps.items():
-            print("- {:02d}, {}: {}".format(step.idx, name, step.status.name))
+            print(f"- {step.idx:02d}, {name}: {step.status.name}")
 
     def _setup_logfile(self, logger):
         if self.file_handler is not None:
@@ -732,16 +733,13 @@ class ORIGIN(steps.LogMixin):
         Parameters
         ----------
         ax : matplotlib.Axes
-            The Axes instance in which the image is drawn
+            The Axes instance in which the image is drawn.
         kwargs : matplotlib.artist.Artist
-            Optional extra keyword/value arguments to be passed to
-            the ``ax.imshow()`` function.
+            Optional extra keyword/value arguments to be passed to ``ax.imshow()``.
 
         """
         if ax is None:
             ax = plt.gca()
-
-        # self.segmap.plot(ax=ax, title='areamap')
 
         kwargs.setdefault("cmap", "jet")
         kwargs.setdefault("alpha", 0.7)
@@ -774,8 +772,7 @@ class ORIGIN(steps.LogMixin):
     def plot_step03_PCA_threshold(
         self, log10=False, ncol=3, legend=True, xlim=None, fig=None, **fig_kw
     ):
-        """ Plot the histogram and the threshold for the starting point
-        of the PCA.
+        """ Plot the histogram and the threshold for the starting point of the PCA.
 
         Parameters
         ----------
@@ -831,7 +828,7 @@ class ORIGIN(steps.LogMixin):
             fig.subplots_adjust(hspace=0)
 
     def plot_step03_PCA_stat(self, cutoff=5, ax=None):
-        """ Plot the threshold value according to the area.
+        """Plot the threshold value according to the area.
 
         Median Absolute Deviation is used to find outliers.
 
@@ -868,16 +865,14 @@ class ORIGIN(steps.LogMixin):
     def plot_PCA_threshold(
         self, area, pfa_test="step03", log10=False, legend=True, xlim=None, ax=None
     ):
-        """ Plot the histogram and the threshold for the starting point
-        of the PCA.
+        """ Plot the histogram and the threshold for the starting point of the PCA.
 
         Parameters
         ----------
         area : int in [1, nbAreas]
             Area ID
         pfa_test : float or str
-            PFA of the test (if 'step03', the value set during step03
-            is used)
+            PFA of the test (if 'step03', the value set during step03 is used)
         log10 : bool
             Draw histogram in logarithmic scale or not
         legend : bool
@@ -901,9 +896,7 @@ class ORIGIN(steps.LogMixin):
                 mea = self.meaO2[area - 1]
                 std = self.stdO2[area - 1]
             else:
-                raise IOError(
-                    "pfa_test param is None: set a value or run" " the Step03"
-                )
+                raise IOError("pfa_test param is None: set a value or run the Step03")
         else:
             if self.cube_std is None:
                 raise IOError("Run the step 01 to initialize self.cube_std")
@@ -964,8 +957,7 @@ class ORIGIN(steps.LogMixin):
         ax : matplotlib.Axes
             The Axes instance in which the image is drawn
         kwargs : matplotlib.artist.Artist
-            Optional extra keyword/value arguments to be passed to
-            the ``ax.imshow()`` function
+            Optional extra keyword/value arguments to be passed to ``ax.imshow()``.
 
         """
         if self.mapO2 is None:
@@ -996,13 +988,13 @@ class ORIGIN(steps.LogMixin):
         Parameters
         ----------
         comp : bool
-            If True, plot purity curves for the complementary lines (step08)
+            If True, plot purity curves for the complementary lines (step08).
         ax : matplotlib.Axes
-            The Axes instance in which the image is drawn
+            The Axes instance in which the image is drawn.
         log10 : bool
-            To draw histogram in logarithmic scale or not
-        legend: bool
-            To draw the legend
+            To draw histogram in logarithmic scale or not.
+        legend : bool
+            To draw the legend.
 
         """
         if ax is None:
@@ -1056,13 +1048,13 @@ class ORIGIN(steps.LogMixin):
         Parameters
         ----------
         src_ind : int
-            Index of the object in self.Cat0
+            Index of the object in self.Cat0.
         ax1 : matplotlib.Axes
-            The Axes instance in which the NB image around the source is drawn
+            The Axes instance in which the NB image around the source is drawn.
         ax2 : matplotlib.Axes
-            The Axes instance in which a other NB image for check is drawn
+            The Axes instance in which a other NB image for check is drawn.
         ax3 : matplotlib.Axes
-            The Axes instance in which the difference is drawn
+            The Axes instance in which the difference is drawn.
 
         """
         if self.Cat0 is None:
