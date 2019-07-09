@@ -5,10 +5,10 @@ The ORIGIN algorithm is computationally intensive, hence it is divided in
 steps.  It is possible to save the outputs after each step and to reload
 a session to continue the processing.
 
-From the user side, everything can be done through the `~muse_origin.ORIGIN` object.
-To instantiate this object, we need to pass it a MUSE datacube. Here for the
-example we will use the MUSE cube stored in the ``muse_origin`` package, which is
-also used for the unit tests::
+From the user side, everything can be done through the `~muse_origin.ORIGIN`
+object.  To instantiate this object, we need to pass it a MUSE datacube. Here
+for the example we will use the MUSE cube stored in the ``muse_origin``
+package, which is also used for the unit tests::
 
     >>> import muse_origin
     >>> import os
@@ -18,11 +18,12 @@ also used for the unit tests::
 (This supposes that you use a full copy of the git repository, as the tests are
 not included in the Python package).
 
-We also must give it a ``name``, this is the "session" name which is used as the
-directory name in which outputs will be saved (inside the current directory,
-which can be overridden with the ``path`` argument)::
+We also must give it a ``name``, this is the "session" name which is used as
+the directory name in which outputs will be saved (inside the current directory
+by default, which can be overridden with the ``path`` argument)::
 
-    >>> orig = muse_origin.ORIGIN(CUBE, name='origtest', loglevel='INFO')
+    >>> testpath = getfixture('tmpdir')
+    >>> orig = muse_origin.ORIGIN(CUBE, name='origtest', loglevel='INFO', path=testpath)
     INFO : Step 00 - Initialization (ORIGIN ...)
     INFO : Read the Data Cube ...
     INFO : Compute FSFs from the datacube FITS header keywords
@@ -46,7 +47,7 @@ At any point it is possible to save the current state with
 
     >>> orig.write()
     INFO : Writing...
-    INFO : Current session saved in ./origtest
+    INFO : Current session saved in .../origtest
 
 This uses the ``name`` of the object as output directory::
 
@@ -60,7 +61,7 @@ steps (``{name}.yaml``).
 A session can then be reloaded with `~muse_origin.ORIGIN.load`::
 
     >>> import muse_origin
-    >>> orig = muse_origin.ORIGIN.load('origtest')
+    >>> orig = muse_origin.ORIGIN.load(os.path.join(testpath, 'origtest'))
     INFO : Step 00 - Initialization (ORIGIN ...)
     INFO : Read the Data Cube ...
     INFO : Compute FSFs from the datacube FITS header keywords
@@ -68,15 +69,16 @@ A session can then be reloaded with `~muse_origin.ORIGIN.load`::
     INFO : 00 Done
 
 Another interesting point with the session feature is that saving the current
-state will unload the data from the memory. When running the steps, various data
-objects (cubes, images, tables) are added as attributes to the step classes, and
-saving the session will dump these objects to disk and free the memory.
+state will unload the data from the memory. When running the steps, various
+data objects (cubes, images, tables) are added as attributes to the step
+classes, and saving the session will dump these objects to disk and free the
+memory.
 
 Steps
 -----
 
-The steps are implemented as subclasses of the `~muse_origin.Step` class, and can be
-run directly through the `~muse_origin.ORIGIN` object.
+The steps are implemented as subclasses of the `~muse_origin.Step` class, and
+can be run directly through the `~muse_origin.ORIGIN` object.
 
 Step 1: `~muse_origin.Preprocessing`
     Preparation of the data for the following steps:
