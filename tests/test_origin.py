@@ -6,8 +6,8 @@ from astropy.io import fits
 from astropy.table import Table
 from mpdaf.sdetect import Catalog, Source
 
-from origin import ORIGIN
-from origin.lib_origin import spatiospectral_merging
+from muse_origin import ORIGIN
+from muse_origin.lib_origin import spatiospectral_merging
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 MINICUBE = os.path.join(CURDIR, 'minicube.fits')

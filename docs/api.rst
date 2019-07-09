@@ -1,5 +1,5 @@
 API
 ===
 
-.. automodapi:: origin
+.. automodapi:: muse_origin
     :no-heading:

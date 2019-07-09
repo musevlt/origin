@@ -14,7 +14,7 @@ project = 'ORIGIN'
 copyright = '2019, ORIGIN Team'
 author = 'Simon Conseil'
 
-release = get_distribution('origin').version
+release = get_distribution('muse_origin').version
 # for example take major/minor
 version = '.'.join(release.split('.')[:2])
 
