@@ -172,13 +172,13 @@ class ORIGIN(steps.LogMixin):
 
         # stdout & file logger
         setup_logging(
-            name="origin",
+            name="muse_origin",
             level=loglevel,
             color=logcolor,
             fmt="%(levelname)-05s: %(message)s",
             stream=sys.stdout,
         )
-        self.logger = logging.getLogger("origin")
+        self.logger = logging.getLogger("muse_origin")
         self._setup_logfile(self.logger)
         self.param["loglevel"] = loglevel
         self.param["logcolor"] = logcolor
