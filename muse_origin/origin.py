@@ -250,7 +250,7 @@ class ORIGIN(steps.LogMixin):
         if name in self._dataobjs:
             return getattr(self._dataobjs[name], name)
         else:
-            raise AttributeError("unknown attribute {}".format(name))
+            raise AttributeError(f"unknown attribute {name}")
 
     def __dir__(self):
         return (
@@ -368,7 +368,7 @@ class ORIGIN(steps.LogMixin):
         path = os.path.dirname(os.path.abspath(folder))
         name = os.path.basename(folder)
 
-        with open("%s/%s.yaml" % (folder, name), "r") as stream:
+        with open(f"{folder}/{name}.yaml", "r") as stream:
             param = load_yaml(stream)
 
         if "FWHM PSF" in param:
@@ -521,8 +521,8 @@ class ORIGIN(steps.LogMixin):
             profiles = [hdu.data for hdu in hdul[1:]]
 
         # check that the profiles have the same size
-        if len(set([p.shape[0] for p in profiles])) != 1:
-            raise IOError("The profiles must have the same size")
+        if len({p.shape[0] for p in profiles}) != 1:
+            raise ValueError("The profiles must have the same size")
 
         return profiles
 
@@ -579,7 +579,7 @@ class ORIGIN(steps.LogMixin):
         if PSF is None or FWHM_PSF is None or LBDA_FWHM_PSF is None:
             info("Compute FSFs from the datacube FITS header keywords")
             if "FSFMODE" not in cube.primary_header:
-                raise IOError("missing PSF keywords in the cube FITS header")
+                raise ValueError("missing PSF keywords in the cube FITS header")
 
             # FSF created from FSF*** keywords
             try:
@@ -618,11 +618,11 @@ class ORIGIN(steps.LogMixin):
 
                 self.PSF = fits.getdata(PSF)
                 if self.PSF.shape[1] != self.PSF.shape[2]:
-                    raise IOError("PSF must be a square image.")
+                    raise ValueError("PSF must be a square image.")
                 if not self.PSF.shape[1] % 2:
-                    raise IOError("The spatial size of the PSF must be odd.")
+                    raise ValueError("The spatial size of the PSF must be odd.")
                 if self.PSF.shape[0] != self.shape[0]:
-                    raise IOError(
+                    raise ValueError(
                         "PSF and data cube have not the same"
                         "dimensions along the spectral axis."
                     )
@@ -670,7 +670,7 @@ class ORIGIN(steps.LogMixin):
         # adapt session if path changes
         if path is not None and path != self.path:
             if not os.path.exists(path):
-                raise ValueError("path does not exist: {}".format(path))
+                raise ValueError(f"path does not exist: {path}")
             self.path = path
             outpath = os.path.join(path, self.name)
             # copy outpath to the new path
@@ -703,7 +703,7 @@ class ORIGIN(steps.LogMixin):
             step.dump(self.outpath)
 
         # parameters in .yaml
-        with open("%s/%s.yaml" % (self.outpath, self.name), "w") as stream:
+        with open(f"{self.outpath}/{self.name}.yaml", "w") as stream:
             dump_yaml(self.param, stream)
 
         # step3 - saving this manually for now
@@ -791,7 +791,7 @@ class ORIGIN(steps.LogMixin):
 
         """
         if self.nbAreas is None:
-            raise IOError("Run the step 02 to initialize self.nbAreas")
+            raise ValueError("Run the step 02 to initialize self.nbAreas")
 
         if fig is None:
             fig = plt.figure()
@@ -841,9 +841,9 @@ class ORIGIN(steps.LogMixin):
 
         """
         if self.nbAreas is None:
-            raise IOError("Run the step 02 to initialize self.nbAreas")
+            raise ValueError("Run the step 02 to initialize self.nbAreas")
         if self.thresO2 is None:
-            raise IOError("Run the step 03 to compute the threshold values")
+            raise ValueError("Run the step 03 to compute the threshold values")
         if ax is None:
             ax = plt.gca()
         ax.plot(np.arange(1, self.nbAreas + 1), self.thresO2, "+")
@@ -860,7 +860,7 @@ class ORIGIN(steps.LogMixin):
                 )
         ax.set_xlabel("area")
         ax.set_ylabel("Threshold")
-        ax.set_title("PCA threshold (med=%.2f, mad= %.2f)" % (med, mad))
+        ax.set_title(f"PCA threshold (med={med:.2f}, mad= {mad:.2f})")
 
     def plot_PCA_threshold(
         self, area, pfa_test="step03", log10=False, legend=True, xlim=None, ax=None
@@ -884,7 +884,7 @@ class ORIGIN(steps.LogMixin):
 
         """
         if self.nbAreas is None:
-            raise IOError("Run the step 02 to initialize self.nbAreas")
+            raise ValueError("Run the step 02 to initialize self.nbAreas")
 
         if pfa_test == "step03":
             param = self.param["compute_PCA_threshold"]["params"]
@@ -896,10 +896,12 @@ class ORIGIN(steps.LogMixin):
                 mea = self.meaO2[area - 1]
                 std = self.stdO2[area - 1]
             else:
-                raise IOError("pfa_test param is None: set a value or run the Step03")
+                raise ValueError(
+                    "pfa_test param is None: set a value or run the Step03"
+                )
         else:
             if self.cube_std is None:
-                raise IOError("Run the step 01 to initialize self.cube_std")
+                raise ValueError("Run the step 01 to initialize self.cube_std")
             # limits of each spatial zone
             ksel = self.areamap._data == area
             # Data in this spatio-spectral zone
@@ -961,7 +963,7 @@ class ORIGIN(steps.LogMixin):
 
         """
         if self.mapO2 is None:
-            raise IOError("Run the step 04 to initialize self.mapO2")
+            raise ValueError("Run the step 04 to initialize self.mapO2")
 
         themap = self.mapO2.copy()
         title = "Number of times the spaxel got cleaned by the PCA"
@@ -1010,7 +1012,7 @@ class ORIGIN(steps.LogMixin):
             Pval = self.Pval
 
         if Pval is None:
-            raise IOError("Run the step 06")
+            raise ValueError("Run the step 06")
 
         Tval_r = Pval["Tval_r"]
         ax2 = ax.twinx()
@@ -1058,7 +1060,7 @@ class ORIGIN(steps.LogMixin):
 
         """
         if self.Cat0 is None:
-            raise IOError("Run the step 05 to initialize self.Cat0")
+            raise ValueError("Run the step 05 to initialize self.Cat0")
 
         if ax1 is None and ax2 is None and ax3 is None:
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4))

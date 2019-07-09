@@ -182,7 +182,7 @@ class StepMeta(type):
                 inst.label = n
                 descr.append((n, inst.kind))
         attrs['_dataobjs'] = descr
-        return super(StepMeta, cls).__new__(cls, name, bases, attrs)
+        return super().__new__(cls, name, bases, attrs)
 
 
 class Step(LogMixin, metaclass=StepMeta):
@@ -254,7 +254,7 @@ class Step(LogMixin, metaclass=StepMeta):
                 step = self.orig.steps[req]
                 if step.status not in (Status.RUN, Status.DUMPED):
                     raise RuntimeError(
-                        'step {:02d} must be run before'.format(step.idx)
+                        f'step {step.idx:02d} must be run before'
                     )
 
         try:
@@ -1232,9 +1232,9 @@ class CreateMasks(Step):
             out_dir = '%s/masks' % orig.outpath
         else:
             if os.path.exists(path):
-                raise IOError("Invalid path: {0}".format(path))
+                raise ValueError(f"Invalid path: {path}")
             path = os.path.normpath(path)
-            out_dir = '%s/%s/masks' % (path, orig.name)
+            out_dir = f'{path}/{orig.name}/masks'
 
         if overwrite:
             shutil.rmtree(out_dir, ignore_errors=True)
@@ -1305,7 +1305,7 @@ class SaveSources(Step):
             outpath = orig.outpath
         else:
             if not os.path.exists(path):
-                raise IOError("Invalid path: {0}".format(path))
+                raise ValueError(f"Invalid path: {path}")
             outpath = os.path.join(os.path.normpath(path), orig.name)
         out_dir = os.path.join(outpath, 'sources')
         catname = os.path.join(outpath, '%s.fits' % orig.name)

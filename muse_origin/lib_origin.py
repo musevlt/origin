@@ -435,7 +435,7 @@ def fusion_areas(label, MinSize, MaxSize, option=None):
                 elif option == 'var':
                     test = createradvar(cu, ot)
                 else:
-                    raise IOError('bad o^ption')
+                    raise ValueError('bad option')
 
                 if len(test) > 0:
                     # keep the min-size

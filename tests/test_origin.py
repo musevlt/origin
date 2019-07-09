@@ -171,7 +171,7 @@ def test_origin(caplog, tmpdir):
     src2 = Source.from_file(str(tmpdir.join('tmp2', 'sources', 'source-00002.fits')))
     # FIXME: check if this test is really useful
     # assert set(sp.shape[0] for sp in src.spectra.values()) == {22, 1100}
-    assert set(ima.shape for ima in src1.images.values()) == {(25, 25)}
+    assert {ima.shape for ima in src1.images.values()} == {(25, 25)}
     assert src1.cubes['MUSE_CUBE'].shape == (1100, 25, 25)
     assert "SRC_TS" in src1.header
     assert src1.header["CAT3_TS"] == src2.header["CAT3_TS"]
