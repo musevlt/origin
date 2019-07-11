@@ -1,0 +1,10 @@
+include CHANGELOG
+include LICENSE
+include README.rst
+
+graft docs
+prune docs/api
+prune docs/_build
+prune muse_origin.egg-info
+
+global-exclude *.log *.py[cod] __pycache__ .git
