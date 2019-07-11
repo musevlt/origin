@@ -1,9 +1,18 @@
-How it works
-============
+Usage
+=====
 
 The ORIGIN algorithm is computationally intensive, hence it is divided in
 steps.  It is possible to save the outputs after each step and to reload
 a session to continue the processing.
+
+As ORIGIN uses intensively linear algebra (PCA) and FFT routines, using the
+Intel MKL with Numpy may bring significant performance boost. This is the case
+by default when using Anaconda or Miniconda, and it is also possible to use the
+Numpy package from Intel `with pip`_. They also provide *mkl-fft* with
+a parallelized version of the FFT.
+
+The ORIGIN class
+----------------
 
 From the user side, everything can be done through the `~muse_origin.ORIGIN`
 object.  To instantiate this object, we need to pass it a MUSE datacube. Here
@@ -15,8 +24,8 @@ package, which is also used for the unit tests::
     >>> origdir = os.path.dirname(muse_origin.__file__)
     >>> CUBE = os.path.join(origdir, '..', 'tests', 'minicube.fits')
 
-(This supposes that you use a full copy of the git repository, as the tests are
-not included in the Python package).
+This supposes that you use a full copy of the git repository, the tests are
+not included in the Python package because the file is quite big.
 
 We also must give it a ``name``, this is the "session" name which is used as
 the directory name in which outputs will be saved (inside the current directory
@@ -29,6 +38,23 @@ by default, which can be overridden with the ``path`` argument)::
     INFO : Compute FSFs from the datacube FITS header keywords
     INFO : mean FWHM of the FSFs = 3.32 pixels
     INFO : 00 Done
+
+Then this object allows to run the steps, which is described in more details in
+the example notebook. It is possible to know the status of the processing with
+`~muse_origin.status`::
+
+    >>> orig.status()
+    - 01, preprocessing: NOTRUN
+    - 02, areas: NOTRUN
+    - 03, compute_PCA_threshold: NOTRUN
+    - 04, compute_greedy_PCA: NOTRUN
+    - 05, compute_TGLR: NOTRUN
+    - 06, compute_purity_threshold: NOTRUN
+    - 07, detection: NOTRUN
+    - 08, compute_spectra: NOTRUN
+    - 09, clean_results: NOTRUN
+    - 10, create_masks: NOTRUN
+    - 11, save_sources: NOTRUN
 
 Profiles and FSF
 ----------------
@@ -77,52 +103,82 @@ memory.
 Steps
 -----
 
-The steps are implemented as subclasses of the `~muse_origin.Step` class, and
-can be run directly through the `~muse_origin.ORIGIN` object.
+The steps are implemented are `~muse_origin.Step` sub-classes (described below),
+which can be run with methods of the `~muse_origin.ORIGIN` object:
+
+- ``orig.step01_preprocessing``
+- ``orig.step02_areas``
+- ``orig.step03_compute_PCA_threshold``
+- ``orig.step04_compute_greedy_PCA``
+- ``orig.step05_compute_TGLR``
+- ``orig.step06_compute_purity_threshold``
+- ``orig.step07_detection``
+- ``orig.step08_compute_spectra``
+- ``orig.step09_clean_results``
+- ``orig.step10_create_masks``
+- ``orig.step11_save_sources``
+
+Each step can has several parameters, with default values that should be fine in
+the general case. The most important parameters are mentioned below,
 
 Step 1: `~muse_origin.Preprocessing`
     Preparation of the data for the following steps:
 
     - Continuum subtraction with a DCT filter (the continuum cube is stored in
-      ``cube_dct``)
+      ``cube_dct``). The order of the DCT is set with the ``dct_order`` keyword.
     - Standardization of the data (stored in ``cube_std``).
     - Computation of the local maxima and minima of the std cube.
-    - Segmentation based on the continuum (``segmap_cont``).
-    - Segmentation based on the residual image (``ima_std``), merged with the
-      previous one which gives ``segmap_merged``.
+    - Segmentation based on the continuum (``segmap_cont``), with the threshold
+      defined by ``pfasegcont``.
+    - Segmentation based on the residual image (``ima_std``), with the threshold
+      defined by ``pfasegres``, merged with the previous one which gives
+      ``segmap_merged``.
 
 Step 2: `~muse_origin.CreateAreas`
     Creation of areas to split the work.
 
     This allows to split the cube into sub-cubes to distribute the following
     steps on multiple processes. The merged segmap computed previously is used
-    to avoid cutting objects.
+    to avoid cutting objects. The size of the sub-cubes is controlled with the
+    ``minsize`` and ``maxsize`` keywords.
 
 Step 3: `~muse_origin.ComputePCAThreshold`
-    Loop on each sub-cube and estimate the threshold for the PCA.
+    Loop on each sub-cube and estimate the threshold for the PCA, using the
+    ``pfa_test`` parameter.
 
 Step 4: `~muse_origin.ComputeGreedyPCA`
-    Loop on each sub-cube and compute the greedy PCA.
+    Loop on each sub-cube and compute the greedy PCA. It will use by default
+    the thresholds computed in step 3.
 
 Step 5: `~muse_origin.ComputeTGLR`
     Compute the cube of GLR test values.
 
-    The test is done on the cube containing the faint signal
-    (``self.cube_faint``) and it uses the PSF and the spectral profiles.
-    Then compute the p-values of local maximum of correlation values.
+    The test is done on the cube containing the faint signal (``cube_faint``)
+    and it uses the PSF and the spectral profiles. Then computes the local
+    maximum and minima of correlation values and stores the maxmap and minmap
+    images. It is possible to use multiprocessing to parallelize the work (with
+    ``n_jobs``), but the best is to use the c-level parallelization with the
+    *mkl-fft* package.
 
 Step 6: `~muse_origin.ComputePurityThreshold`
-    Find the threshold for a given purity.
+    Find the thresholds for the given purity, for the correlation (faint)
+    cube and the complementary one.
 
 Step 7: `~muse_origin.Detection`
-    Detections on local maxima from correlation and std cube, and
-    spatia-spectral merging in order to create the first catalog.
+    Detections on local maxima from the correlation and complementary cube,
+    using the thresholds computed in step 5. It is also possible to provides
+    thresholds with the corresponding parameters. This creates the ``Cat0``
+    table.
+
+    Then the detections are merged in sources, to create ``Cat1``. See
+    :ref:`merging` below.
 
 Step 8: `~muse_origin.ComputeSpectra`
     Compute the estimated emission line and the optimal coordinates.
 
-    For each detected line in a spatio-spectral grid, the line
-    is estimated with the deconvolution model::
+    This computes ``Cat2`` with a refined position for sources.  And for each
+    detected line in a spatio-spectral grid, the line is estimated with the
+    deconvolution model::
 
         subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
 
@@ -137,13 +193,29 @@ Step 9: `~muse_origin.CleanResults`
     - A table of unique sources is created.
     - Statistical detection info is added on the 2 resulting catalogs.
 
+    This step produces two tables:
+
+    - `Cat3_lines`: clean table of lines;
+    - `Cat3_sources`: table of unique sources.
+
 Step 10: `~muse_origin.CreateMasks`
-    This step create the mask and sky mask for each source.
+    This step create a source mask and a sky mask for each source. These masks
+    are computed as the combination of masks on the narrow band images of each
+    line.
 
 Step 11: `~muse_origin.SaveSources`
-    Create the source file for each source.
+    Create an `mpdaf.sdetect.Source` file for each source.
 
+.. _merging:
+
+Merging of lines in sources
+---------------------------
+
+**TODO**
+
+spatial-spectral merging in order to create the first catalog.
 
 
 .. _FSF models: https://mpdaf.readthedocs.io/en/stable/muse.html#muse-fsf-models
 .. _Fieldmap: https://mpdaf.readthedocs.io/en/stable/muse.html#muse-mosaic-field-map
+.. _with pip: https://software.intel.com/en-us/articles/installing-the-intel-distribution-for-python-and-intel-performance-libraries-with-pip-and

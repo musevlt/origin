@@ -901,7 +901,7 @@ class ComputePurityThreshold(Step):
 
 class Detection(Step):
     """Detections on local maxima from correlation and std cube, and
-    spatia-spectral merging in order to create the first catalog.
+    spatial-spectral merging in order to create the first catalog.
 
     Parameters
     ----------
