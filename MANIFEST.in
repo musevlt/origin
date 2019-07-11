@@ -6,5 +6,6 @@ graft docs
 prune docs/api
 prune docs/_build
 prune muse_origin.egg-info
+prune tests
 
 global-exclude *.log *.py[cod] __pycache__ .git
