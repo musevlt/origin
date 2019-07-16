@@ -220,7 +220,7 @@ class ORIGIN(steps.LogMixin):
 
         # List of spectral profile
         if profiles is None:
-            profiles = os.path.join(CURDIR, "Dico_FWHM_2_12.fits")
+            profiles = os.path.join(CURDIR, "Dico_3FWHM.fits")
         self.param["profiles"] = profiles
 
         # FSF
