@@ -158,13 +158,13 @@ def test_origin(caplog, tmpdir):
     assert [rec.message for rec in caplog.records] == [
         'ORIGIN PCA pfa 0.01 Back Purity: 0.80 Threshold: 9.28 '
         'Bright Purity 0.80 Threshold 5.46',
-        'Nb of detected lines: 18',
-        'Nb of sources Total: 8 Background: 4 Cont: 4',
-        'Nb of sources detected in faint (after PCA): 6 in std (before PCA): 2',
+        'Nb of detected lines: 16',
+        'Nb of sources Total: 6 Background: 3 Cont: 3',
+        'Nb of sources detected in faint (after PCA): 4 in std (before PCA): 2',
     ]
 
     cat = Catalog.read(str(tmpdir.join('tmp2', 'tmp2.fits')))
-    assert len(cat) == 8
+    assert len(cat) == 6
 
     # test returned sources are valid
     src1 = Source.from_file(str(tmpdir.join('tmp2', 'sources', 'source-00001.fits')))
