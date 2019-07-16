@@ -1,6 +1,8 @@
 include CHANGELOG
 include LICENSE
 include README.rst
+include muse_origin/Dico_3FWHM.fits
+include muse_origin/Dico_FWHM_2_12.fits
 
 graft docs
 prune docs/api
