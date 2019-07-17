@@ -10,6 +10,9 @@ ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
 
 .. include:: ../README.rst
 
+History
+-------
+
 This software was initially developed by Carole Clastres, under the supervision
 of David Mary (Lagrange institute, University of Nice). It was then ported to
 Python by Laure Piqueras (CRAL). From November 2016 to November 2017 the
@@ -22,9 +25,10 @@ The project is funded by the ERC MUSICOS (Roland Bacon, CRAL).
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
    installation
    usage
+   example
    api
    changelog

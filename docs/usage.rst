@@ -14,10 +14,10 @@ a parallelized version of the FFT.
 The ORIGIN class
 ----------------
 
-From the user side, everything can be done through the `~muse_origin.ORIGIN`
-object.  To instantiate this object, we need to pass it a MUSE datacube. Here
-for the example we will use the MUSE cube stored in the ``muse_origin``
-package, which is also used for the unit tests::
+To run ORIGIN everything can be done through the `~muse_origin.ORIGIN` object.
+To instantiate this object, we need to pass it a MUSE datacube. Here for the
+example we will use the MUSE cube stored in the ``muse_origin`` package, which
+is also used for the unit tests::
 
     >>> import muse_origin
     >>> import os
@@ -64,6 +64,19 @@ FSF information. The FSF model can be read from the cube with MPDAF's `FSF
 models`_ (`mpdaf.MUSE.FSFModel`) or it can be provided as parameter. It is also
 possible to use a Fieldmap_ for the case of mosaics where the FSF varies on the
 field.
+
+By default ORIGIN supposes that the cube contains an FSF model that can be
+read with MPDAF::
+
+    >>> from mpdaf.MUSE import FSFModel
+    >>> fsfmodel = FSFModel.read(CUBE)
+    >>> fsfmodel
+    <OldMoffatModel(model=MOFFAT1)>
+    >>> fsfmodel.to_header()
+    FSFMODE = 'MOFFAT1 '           / Old model with a fixed beta
+    FSF00BET=                  2.8
+    FSF00FWA=                0.869
+    FSF00FWB=           -3.401E-05
 
 Session save and restore
 ------------------------

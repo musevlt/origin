@@ -20,11 +20,15 @@ emitters. The estimation of the resulting purity for emission lines is based on
 endogenous training data: the statistics of the peaks is based on that of the
 valley.
 
+Citation
+--------
+
 ORIGIN was described briefly in `2017A&A...608A...1B
 <https://ui.adsabs.harvard.edu/abs/2017A%26A...608A...1B/abstract>`_ and will be
 presented in more details in a forthcoming publication ([Mary et al. in prep.]).
 
-Links:
+Links
+-----
 
 - `Documentation <https://muse-origin.readthedocs.io/>`_
 - `PyPI <https://pypi.org/project/muse-origin/>`_ (coming soon)
