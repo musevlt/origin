@@ -156,34 +156,49 @@ the general case. The most important parameters are mentioned below,
 Step 1: `~muse_origin.Preprocessing`
     Preparation of the data for the following steps:
 
-    - Continuum subtraction with a DCT filter (the continuum cube is stored in
-      ``cube_dct``). The order of the DCT is set with the ``dct_order`` keyword.
+    - Nuisance removal with DCT. The estimated continuum cube is stored in
+      ``cube_dct``. The order of the DCT is set with the ``dct_order`` keyword.
+
     - Standardization of the data (stored in ``cube_std``).
-    - Computation of the local maxima and minima of the std cube.
+
+    - Computation of the local maxima and minima of ``cube_std``.
+
     - Segmentation based on the continuum (``segmap_cont``), with the threshold
       defined by ``pfasegcont``.
-    - Segmentation based on the residual image (``ima_std``), with the threshold
-      defined by ``pfasegres``, merged with the previous one which gives
-      ``segmap_merged``.
+
+    - Segmentation based on the residual image (``ima_std``), with the
+      threshold defined by ``pfasegres``, merged with the previous one which
+      gives ``segmap_merged``.
 
 Step 2: `~muse_origin.CreateAreas`
-    Creation of areas to split the work.
+    Creation of areas for the PCA.
 
-    This allows to split the cube into sub-cubes to distribute the following
-    steps on multiple processes. The merged segmap computed previously is used
-    to avoid cutting objects. The size of the sub-cubes is controlled with the
-    ``minsize`` and ``maxsize`` keywords.
+    The purpose of spatial segmentation is to locate regions where the sky
+    contains "nuisance" sources, i.e., sources with continuum and / or bright
+    emission lines, or regions exhibiting a particular statistical behaviour,
+    caused by the presence of systematic residuals for instance.
+
+    The merged segmap computed previously is used to avoid cutting objects. The
+    size of the areas is controlled with the ``minsize`` and ``maxsize``
+    keywords.
 
 Step 3: `~muse_origin.ComputePCAThreshold`
-    Loop on each sub-cube and estimate the threshold for the PCA, using the
+    Loop on each area and estimate the threshold for the PCA, using the
     ``pfa_test`` parameter.
 
 Step 4: `~muse_origin.ComputeGreedyPCA`
-    Loop on each sub-cube and compute the greedy PCA. It will use by default
-    the thresholds computed in step 3.
+    Nuisance removal with iterative PCA.
+
+    This is one of the most computationally intensive step in ORIGIN, with the
+    following step.
+
+    Loop on each area and compute the iterative PCA: iteratively locate and
+    remove residual nuisance sources, i.e., any signal that is not the signa-
+    ture of a faint, spatially unresolved emission line.  Use by default the
+    thresholds computed in step 3.
 
 Step 5: `~muse_origin.ComputeTGLR`
-    Compute the cube of GLR test values.
+    Compute the cube of GLR test values (the "correlation" cube).
 
     The test is done on the cube containing the faint signal (``cube_faint``)
     and it uses the PSF and the spectral profiles. Then computes the local
@@ -194,7 +209,7 @@ Step 5: `~muse_origin.ComputeTGLR`
 
 Step 6: `~muse_origin.ComputePurityThreshold`
     Find the thresholds for the given purity, for the correlation (faint)
-    cube and the complementary one.
+    cube and the complementary (std) one.
 
 Step 7: `~muse_origin.Detection`
     Detections on local maxima from the correlation and complementary cube,
