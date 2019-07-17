@@ -489,9 +489,9 @@ class CreateAreas(Step):
     Returns
     -------
     self.nbAreas : int
-        number of areas
+        Number of areas.
     self.areamap : `~mpdaf.obj.Image`
-        The map of areas
+        The map of areas.
 
     """
 
@@ -554,22 +554,22 @@ class ComputePCAThreshold(Step):
     Parameters
     ----------
     pfa_test : float
-        Threshold of the test (default=0.01)
+        Threshold of the test (default=0.01).
 
     Returns
     -------
     self.testO2 : list of arrays (one per PCA area)
         Result of the O2 test.
     self.histO2 : lists of arrays (one per PCA area)
-        PCA histogram
+        PCA histogram.
     self.binO2 : lists of arrays (one per PCA area)
-        bin for the PCA histogram
+        bin for the PCA histogram.
     self.thresO2 : list of float
-        For each area, threshold value
+        For each area, threshold value.
     self.meaO2 : list of float
-        Location parameter of the Gaussian fit used to estimate the threshold
+        Location parameter of the Gaussian fit used to estimate the threshold.
     self.stdO2 : list of float
-        Scale parameter of the Gaussian fit used to estimate the threshold
+        Scale parameter of the Gaussian fit used to estimate the threshold.
 
     """
 
@@ -611,12 +611,12 @@ class ComputePCAThreshold(Step):
 
 class ComputeGreedyPCA(Step):
     """
-    Loop on each sub-cube and compute the greedy PCA.
+    Loop on each area and compute the greedy PCA.
 
-    The test (test_fun) and the threshold (threshold_test) define the part
+    The O2 test and the thresholds (``threshold_list``) define the part
     of the each zone of the cube to segment in nuisance and background.
-    A part of the background part (1/Noise_population %) is used to compute
-    a mean background, a signature.
+    A part of the background part (``1 / Noise_population %``) is used
+    to compute a mean background, a signature.
 
     The Nuisance part is orthogonalized to this signature in order to not
     loose this part during the greedy process. SVD is performed on nuisance
@@ -625,27 +625,26 @@ class ComputeGreedyPCA(Step):
     Nuisance and background. The Nuisance spectra which satisfied the test
     are updated in the background computation and the background is so
     cleaned from sources signature. The iteration stop when all the spectra
-    satisfy the criteria
+    satisfy the criteria.
 
     Parameters
     ----------
     Noise_population : float
-        Fraction of spectra used to estimate the background signature
+        Fraction of spectra used to estimate the background signature.
     itermax : int
-        Maximum number of iterations
+        Maximum number of iterations.
     threshold_list : list
-        User given list of threshold (not pfa) to apply on each area, the list
-        is of length nbAreas or of length 1. Before using this option make sure
-        to have good correspondence between the Areas and the threshold in
-        list.  Use: self.plot_areas() to be sure.
+        List of thresholds (not pfa) to apply on each area. Before using
+        this option make sure to have good correspondence between areas
+        and the threshold in list. Use ``self.plot_areas()`` to be sure.
 
     Returns
     -------
     self.cube_faint : `~mpdaf.obj.Cube`
         Projection on the eigenvectors associated to the lower
-        eigenvalues of the data cube (representing the faint signal)
+        eigenvalues of the data cube (representing the faint signal).
     self.mapO2 : `~mpdaf.obj.Image`
-        The numbers of iterations used by testO2 for each spaxel
+        The numbers of iterations used by testO2 for each spaxel.
 
     """
 
@@ -703,19 +702,19 @@ class ComputeTGLR(Step):
     Returns
     -------
     self.cube_correl : `~mpdaf.obj.Cube`
-        Cube of T_GLR values
+        Cube of T_GLR values.
     self.correl_min : `~mpdaf.obj.Cube`
-        Cube of T_GLR values of minimum correlation
+        Cube of T_GLR values of minimum correlation.
     self.cube_profile : `~mpdaf.obj.Cube` (type int)
-        Number of the profile associated to the T_GLR
+        Number of the profile associated to the T_GLR.
     self.maxmap : `~mpdaf.obj.Image`
-        Map of maximum correlations along the wavelength axis
+        Map of maximum correlations along the wavelength axis.
     self.minmap : `~mpdaf.obj.Image`
-        Map of minimum correlations along the wavelength axis
+        Map of minimum correlations along the wavelength axis.
     self.cube_local_max : `~mpdaf.obj.Cube`
-        Local maxima from max correlation
+        Local maxima from max correlation.
     self.cube_local_min : `~mpdaf.obj.Cube`
-        Local maxima from minus min correlation
+        Local maxima from minus min correlation.
 
     """
 
@@ -1032,7 +1031,7 @@ class ComputeSpectra(Step):
     Parameters
     ----------
     grid_dxy : int
-        Maximum spatial shift for the grid
+        Maximum spatial shift for the grid.
     spectrum_size_fwhm: float
         The length of the spectrum to keep around each line as a factor of
         the fitted line FWHM.
@@ -1043,7 +1042,7 @@ class ComputeSpectra(Step):
         Catalog of parameters of detected emission lines.  Columns:
         ra dec lbda x0 x y0 y z0 z T_GLR profile residual flux num_line purity
     self.spectra : list of `~mpdaf.obj.Spectrum`
-        Estimated lines
+        Estimated lines.
 
     """
 
