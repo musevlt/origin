@@ -56,14 +56,14 @@ the example notebook. It is possible to know the status of the processing with
     - 10, create_masks: NOTRUN
     - 11, save_sources: NOTRUN
 
-Profiles and FSF
-----------------
+FSF
+---
 
-During the instantiation it will read the dictionary of profiles and the
-FSF information. The FSF model can be read from the cube with MPDAF's `FSF
-models`_ (`mpdaf.MUSE.FSFModel`) or it can be provided as parameter. It is also
-possible to use a Fieldmap_ for the case of mosaics where the FSF varies on the
-field.
+ORIGIN needs some information about the FSF (*Field Spread Function*),
+including its dependency on the wavelength.  The FSF model can be read from the
+cube with MPDAF's `FSF models`_ (`mpdaf.MUSE.FSFModel`) or it can be provided
+as parameter. It is also possible to use a Fieldmap_ for the case of mosaics
+where the FSF varies on the field.
 
 By default ORIGIN supposes that the cube contains an FSF model that can be
 read with MPDAF::
@@ -72,11 +72,30 @@ read with MPDAF::
     >>> fsfmodel = FSFModel.read(CUBE)
     >>> fsfmodel
     <OldMoffatModel(model=MOFFAT1)>
-    >>> fsfmodel.to_header()
-    FSFMODE = 'MOFFAT1 '           / Old model with a fixed beta
-    FSF00BET=                  2.8
-    FSF00FWA=                0.869
-    FSF00FWB=           -3.401E-05
+    >>> fsfmodel.to_header().cards
+    ('FSFMODE', 'MOFFAT1', 'Old model with a fixed beta')
+    ('FSF00BET', 2.8, '')
+    ('FSF00FWA', 0.869, '')
+    ('FSF00FWB', -3.401e-05, '')
+
+This model is used to get the FWHM for each wavelength plane, otherwise the
+full list must be provides as parameter::
+
+    >>> import numpy as np
+    >>> fsfmodel.get_fwhm(np.array([5000, 7000, 9000]))
+    array([0.69... , 0.63..., 0.56...])
+
+Profiles
+--------
+
+For the spectral axis ORIGIN uses a dictionary of line profiles, which will be
+used to compute the spectral correlation. The ORIGIN comes with two FITS files
+containing profiles:
+
+- ``Dico_3FWHM.fits``: contains 3 profiles with FWHM of 2, 6.7 and 12 pixels.
+  This is the one used by default.
+- ``Dico_FWHM_2_12.fits``: contains 20 profiles with FWHM between 2 and 12
+  pixels.
 
 Session save and restore
 ------------------------
