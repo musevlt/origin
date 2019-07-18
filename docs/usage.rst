@@ -258,9 +258,32 @@ Step 11: `~muse_origin.SaveSources`
 Merging of lines in sources
 ---------------------------
 
-**TODO**
+Once we get the list of line detections, we need to group these detections in
+"sources", where a given source can have multiple lines. It's a tricky step
+because extended sources can have detections with different spatial positions.
+To solve this problem we use the information from a segmentation map, that can
+be provided or computed automatically on the continuum image, to identify the
+regions of bright or extended sources. And we adopt a different method for
+detections that are in these areas.
 
-spatial-spectral merging in order to create the first catalog.
+First, the detections are merged based on a spatial distance criteria (the
+``tol_spat`` parameter). Starting from a given detection, the detections within
+a distance of ``tol_spat`` are merged. Then looking iteratively at the
+neighbors of the merged detections, these are merged in the group if their
+distance to the seed detection is less than ``tol_spat``, or if the distance on
+the wavelength axis is less than ``tol_spec``. And this process is repeated for
+all detections that are not yet merged.
+
+Then we take all the detections that belong to a given region of the
+segmentation map, and if there is more than one group of lines from the
+previous step we compute the distance on the wavelength axis between the groups
+of lines. If the minimum distance in wavelength is less than ``tol_spec`` then
+the groups are merged.
+
+
+
+
+
 
 
 .. _FSF models: https://mpdaf.readthedocs.io/en/stable/muse.html#muse-fsf-models
