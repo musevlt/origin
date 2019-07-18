@@ -150,8 +150,10 @@ which can be run with methods of the `~muse_origin.ORIGIN` object:
 - ``orig.step10_create_masks``
 - ``orig.step11_save_sources``
 
-Each step can has several parameters, with default values that should be fine in
-the general case. The most important parameters are mentioned below,
+Each step has several parameters, with default values that should be fine in
+the general case. The most important parameters are mentioned below, and more
+details about the others parameters and attributes can be found in the
+docstrings of the step classes.
 
 Step 1: `~muse_origin.Preprocessing`
     Preparation of the data for the following steps:
@@ -229,8 +231,6 @@ Step 8: `~muse_origin.ComputeSpectra`
 
         subcube = FSF*line -> line_est = subcube*fsf/(fsf^2))
 
-    Via PCA LS or denoised PCA LS Method.
-
 Step 9: `~muse_origin.CleanResults`
     This step does several things to “clean” the results of ORIGIN:
 
@@ -279,10 +279,6 @@ segmentation map, and if there is more than one group of lines from the
 previous step we compute the distance on the wavelength axis between the groups
 of lines. If the minimum distance in wavelength is less than ``tol_spec`` then
 the groups are merged.
-
-
-
-
 
 
 
