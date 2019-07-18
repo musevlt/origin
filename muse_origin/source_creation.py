@@ -44,47 +44,47 @@ def create_source(
 
     Parameters
     ----------
-    source_id: int
+    source_id : int
         Identifier for the source in the source and line tables.
-    source_table: astropy.table.Table
+    source_table : astropy.table.Table
         Catalogue of sources like the Cat3_sources one.
-    source_lines: astropy.table.Table
+    source_lines : astropy.table.Table
         Catalogue of lines like the Cat3_lines one.
-    origin_params: dict
+    origin_params : dict
         Dictionary of the parameters for the ORIGIN run.
-    cube_cor_filename: str
+    cube_cor_filename : str
         Name of the file containing the correlation cube of the ORIGIN run.
-    cube_std_filename: str
+    cube_std_filename : str
         Name of the file containing the std cube of the ORIGIN run.
-    mask_filename: str
+    mask_filenam e: str
         Name of the file containing the mask of the source.
-    skymask_filename: str:
+    skymask_filename : str
         Name of the file containing the sky mask of the source.
-    spectra_fits_filename: str
+    spectra_fits_filename : str
         Name of the FITS file containing the spectra of the lines.
-    segmaps: dict(str: str)
+    segmaps : dict(str: str)
         Dictionnary associating to a segmap type the associated FITS file name.
-    version: str
+    version : str
         Version number stored in the source.
-    source_ts: str
+    source_ts : str
         Time stamp for when the source was created.
-    profile_fwhm: list of int
+    profile_fwhm : list of int
         List of line profile FWHM in pixel. The index in the list is the
         profile number.
-    author: str
+    author : str
         Name of the author.
-    nb_fwhm: float
+    nb_fwhm : float
         Factor multiplying the FWHM of the line to compute the width of the
         narrow band image.
-    expmap_filename: str
+    expmap_filename : str
         Name of the file containing the exposure map.  If not None, a cut-out
         of the exposure map will be added to the source file.
-    save_to: str
+    save_to : str
         If not None, the source will be saved to the given file.
 
     Returns
     -------
-    mpdaf.sdetect.source.Source or None
+    mpdaf.sdetect.Source or None
         If save_to is used, the function returns None.
 
     """

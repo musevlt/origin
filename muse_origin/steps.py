@@ -368,19 +368,21 @@ class Preprocessing(Step):
     Parameters
     ----------
     dct_order : int
-        The number of atom to keep for the DCT decomposition.
+        The number of atom to keep for the DCT decomposition, defaults to 10.
     dct_approx : bool
-        if True, the DCT computation does not take the variance into account
-        for the computation of the DCT coefficients.
+        If True, the DCT computation does not take the variance into account
+        for the computation of the DCT coefficients. Defaults to False.
     pfasegcont : float
-        PFA for the segmentation based on the continuum.
+        PFA for the segmentation based on the continuum, defaults to 0.01
     pfasegres : float
-        PFA for the segmentation based on the residual.
+        PFA for the segmentation based on the residual, defaults to 0.01
     local_max_size : int
-        Connectivity of contiguous voxels per axis, for the maximum filter.
+        Connectivity of contiguous voxels per axis, for the maximum filter,
+        defaults to 3.
     bins : str
-        Method for computing bins for the segmentation of the continuum and of
-        the residual images (see `numpy.histogram_bin_edges`).
+        Method for computing bins for the segmentation of the continuum and
+        of the residual images (see `numpy.histogram_bin_edges`), defaults
+        to 'fd'.
 
     Returns
     -------
@@ -498,13 +500,13 @@ class CreateAreas(Step):
     Parameters
     ----------
     pfa : float
-        PFA of the segmentation test to estimates sources with
-        strong continuum
+        PFA of the segmentation test to estimates sources with strong
+        continuum, defaults to 0.2
     minsize : int
-        Length in pixel of the side of typical surface wanted
-        enough big area to satisfy the PCA
+        Length in pixel of the side of typical area wanted enough big
+        area to satisfy the PCA, defaults to 100.
     maxsize : int
-        Length in pixel of the side of maximum surface wanted
+        Length in pixel of the side of maximum area wanted, defaults to None.
 
     Returns
     -------
@@ -569,7 +571,7 @@ class CreateAreas(Step):
 
 class ComputePCAThreshold(Step):
     """
-    Loop on each sub-cube and estimate the threshold for the PCA.
+    Loop on each area and estimate the threshold for the PCA.
 
     Parameters
     ----------
@@ -650,13 +652,15 @@ class ComputeGreedyPCA(Step):
     Parameters
     ----------
     Noise_population : float
-        Fraction of spectra used to estimate the background signature.
+        Fraction of spectra used to estimate the background signature, as
+        a percentage of the number of spectra. Defaults to 50.
     itermax : int
-        Maximum number of iterations.
+        Maximum number of iterations, defaults to 100.
     threshold_list : list
         List of thresholds (not pfa) to apply on each area. Before using
         this option make sure to have good correspondence between areas
         and the threshold in list. Use ``self.plot_areas()`` to be sure.
+        By default the thresholds computed in the previous step are used.
 
     Returns
     -------
@@ -711,13 +715,13 @@ class ComputeTGLR(Step):
     Parameters
     ----------
     size : int
-        Connectivity of contiguous voxels per axis, for the maximum filter.
+        Connectivity of contiguous voxels per axis for the maximum filter.
     ncpu : int
         Number of CPUs used, defaults to 1.
     pcut : float
-        Cut applied to the profiles to limit their width (default 1e-8).
+        Cut applied to the profiles to limit their width (defaults to 1e-8).
     pmeansub : bool
-        Subtract the mean of the profiles (default True).
+        Subtract the mean of the profiles (defaults to True).
 
     Returns
     -------
@@ -807,19 +811,21 @@ class ComputePurityThreshold(Step):
         Purity to automatically compute the threshold.
     purity_std : float
         Purity to automatically compute the threshold on the cube_std.
-        If None, previous purity is used
+        If None, previous purity is used.
     threshlist : list
-        List of thresholds to compute the purity.
+        List of thresholds to compute the purity. If not provided it is
+        computed from the data with 50 values between 1.1*median and the
+        max value.
     pfasegfinal : float
-        PFA for the segmentation based on the maxmap.
+        PFA for the segmentation based on the maxmap, defaults to 1e-5.
     bins : str
         Method for computing bins for the maxmap segmap
-        (see `numpy.histogram_bin_edges`).
+        (see `numpy.histogram_bin_edges`). Defaults to 'fd'.
 
     Returns
     -------
     self.threshold_correl : float
-        Estimated threshold used to detect on the correl.
+        Estimated threshold used to detect on the correl, defaults to 0.9.
     self.threshold_std : float
         Estimated threshold used to detect complementary lines on std cube.
     self.segmap_purity : `~mpdaf.obj.Image`
@@ -893,14 +899,15 @@ class Detection(Step):
     Parameters
     ----------
     threshold : float
-        User threshold if the estimated threshold is not good.
+        User threshold if the estimated threshold from the previous step
+        is not good.
     threshold_std : float
         User threshold if the estimated cube_std threshold is not good.
     tol_spat : int
-        Tolerance for the spatial merging (distance in pixels).
+        Tolerance for the spatial merging (distance in pixels), defaults to 3.
         TODO en fonction du FWHM
     tol_spec : int
-        Tolerance for the spectral merging (distance in pixels).
+        Tolerance for the spectral merging (distance in pixels), defaults to 5.
     segmap : str
         Optional segmap to use instead of the one computed automatically on the
         continuum image.
@@ -1051,10 +1058,10 @@ class ComputeSpectra(Step):
     Parameters
     ----------
     grid_dxy : int
-        Maximum spatial shift for the grid.
+        Maximum spatial shift for the grid, defaults to 0.
     spectrum_size_fwhm: float
         The length of the spectrum to keep around each line as a factor of
-        the fitted line FWHM.
+        the fitted line FWHM, defaults to 6.
 
     Returns
     -------
@@ -1128,7 +1135,7 @@ class CleanResults(Step):
     Parameters
     ----------
     merge_lines_z_threshold: int
-        z axis pixel threshold used when merging similar lines.
+        z axis pixel threshold used when merging similar lines, defaults to 5.
 
     """
 
@@ -1171,21 +1178,23 @@ class CreateMasks(Step):
     Parameters
     ----------
     path : str
-        Path where the masks will be saved.
+        Path where the masks will be saved. By default this is
+        ``<output_dir>/masks``.
     overwrite : bool
-        Overwrite the folder if it already exists
+        Overwrite the folder if it already exists, True by default.
     mask_size: int
         Minimal width in pixel for the square masks. The mask size must be odd.
         If this parameter is even, 1 will be added to it when creating the
-        masks.
+        masks. Defaults to 25.
     min_sky_npixel: int
-        Minimum number of sky pixels in the mask.
+        Minimum number of sky pixels in the mask, defaults to 100.
     seg_thres_factor: float
         Factor applied to the detection threshold to get the threshold used
-        for mask creation.
+        for mask creation, defaults to 0.5
     fwhm_factor: float
         When creating a source, for each line a disk with a diameter of the
-        FWMH multiplied by this factor is added to the source mask.
+        FWMH multiplied by this factor is added to the source mask, defaults
+        to 2.
     plot_problems: bool
         If true, when the mask or a source seems dubious, some diagnostic plots
         about the source and its lines is saved in the output folder. Note that
@@ -1249,16 +1258,17 @@ class SaveSources(Step):
     Parameters
     ----------
     version: str
-        Version number of the source files.
+        Version number of the source files, for the SRC_V FITS keyword.
     path: str
-        Path where the sources will be saved.
+        Path where the sources will be saved, by default this is the output
+        directory of the ORIGIN object.
     n_jobs : int
-        Number of jobs for parallel processing.
+        Number of jobs for parallel processing, defaults to 1.
     author: str
         Name of the author to add in the sources.
     nb_fwhm: float
         Factor multiplying the FWHM of a line to compute the width of the
-        associated narrow band image.
+        associated narrow band image, defaults to 2.
     expmap_filename: str
         Name of the file containing the exposure map to add to the source.
     overwrite: bool
