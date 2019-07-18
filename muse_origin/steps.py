@@ -52,6 +52,7 @@ __all__ = (
     'CleanResults',
     'CreateMasks',
     'SaveSources',
+    'Status',
     'Step',
     'STEPS',
 )
@@ -185,16 +186,27 @@ class StepMeta(type):
 
 
 class Step(LogMixin, metaclass=StepMeta):
-    """Define a processing step."""
+    """Define a processing step.
 
-    """Name of the function to run the step."""
+    Parameters
+    ----------
+    orig : `muse_origin.ORIGIN`
+        The ORIGIN instance.
+    idx : int
+        The step number
+    param : dict
+        Dictionary of parameters for the step.
+
+    """
+
     name = None
+    """Name of the function to run the step."""
 
-    """Description of the step."""
     desc = None
+    """Description of the step."""
 
-    """List of required steps (that must be run before)."""
     require = None
+    """List of required steps (that must be run before)."""
 
     def __init__(self, orig, idx, param):
         self.logger = logging.getLogger(__name__)
@@ -213,6 +225,14 @@ class Step(LogMixin, metaclass=StepMeta):
 
     @property
     def status(self):
+        """Processing status (`muse_origin.Status`):
+
+        - NOTRUN: The step has not been run.
+        - RUN: The step has been run but not saved.
+        - DUMP: The step has been run and its outputs saved to disk.
+        - FAILED: The step has been run but it failed.
+
+        """
         return self.meta.get('status', Status.NOTRUN)
 
     @status.setter
@@ -339,7 +359,8 @@ class Preprocessing(Step):
     - Continuum subtraction with a DCT filter (the continuum cube is stored in
       ``cube_dct``)
     - Standardization of the data (stored in ``cube_std``).
-    - Computation of the local maxima and minima of the std cube.
+    - Computation of the local maxima and minima of the std cube
+      (``cube_std_local_max`` and ``cube_std_local_min``).
     - Segmentation based on the continuum (``segmap_cont``).
     - Segmentation based on the residual image (``ima_std``), merged with the
       previous one which gives ``segmap_merged``.
@@ -364,17 +385,17 @@ class Preprocessing(Step):
     Returns
     -------
     self.cube_std : `~mpdaf.obj.Cube`
-        standardized data for PCA.
+        Standardized data for the PCA.
     self.cont_dct : `~mpdaf.obj.Cube`
-        continuum estimated with a DCT.
+        Continuum estimated with a DCT.
     self.ima_std : `~mpdaf.obj.Image`
-        Mean of standardized data cube.
+        White-light image of standardized data cube.
     self.ima_dct : `~mpdaf.obj.Image`
-        Mean of DCT continuum cube.
+        White-light image of DCT continuum cube.
     self.cube_std_local_max : `~mpdaf.obj.Cube`
-        Local maxima from cube_std
+        Local maxima from ``cube_std``.
     self.cube_std_local_min : `~mpdaf.obj.Cube`
-        Local maxima from minus cube_std
+        Local maxima from minus ``cube_std``.
     self.segmap_cont : `~mpdaf.obj.Image`
         Segmentation map computed on the white-light image.
     self.segmap_merged : `~mpdaf.obj.Image`
