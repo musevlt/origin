@@ -140,7 +140,7 @@ def test_origin(caplog, tmpdir):
     orig.info()
     with open(orig.logfile) as f:
         log = f.read().splitlines()
-        assert 'Create the final catalog...' in log[-2]
+        assert '11 Done' in log[-1]
 
     tbl = orig.timestat(table=True)
     assert len(tbl) == 12
@@ -163,8 +163,9 @@ def test_origin(caplog, tmpdir):
         'Nb of sources detected in faint (after PCA): 4 in std (before PCA): 2',
     ]
 
-    cat = Catalog.read(str(tmpdir.join('tmp2', 'tmp2.fits')))
-    assert len(cat) == 6
+    cat = Catalog.read(str(tmpdir.join('tmp2', 'Cat3_lines.fits')))
+    assert len(cat) == 16
+    assert max(cat['ID']) == 6
 
     # test returned sources are valid
     src1 = Source.from_file(str(tmpdir.join('tmp2', 'sources', 'source-00001.fits')))
@@ -177,7 +178,7 @@ def test_origin(caplog, tmpdir):
     assert src1.header["CAT3_TS"] == src2.header["CAT3_TS"]
     assert src1.header["SRC_TS"] == src2.header["SRC_TS"]
 
-    # Cleanup (try to close opened files)
+    # Cleanup (try to close opened files to avoid warnings)
     for h in orig.logger.handlers:
         h.close()
 

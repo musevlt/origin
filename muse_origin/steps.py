@@ -13,7 +13,6 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Column, Table, vstack
 from mpdaf.obj import Cube, Image, Spectrum
-from mpdaf.sdetect import Catalog
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
@@ -1261,7 +1260,6 @@ class SaveSources(Step):
         expmap_filename=None,
         overwrite=True,
     ):
-
         if path is None:
             outpath = orig.outpath
         else:
@@ -1269,17 +1267,15 @@ class SaveSources(Step):
                 raise ValueError(f"Invalid path: {path}")
             outpath = os.path.join(os.path.normpath(path), orig.name)
         out_dir = os.path.join(outpath, 'sources')
-        catname = os.path.join(outpath, '%s.fits' % orig.name)
 
         if overwrite:
             shutil.rmtree(out_dir, ignore_errors=True)
         os.makedirs(out_dir, exist_ok=True)
 
-        # We need the correlation cube and the spectrum FITS files saved to disk.
+        # We need the correlation cube and the spectrum FITS files saved to disk
         orig.write()
 
         from .source_creation import create_all_sources
-
         create_all_sources(
             cat3_sources=orig.Cat3_sources,
             cat3_lines=orig.Cat3_lines,
@@ -1301,11 +1297,6 @@ class SaveSources(Step):
             nb_fwhm=nb_fwhm,
             expmap_filename=expmap_filename,
         )
-
-        # create the final catalog
-        self._loginfo('Create the final catalog...')
-        catF = Catalog.from_path(out_dir, fmt='working')
-        catF.write(catname, overwrite=overwrite)
 
 
 """This defines the list of all processing steps."""
