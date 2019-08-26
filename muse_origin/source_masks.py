@@ -122,10 +122,11 @@ def _create_mask(
 
         try:
             seg_line = segmap.data[y_line, x_line]
-        except (AttributeError, IndexError):
+        except AttributeError:
             # photutils 0.7+ returns None when no sources are detected
             # (-> AttributeError)
-            #
+            seg_line = 0
+        except IndexError:
             # The line position is outside of the mask coverage. We must try
             # with a larger mask.
             is_wrong = True
@@ -142,7 +143,7 @@ def _create_mask(
             # If the segment of the line is 0, that means that there are not
             # enough pixels above the threshold to create a source with
             # photutils. The mask will consist only in the PSF added next.
-            line_mask = np.full_like(segmap.data, False, dtype=bool)
+            line_mask = np.full(max_map.shape, False, dtype=bool)
 
         # Adding the FWHM disk around the line position
         radius = int(np.ceil(0.5 * fwhm_factor * fwhm[z_line]))
