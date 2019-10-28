@@ -1,5 +1,5 @@
-ORIGIN: detectiOn and extRactIon of Galaxy emIssion liNes
-=========================================================
+ORIGIN: blind detection of faint line emitters in MUSE datacubes
+================================================================
 
 .. ifconfig:: 'dev' in release
 

@@ -3,29 +3,31 @@
 
 .. image:: https://codecov.io/gh/musevlt/origin/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/musevlt/origin
+  
+  
 
-ORIGIN is a Python software for the blind detection of faint emission line
-galaxies in MUSE datacubes. Several line detection algorithms exist but their
-performances for the deepest MUSE exposures is hard to quantify, in particular
-with respect to the actual purity of their detection results. This works
-proposes an algorithm which is powerful for detecting faint spatial-spectral
-emission signatures while allowing for a stable false detection rate over the
-data cube and providing an automated and reliable estimation of the false
-detections, or purity.
+ORIGIN is a software to perform blind detection of faint emitters in MUSE datacubes.
+ 
+The algorithm is tuned to efficiently detects faint spatial-spectral emission signatures, 
+while  allowing for a stable false detection rate over the data cube and providing 
+in the same time an automated and reliable estimation of the purity.
 
-As for the detection part, the algorithm combines nuisance removal based on
-iterative Principal Component Analysis and detection using a Generalized
-Likelihood Ratio approach based on spatial-spectral profiles of emission line
-emitters. The estimation of the resulting purity for emission lines is based on
-endogenous training data: the statistics of the peaks is based on that of the
-valley.
+The algorithm implements :
+
+	i) a nuisance removal part based on a continuum subtraction  combining a Discrete Cosine Transform and an iterative Principal Component Analysis, 
+	ii) a detection part based on the local maxima of Generalized Likelihood Ratio test  statistics obtained for a set of spatial-spectral profiles of emission line emitters, 
+	iii)  a purity estimation part, where the proportion of true emission lines is estimated from the data itself:  the distribution of the local maxima in the noise only configuration is estimated from that of the local minima.
+
+
 
 Citation
 --------
+ORIGIN is presented in the following paper:
+([Mary et al., A&A  submitted]).
 
-ORIGIN was described briefly in `2017A&A...608A...1B
-<https://ui.adsabs.harvard.edu/abs/2017A%26A...608A...1B/abstract>`_ and will be
-presented in more details in a forthcoming publication ([Mary et al. in prep.]).
+
+ORIGIN was also described briefly in `2017A&A...608A...1B
+<https://ui.adsabs.harvard.edu/abs/2017A%26A...608A...1B/abstract>`_ 
 
 Links
 -----
