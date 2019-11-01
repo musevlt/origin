@@ -7,6 +7,9 @@ from datetime import datetime
 from functools import wraps
 from time import time
 
+#import warnings
+#warnings.filterwarnings("ignore", category=RuntimeWarning) 
+
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -1989,6 +1992,7 @@ def unique_sources(table):
       cube before the PCA.
     - line_merged_flag: boolean flag indicating if any of the lines associated
       to the source was merged with another nearby line.
+    - waves: a list of the first three wavelengths (comma separated), sorted by decreasing flux 
 
     Note: The n_lines contains the number of unique lines associated to the
     source, but for computing the position of the source, we are using all the
@@ -2028,6 +2032,10 @@ def unique_sources(table):
         seg_label = group['seg_label'][0]
         comp = group['comp'][0]  # FIXME: not necessarily true
         line_merged_flag = np.any(group["line_merged_flag"])
+ 
+        ngroup = group[group['merged_in'] == -9999]       
+        ngroup.sort('flux')
+        waves = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])
 
         result_rows.append(
             [
@@ -2040,6 +2048,7 @@ def unique_sources(table):
                 seg_label,
                 comp,
                 line_merged_flag,
+                waves
             ]
         )
 
@@ -2055,6 +2064,7 @@ def unique_sources(table):
             "seg_label",
             "comp",
             "line_merged_flag",
+            "waves"
         ],
     )
     source_table.meta["CAT3_TS"] = table.meta["CAT3_TS"]
