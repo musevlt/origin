@@ -13,6 +13,10 @@ from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
 from mpdaf.tools import progressbar
 
+import warnings
+from astropy.io.fits.verify import VerifyWarning
+warnings.simplefilter('ignore', category=VerifyWarning)
+
 from .version import __version__ as origin_version
 
 __all__ = ("create_source", "create_all_sources")
