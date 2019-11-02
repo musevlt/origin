@@ -197,28 +197,32 @@ def update_sources(
     nb_fwhm=2,
     expmap_filename=None,
 ):
+    logger = logging.getLogger(__name__)
     # Timestamp of the source creation
     source_ts = datetime.now().isoformat()    
 
     for source_id in source_idlist:
+        
+        logger.debug('Creating source %d', source_id)
+        source_lines = cat3_lines[cat3_lines["ID"] == source_id]
                 
         create_source(
             source_id,
             cat3_sources,
-            cat3_lines,
+            source_lines,
             origin_params,
             cube_cor_filename,
             cube_std_filename,
-            mask_filename=mask_filename_tpl % source_id,
-            skymask_filename=skymask_filename_tpl % source_id,
+            mask_filename_tpl % source_id,
+            skymask_filename_tpl % source_id,
             spectra_fits_filename,
             segmaps,
             version,
             source_ts,
             profile_fwhm,
-            author="",
-            nb_fwhm,
-            expmap_filename,
-            save_to=out_tpl % source_id,
+            author=author,
+            nb_fwhm=nb_fwhm,
+            expmap_filename=expmap_filename,
+            save_to=out_tpl % source_id
         )    
     
