@@ -18,6 +18,7 @@ def split_source(
     num_lines_to_keep,
     source_table,
     source_lines,
+    create_new=True
 ):
     """Split an ORIGIN source into two.
 
@@ -32,6 +33,8 @@ def split_source(
         Catalogue of sources like the Cat3_sources one.
     source_lines : astropy.table.Table
         Catalogue of lines like the Cat3_lines one.
+    create_new : bool
+        If True a new entry is added in the catalog and the splitted lines are moved to it.
 
     Returns
     -------
@@ -59,14 +62,20 @@ def split_source(
     new_lines = [k for k in lines['num_line'] if k not in num_lines_to_keep]
     
     # find the new_id
-    new_id = source_lines['ID'].max() + 1
-    logger.debug('Create new source %d with %s lines',new_id,new_lines)
+    if create_new:
+        new_id = source_lines['ID'].max() + 1
+        logger.debug('Create new source %d with %s lines',new_id,new_lines)
+    else:
+        logger.debug('Removing %s lines from the current source',new_lines)
     
     # update new_lines
     for num in new_lines:
         ksort = source_lines['num_line']==num
-        source_lines['ID'][ksort] = new_id
-     
+        if create_new:
+            source_lines['ID'][ksort] = new_id
+        else:
+            # the lines to remove are set to ID = -99 
+            source_lines['ID'][ksort] = -99
     # update source_table
     ksel = source_table['ID']==source_id
     group = source_lines[source_lines['ID']==source_id]
@@ -95,35 +104,37 @@ def split_source(
     ngroup.sort('flux')
     source_table['waves'][ksel] = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])    
     
-    # add a new entry in source_table
-    group = source_lines[source_lines['ID']==new_id]
-    result = {'ID':new_id}
-    result['ra'] = np.average(group['ra'], weights=group['flux'])
-    result['dec'] = np.average(group['dec'], weights=group['flux'])
-
-    result['x'] = np.average(group['x'], weights=group['flux'])
-    result['y'] = np.average(group['y'], weights=group['flux'])
-
-    # The number of lines in the source is the number of lines that have
-    # not been merged in another one.
-    result['n_lines']= np.sum(group['merged_in'] == -9999)
-
-    result['seg_label'] = group['seg_label'][0]
-    result['comp'] = group['comp'][0]  # FIXME: not necessarily true
-    result['line_merged_flag']= np.any(group["line_merged_flag"]) 
+    if create_new:
+            
+        # add a new entry in source_table
+        group = source_lines[source_lines['ID']==new_id]
+        result = {'ID':new_id}
+        result['ra'] = np.average(group['ra'], weights=group['flux'])
+        result['dec'] = np.average(group['dec'], weights=group['flux'])
     
-    ngroup = group[group['merged_in'] == -9999]   
-    result['flux'] = np.max(ngroup['flux'])
-    result['T_GLR'] = np.max(ngroup['T_GLR'])
-    result['nsigTGLR'] = np.max(ngroup['nsigTGLR'])
-    result['STD'] = np.max(ngroup['STD'])
-    result['nsigSTD'] = np.max(ngroup['nsigSTD'])
-    result['purity'] = np.max(ngroup['purity'])    
-    result['waves'] = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])    
+        result['x'] = np.average(group['x'], weights=group['flux'])
+        result['y'] = np.average(group['y'], weights=group['flux'])
     
-    source_table.add_row(result)
+        # The number of lines in the source is the number of lines that have
+        # not been merged in another one.
+        result['n_lines']= np.sum(group['merged_in'] == -9999)
+    
+        result['seg_label'] = group['seg_label'][0]
+        result['comp'] = group['comp'][0]  # FIXME: not necessarily true
+        result['line_merged_flag']= np.any(group["line_merged_flag"]) 
+        
+        ngroup = group[group['merged_in'] == -9999]   
+        result['flux'] = np.max(ngroup['flux'])
+        result['T_GLR'] = np.max(ngroup['T_GLR'])
+        result['nsigTGLR'] = np.max(ngroup['nsigTGLR'])
+        result['STD'] = np.max(ngroup['STD'])
+        result['nsigSTD'] = np.max(ngroup['nsigSTD'])
+        result['purity'] = np.max(ngroup['purity'])    
+        result['waves'] = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])    
+        
+        source_table.add_row(result)
        
-    return new_id
+    return new_id if create_new else None
 
 def update_masks(
     source_idlist,
