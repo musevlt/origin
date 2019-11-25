@@ -7,11 +7,26 @@ from .source_creation import create_source
 from datetime import datetime
 
 def merge_sources(
+    source_id,
     source_idlist,
     source_table,
     source_lines,
 ):
-    pass
+    # select in lines the relevant lines 
+    ksel = np.in1d(source_lines['ID'], source_idlist)
+    if np.sum(ksel) == 0:
+        logger.error('No lines found for sources %s in line table', source_idlist)
+        return
+    
+    # attach lines to the master source ID
+    source_lines['ID'][ksel] = source_id
+    
+    # remove merged source from source table
+    ksel = np.in1d(source_table['ID'], source_idlist, invert=True)
+    source_table = source_table[ksel] 
+    
+    # update source table
+    update_source_table(source_id, source_table, source_lines)
 
 def split_source(
     source_id,
@@ -76,33 +91,9 @@ def split_source(
         else:
             # the lines to remove are set to ID = -99 
             source_lines['ID'][ksort] = -99
-    # update source_table
-    ksel = source_table['ID']==source_id
-    group = source_lines[source_lines['ID']==source_id]
-    
-    source_table['ra'][ksel] = np.average(group['ra'], weights=group['flux'])
-    source_table['dec'][ksel] = np.average(group['dec'], weights=group['flux'])
-
-    source_table['x'][ksel] = np.average(group['x'], weights=group['flux'])
-    source_table['y'][ksel] = np.average(group['y'], weights=group['flux'])
-
-    # The number of lines in the source is the number of lines that have
-    # not been merged in another one.
-    source_table['n_lines'][ksel]= np.sum(group['merged_in'] == -9999)
-
-    source_table['seg_label'][ksel] = group['seg_label'][0]
-    source_table['comp'][ksel] = group['comp'][0]  # FIXME: not necessarily true
-    source_table['line_merged_flag'][ksel]= np.any(group["line_merged_flag"])
-    
-    ngroup = group[group['merged_in'] == -9999]       
-    source_table['flux'][ksel] = np.max(ngroup['flux'])
-    source_table['T_GLR'][ksel] = np.max(ngroup['T_GLR'])
-    source_table['nsigTGLR'][ksel] = np.max(ngroup['nsigTGLR'])
-    source_table['STD'][ksel] = np.max(ngroup['STD'])
-    source_table['nsigSTD'][ksel] = np.max(ngroup['nsigSTD'])
-    source_table['purity'][ksel] = np.max(ngroup['purity'])
-    ngroup.sort('flux')
-    source_table['waves'][ksel] = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])    
+     
+    # update source table        
+    update_source_table(source_id, source_table, source_lines)
     
     if create_new:
             
@@ -237,3 +228,32 @@ def update_sources(
             save_to=out_tpl % source_id
         )    
     
+def update_source_table(source_id, source_table, source_lines):
+    
+    # update source_table
+    ksel = source_table['ID']==source_id
+    group = source_lines[source_lines['ID']==source_id]
+    
+    source_table['ra'][ksel] = np.average(group['ra'], weights=group['flux'])
+    source_table['dec'][ksel] = np.average(group['dec'], weights=group['flux'])
+
+    source_table['x'][ksel] = np.average(group['x'], weights=group['flux'])
+    source_table['y'][ksel] = np.average(group['y'], weights=group['flux'])
+
+    # The number of lines in the source is the number of lines that have
+    # not been merged in another one.
+    source_table['n_lines'][ksel]= np.sum(group['merged_in'] == -9999)
+
+    source_table['seg_label'][ksel] = group['seg_label'][0]
+    source_table['comp'][ksel] = group['comp'][0]  # FIXME: not necessarily true
+    source_table['line_merged_flag'][ksel]= np.any(group["line_merged_flag"])
+    
+    ngroup = group[group['merged_in'] == -9999]       
+    source_table['flux'][ksel] = np.max(ngroup['flux'])
+    source_table['T_GLR'][ksel] = np.max(ngroup['T_GLR'])
+    source_table['nsigTGLR'][ksel] = np.max(ngroup['nsigTGLR'])
+    source_table['STD'][ksel] = np.max(ngroup['STD'])
+    source_table['nsigSTD'][ksel] = np.max(ngroup['nsigSTD'])
+    source_table['purity'][ksel] = np.max(ngroup['purity'])
+    ngroup.sort('flux')
+    source_table['waves'][ksel] = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])      

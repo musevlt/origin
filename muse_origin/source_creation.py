@@ -217,7 +217,12 @@ def create_source(
     )
     # Add FSF with the full cube, to have the same shape as fieldmap, then we
     # can work directly with the subcube
-    source.add_FSF(data_cube, fieldmap=origin_params["fieldmap"])
+    has_fsf = True
+    try:
+        source.add_FSF(data_cube, fieldmap=origin_params["fieldmap"])
+    except:
+        logger.debug('No FSF information found in the cube')
+        has_fsf = False
     data_cube = source.cubes["MUSE_CUBE"]
 
     if source.COMP_CAT:
@@ -270,24 +275,25 @@ def create_source(
 
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
-    a, b, beta, _ = source.get_FSF()
-    fwhm_fsf = b * data_cube.wave.coord() + a
-    source.extract_spectra(
-        data_cube,
-        obj_mask="ORI_MASK_OBJ",
-        sky_mask="ORI_MASK_SKY",
-        skysub=True,
-        psf=fwhm_fsf,
-        beta=beta,
-    )
-    source.extract_spectra(
-        data_cube,
-        obj_mask="ORI_MASK_OBJ",
-        sky_mask="ORI_MASK_SKY",
-        skysub=False,
-        psf=fwhm_fsf,
-        beta=beta,
-    )
+    if has_fsf:        
+        a, b, beta, _ = source.get_FSF()
+        fwhm_fsf = b * data_cube.wave.coord() + a
+        source.extract_spectra(
+            data_cube,
+            obj_mask="ORI_MASK_OBJ",
+            sky_mask="ORI_MASK_SKY",
+            skysub=True,
+            psf=fwhm_fsf,
+            beta=beta,
+        )
+        source.extract_spectra(
+            data_cube,
+            obj_mask="ORI_MASK_OBJ",
+            sky_mask="ORI_MASK_SKY",
+            skysub=False,
+            psf=fwhm_fsf,
+            beta=beta,
+        )
 
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
