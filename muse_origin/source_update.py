@@ -12,6 +12,7 @@ def merge_sources(
     source_table,
     source_lines,
 ):
+    logger = logging.getLogger(__name__)
     # select in lines the relevant lines 
     ksel = np.in1d(source_lines['ID'], source_idlist)
     if np.sum(ksel) == 0:
