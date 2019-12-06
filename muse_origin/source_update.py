@@ -13,11 +13,16 @@ def merge_sources(
     source_lines,
 ):
     logger = logging.getLogger(__name__)
+    # check that source_id exist in source_table
+    if source_id not in source_table['ID']:
+        logger.error('Source %d not found in source table', source_id)
+        return False  
+    
     # select in lines the relevant lines 
     ksel = np.in1d(source_lines['ID'], source_idlist)
     if np.sum(ksel) == 0:
-        logger.error('No lines found for sources %s in line table', source_idlist)
-        return
+        logger.error('No lines found for source %s in line table', source_idlist)
+        return False
     
     # attach lines to the master source ID
     source_lines['ID'][ksel] = source_id
@@ -28,6 +33,8 @@ def merge_sources(
     
     # update source table
     update_source_table(source_id, source_table, source_lines)
+    
+    return True
 
 def split_source(
     source_id,

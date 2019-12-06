@@ -134,6 +134,8 @@ def create_source(
 
     if not np.isnan(source_info["STD"]):
         source.header["OR_STD"] = (source_info["STD"], "STD max value in all lines")
+    
+    if not np.isnan(source_info["nsigSTD"]):
         source.header["OR_nSTD"] = (
             source_info["nsigSTD"],
             "max of STD/std(STD) in all lines",
@@ -144,6 +146,7 @@ def create_source(
             source_info["T_GLR"],
             "T_GLR max value in all lines",
         )
+    if not np.isnan(source_info["nsigTGLR"]):
         source.header["OR_nTGLR"] = (
             source_info["nsigTGLR"],
             "max of T_GLR/std(T_GLR) in all lines",
