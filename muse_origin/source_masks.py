@@ -65,7 +65,7 @@ def _create_mask(
         unit_size = None
     if mask_size % 2 == 0:
         msg = "Mask size must be odd. Changing mask_size from %s to %s."
-        logger.warning(msg, mask_size, mask_size + 1)
+        logger.debug(msg, mask_size, mask_size + 1)
         mask_size += 1
 
     # We will modify the table
@@ -201,7 +201,7 @@ def _create_mask(
 
     if is_wrong and step <= 4:
         new_size = int(mask_size * 1.5)
-        logger.warning(
+        logger.debug(
             "Source %s mask can't be done with size %s px at "
             "step %s. Trying with %s px.",
             source_id,
