@@ -8,7 +8,7 @@ from functools import wraps
 from time import time
 
 #import warnings
-#warnings.filterwarnings("ignore", category=RuntimeWarning) 
+#warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1120,6 +1120,10 @@ def Correlation_GLR_test(
         # (maybe because of astropy.io.fits doing weird things with the memap?)
         cube = np.array(cube)
 
+    # Make sure that we have a float array in C-order because scipy.fft
+    # (new in v1.4) fails with Fortran ordered arrays.
+    cube = cube.astype(float)
+
     with Parallel(n_jobs=nthreads) as parallel:
         for nf in fields:
             # convolve spatially each spectral channel by the FSF, and do the
@@ -1992,7 +1996,7 @@ def unique_sources(table):
       cube before the PCA.
     - line_merged_flag: boolean flag indicating if any of the lines associated
       to the source was merged with another nearby line.
-    - waves: a list of the first three wavelengths (comma separated), sorted by decreasing flux 
+    - waves: a list of the first three wavelengths (comma separated), sorted by decreasing flux
 
     Note: The n_lines contains the number of unique lines associated to the
     source, but for computing the position of the source, we are using all the
@@ -2032,8 +2036,8 @@ def unique_sources(table):
         seg_label = group['seg_label'][0]
         comp = group['comp'][0]  # FIXME: not necessarily true
         line_merged_flag = np.any(group["line_merged_flag"])
- 
-        ngroup = group[group['merged_in'] == -9999]       
+
+        ngroup = group[group['merged_in'] == -9999]
         ngroup.sort('flux')
         waves = ','.join([str(int(l)) for l in ngroup['lbda'][:-4:-1]])
 
