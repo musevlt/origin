@@ -1109,10 +1109,11 @@ class ComputeSpectra(Step):
             profile, z, num_line = row['profile', 'z', 'num_line']
             z_min = z - radius[profile]
             z_max = z + radius[profile]
-            sp = Spectrum(
-                data=data, var=vari, wave=orig.wave, mask=np.ma.nomask, copy=False
-            )
-            self.spectra[num_line] = sp.subspec(z_min, z_max, unit=None)
+            if len(data) > 1: # RB test for bug in GridAnalysis         
+                sp = Spectrum(
+                    data=data, var=vari, wave=orig.wave, mask=np.ma.nomask, copy=False
+                )
+                self.spectra[num_line] = sp.subspec(z_min, z_max, unit=None)
 
         self._loginfo('Save estimated spectrum of each line in self.spectra')
 

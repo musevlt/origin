@@ -360,11 +360,12 @@ def create_source(
             desc=None,
         )
 
-        source.spectra[f"ORI_SPEC_{num_line}"] = Spectrum(
-            hdulist=hdulist,
-            ext=(f"DATA{num_line}", f"STAT{num_line}"),
-            convert_float64=False,
-        )
+        if f"DATA{num_line}" in hdulist:  # RB add test           
+            source.spectra[f"ORI_SPEC_{num_line}"] = Spectrum(
+                hdulist=hdulist,
+                ext=(f"DATA{num_line}", f"STAT{num_line}"),
+                convert_float64=False,
+            )
 
         source.add_narrow_band_image_lbdaobs(
             data_cube,

@@ -1752,6 +1752,19 @@ def GridAnalysis(
         wy, wx = np.where(fest_00 == fest_00.max())
     elif criteria == 'mse':
         wy, wx = np.where(mse == mse.min())
+        
+    # RB to solve bug
+    if (len(wx)==0) or (len(wy)==0):
+        return (
+            0.0,
+            1.e6,
+            [0],
+            [0],
+            y0,
+            x0,
+            z0,
+        )        
+    
 
     y = y0 - size_grid + wy
     x = x0 - size_grid + wx
@@ -1768,7 +1781,7 @@ def GridAnalysis(
         flux_est_5,
         MSE_5,
         estimated_line.ravel(),
-        estimated_variance.ravel(),
+        estimated_variance.ravel(),        
         int(y),
         int(x),
         int(z),
