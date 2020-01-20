@@ -1109,7 +1109,7 @@ class ComputeSpectra(Step):
             profile, z, num_line = row['profile', 'z', 'num_line']
             z_min = z - radius[profile]
             z_max = z + radius[profile]
-            if len(data) > 1: # RB test for bug in GridAnalysis         
+            if len(data) > 1:  # RB test for bug in GridAnalysis
                 sp = Spectrum(
                     data=data, var=vari, wave=orig.wave, mask=np.ma.nomask, copy=False
                 )
@@ -1308,6 +1308,7 @@ class SaveSources(Step):
         orig.write()
 
         from .source_creation import create_all_sources
+
         create_all_sources(
             cat3_sources=orig.Cat3_sources,
             cat3_lines=orig.Cat3_lines,

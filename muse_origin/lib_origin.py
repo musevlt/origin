@@ -7,8 +7,8 @@ from datetime import datetime
 from functools import wraps
 from time import time
 
-#import warnings
-#warnings.filterwarnings("ignore", category=RuntimeWarning)
+# import warnings
+# warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1752,19 +1752,18 @@ def GridAnalysis(
         wy, wx = np.where(fest_00 == fest_00.max())
     elif criteria == 'mse':
         wy, wx = np.where(mse == mse.min())
-        
+
     # RB to solve bug
-    if (len(wx)==0) or (len(wy)==0):
+    if (len(wx) == 0) or (len(wy) == 0):
         return (
             0.0,
-            1.e6,
+            1.0e6,
             [0],
             [0],
             y0,
             x0,
             z0,
-        )        
-    
+        )
 
     y = y0 - size_grid + wy
     x = x0 - size_grid + wx
@@ -1781,7 +1780,7 @@ def GridAnalysis(
         flux_est_5,
         MSE_5,
         estimated_line.ravel(),
-        estimated_variance.ravel(),        
+        estimated_variance.ravel(),
         int(y),
         int(x),
         int(z),
@@ -2065,7 +2064,7 @@ def unique_sources(table):
                 seg_label,
                 comp,
                 line_merged_flag,
-                waves
+                waves,
             ]
         )
 
@@ -2081,7 +2080,7 @@ def unique_sources(table):
             "seg_label",
             "comp",
             "line_merged_flag",
-            "waves"
+            "waves",
         ],
     )
     source_table.meta["CAT3_TS"] = table.meta["CAT3_TS"]

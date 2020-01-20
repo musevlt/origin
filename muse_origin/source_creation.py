@@ -15,6 +15,7 @@ from mpdaf.tools import progressbar
 
 import warnings
 from astropy.io.fits.verify import VerifyWarning
+
 warnings.simplefilter('ignore', category=VerifyWarning)
 
 from .version import __version__ as origin_version
@@ -134,7 +135,7 @@ def create_source(
 
     if not np.isnan(source_info["STD"]):
         source.header["OR_STD"] = (source_info["STD"], "STD max value in all lines")
-    
+
     if not np.isnan(source_info["nsigSTD"]):
         source.header["OR_nSTD"] = (
             source_info["nsigSTD"],
@@ -278,7 +279,7 @@ def create_source(
 
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
-    if has_fsf:        
+    if has_fsf:
         a, b, beta, _ = source.get_FSF()
         fwhm_fsf = b * data_cube.wave.coord() + a
         source.extract_spectra(
@@ -360,7 +361,7 @@ def create_source(
             desc=None,
         )
 
-        if f"DATA{num_line}" in hdulist:  # RB add test           
+        if f"DATA{num_line}" in hdulist:  # RB add test
             source.spectra[f"ORI_SPEC_{num_line}"] = Spectrum(
                 hdulist=hdulist,
                 ext=(f"DATA{num_line}", f"STAT{num_line}"),
