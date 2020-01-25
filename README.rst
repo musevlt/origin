@@ -3,12 +3,11 @@
 
 .. image:: https://codecov.io/gh/musevlt/origin/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/musevlt/origin
-  
-  
+
 
 ORIGIN is a software to perform blind detection of faint emitters in MUSE datacubes.
  
-The algorithm is tuned to efficiently detects faint spatial-spectral emission signatures, 
+The algorithm is tuned to efficiently detects faint spatial-spectral emission signatures,
 while  allowing for a stable false detection rate over the data cube and providing 
 in the same time an automated and reliable estimation of the purity.
 
@@ -23,11 +22,9 @@ The algorithm implements :
 Citation
 --------
 ORIGIN is presented in the following paper:
-([Mary et al., A&A  submitted]).
+`Mary et al., A&A, 2020, in press <https://doi.org/10.1051/0004-6361/201937001>`_
 
 
-ORIGIN was also described briefly in `2017A&A...608A...1B
-<https://ui.adsabs.harvard.edu/abs/2017A%26A...608A...1B/abstract>`_ 
 
 Links
 -----
