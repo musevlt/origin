@@ -372,7 +372,7 @@ Example::
 
     >>> from mpdaf.sdetect.source import Source
     >>> src = Source.from_file('orig_mxdf/sources/source-00046.fits')  # doctest: +SKIP
-    >>> src.info()
+    >>> src.info()  # doctest: +SKIP
     [INFO] ID      =                   46 / object ID %d
     [INFO] RA      =    53.16711704003818 / RA u.degree %.7f
     [INFO] DEC     =   -27.79575893776533 / DEC u.degree %.7f
