@@ -394,10 +394,10 @@ Example::
 
 The table ``ORI_LINES`` contain line information::
 
-    >>> src.tables['ORI_LINES']
+    >>> src.tables['ORI_LINES']  # doctest: +SKIP
         <Table masked=True length=1>
     ID          ra                dec           lbda    x   ... line_merged_flag merged_in      nsigTGLR      nsigSTD
-    int64      float64            float64       float64 int64 ...       bool         int64        float64       float64
+    int64      float64            f  # doctest: +SKIPloat64       float64 int64 ...       bool         int64        float64       float64
     ----- ----------------- ------------------- ------- ----- ... ---------------- --------- ------------------ -------
     142 53.16010113941778 -27.786101772517704  5772.5   178 ...            False        -- 29.074403824269364     nan
 
@@ -405,19 +405,19 @@ The table ``ORI_LINES`` contain line information::
 The source spectrum is also available::
 
     >>> import matplotlib.pyplot as plt
-    >>> fig = plt.figure()
-    >>> src.spectra[src.REFSPEC].plot(lmin=5600,lmax=6000)
-    >>> plt.axvline(5772.5, color='r')
-    >>> plt.show()
+    >>> fig = plt.figure()  # doctest: +SKIP
+    >>> src.spectra[src.REFSPEC].plot(lmin=5600,lmax=6000)  # doctest: +SKIP
+    >>> plt.axvline(5772.5, color='r')  # doctest: +SKIP
+    >>> plt.show()  # doctest: +SKIP
 
 .. image:: images/src1.png
 
 and the correlation and narrow band images::
 
-    >>> fig,ax = plt.subplots(1,2,figsize=(10,5))
-    >>> src.images['ORI_CORR_200'].plot(ax=ax[0], title='ORI_CORR_200')
-    >>> src.images['NB_LINE_200'].plot(ax=ax[1], title='NB_LINE_200')
-    >>> plt.show()
+    >>> fig,ax = plt.subplots(1,2,figsize=(10,5))  # doctest: +SKIP
+    >>> src.images['ORI_CORR_200'].plot(ax=ax[0], title='ORI_CORR_200')  # doctest: +SKIP
+    >>> src.images['NB_LINE_200'].plot(ax=ax[1], title='NB_LINE_200')  # doctest: +SKIP
+    >>> plt.show()  # doctest: +SKIP
 
 .. image:: images/src2.png
 
