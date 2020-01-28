@@ -29,4 +29,3 @@ Or into the user path with::
     a parallelized version of the FFT.
 
 .. _with pip: https://software.intel.com/en-us/articles/installing-the-intel-distribution-for-python-and-intel-performance-libraries-with-pip-and
-

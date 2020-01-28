@@ -6,15 +6,15 @@
 
 
 ORIGIN is a software to perform blind detection of faint emitters in MUSE datacubes.
- 
+
 The algorithm is tuned to efficiently detects faint spatial-spectral emission signatures,
-while  allowing for a stable false detection rate over the data cube and providing 
+while  allowing for a stable false detection rate over the data cube and providing
 in the same time an automated and reliable estimation of the purity.
 
 The algorithm implements :
 
-	i) a nuisance removal part based on a continuum subtraction  combining a Discrete Cosine Transform and an iterative Principal Component Analysis, 
-	ii) a detection part based on the local maxima of Generalized Likelihood Ratio test  statistics obtained for a set of spatial-spectral profiles of emission line emitters, 
+	i) a nuisance removal part based on a continuum subtraction  combining a Discrete Cosine Transform and an iterative Principal Component Analysis,
+	ii) a detection part based on the local maxima of Generalized Likelihood Ratio test  statistics obtained for a set of spatial-spectral profiles of emission line emitters,
 	iii)  a purity estimation part, where the proportion of true emission lines is estimated from the data itself:  the distribution of the local maxima in the noise only configuration is estimated from that of the local minima.
 
 

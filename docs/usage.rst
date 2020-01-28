@@ -8,14 +8,13 @@ The ORIGIN algorithm is computationally intensive, hence it is divided in
 steps.  It is possible to save the outputs after each step and to reload
 a session to continue the processing.
 
-
 The software has been originally developed for the MUSE Hubble Ultra-Deep Field
 (`Bacon et al, 2017
-<https://www.aanda.org/articles/aa/pdf/2017/12/aa30833-17.pdf>`_).
-Although it was extensively tested on these deep datacubes, the
-blind use of the software is not recommmended and the user is
-advice to run each step, check carefully the results and play with the
-input parameters until satisfactory results are obtained.
+<https://www.aanda.org/articles/aa/pdf/2017/12/aa30833-17.pdf>`_).  Although it
+was extensively tested on these deep datacubes, the blind use of the software is
+not recommended and the user is advice to run each step, check carefully the
+results and play with the input parameters until satisfactory results are
+obtained.
 
 The quality of the input cube is key to obtain the maximum
 detections and to limit the false detections. The algorithm
@@ -23,7 +22,6 @@ is able to learn from the datacube itself its noise properties
 and to adapt the threshold and other parameters. However
 it has not been tested with strong non-gaussian noise or
 large systematics.
-
 
 
 The ORIGIN class
@@ -235,7 +233,7 @@ Step 3: `~muse_origin.ComputePCAThreshold`
     This parameter is important. If it is too small, the PCA will not be
     efficient to remove the background residuals and the algorithm will
     fail to detect faint emitters. It if is too important, the risk is
-    to remove the line emitters. Note that the algorithm is able to retreive
+    to remove the line emitters. Note that the algorithm is able to retrieve
     the brightest line emitters which have been removed by the PCA.
 
 Step 4: `~muse_origin.ComputeGreedyPCA`
@@ -251,7 +249,7 @@ Step 4: `~muse_origin.ComputeGreedyPCA`
 
     Inspection of the map of the number of PCA iterations is instructive of
     the regions of low SNR and/or defects in the datacube.
-    Depending of the datacube quality, the defaut value of the maximum number
+    Depending of the datacube quality, the default value of the maximum number
     of iterations might be increase.
 
 Step 5: `~muse_origin.ComputeTGLR`
