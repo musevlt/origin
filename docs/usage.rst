@@ -370,9 +370,9 @@ tables, cubes and spectra.
 
 Example::
 
-     >>> from mpdaf.sdetect.source import Source
-     >>> src = Source.from_file('orig_mxdf/sources/source-00046.fits')
-     >>> src.info()
+    >>> from mpdaf.sdetect.source import Source
+    >>> src = Source.from_file('orig_mxdf/sources/source-00046.fits')  # doctest: +SKIP
+    >>> src.info()
     [INFO] ID      =                   46 / object ID %d
     [INFO] RA      =    53.16711704003818 / RA u.degree %.7f
     [INFO] DEC     =   -27.79575893776533 / DEC u.degree %.7f
@@ -393,7 +393,6 @@ Example::
     [INFO] 2 cubes: MUSE_CUBE ORI_CORREL
     [INFO] 3 tables: ORI_CAT ORI_LINES NB_PAR
     [INFO] 1 lines
-
 
 The table ``ORI_LINES`` contain line information::
 
