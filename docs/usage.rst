@@ -396,10 +396,10 @@ The table ``ORI_LINES`` contain line information::
 
     >>> src.tables['ORI_LINES']  # doctest: +SKIP
         <Table masked=True length=1>
-    ID          ra                dec           lbda    x   ... line_merged_flag merged_in      nsigTGLR      nsigSTD
-    int64      float64            f  # doctest: +SKIPloat64       float64 int64 ...       bool         int64        float64       float64
+    ID          ra                dec            lbda     x   ... line_merged_flag merged_in      nsigTGLR      nsigSTD
+    int64      float64            float64       float64 int64 ...       bool         int64        float64       float64
     ----- ----------------- ------------------- ------- ----- ... ---------------- --------- ------------------ -------
-    142 53.16010113941778 -27.786101772517704  5772.5   178 ...            False        -- 29.074403824269364     nan
+    142 53.16010113941778   -27.786101772517704  5772.5   178 ...            False        -- 29.074403824269364     nan
 
 
 The source spectrum is also available::
