@@ -1,7 +1,7 @@
 Installation
 ============
 
-ORIGIN requires the following packages:
+ORIGIN requires Python 3.6+ and the following packages:
 
 * Numpy
 * Astropy
@@ -11,6 +11,7 @@ ORIGIN requires the following packages:
 * tqdm
 * PyYAML
 * Matplotlib
+* Photutils
 
 The last stable release of ORIGIN can be installed simply with pip::
 

@@ -221,10 +221,9 @@ Step 2: `~muse_origin.CreateAreas`
     emission lines, or regions exhibiting a particular statistical behaviour,
     caused by the presence of systematic residuals for instance.
 
-    The merged segmap computed previously is used to avoid cutting continuum
-    objects. The
-    size of the areas is controlled with the ``minsize`` and ``maxsize``
-    keywords.
+    The merged segmentation map computed previously is used to avoid cutting
+    continuum objects. The size of the areas is controlled with the ``minsize``
+    and ``maxsize`` keywords.
 
 Step 3: `~muse_origin.ComputePCAThreshold`
     Loop on each area and estimate the threshold for the PCA, using the
@@ -243,9 +242,9 @@ Step 4: `~muse_origin.ComputeGreedyPCA`
     following step.
 
     Loop on each area and compute the iterative PCA: iteratively locate and
-    remove residual nuisance sources, i.e., any signal that is not the signa-
-    ture of a faint, spatially unresolved emission line.  Use by default the
-    thresholds computed in step 3.
+    remove residual nuisance sources, i.e., any signal that is not the
+    signature of a faint, spatially unresolved emission line.  Use by default
+    the thresholds computed in step 3.
 
     Inspection of the map of the number of PCA iterations is instructive of
     the regions of low SNR and/or defects in the datacube.
@@ -279,8 +278,6 @@ Step 6: `~muse_origin.ComputePurityThreshold`
         to next step by fixing the threshold parameter. Inspection
         of the purity plot can help to find the correct threshold
         to avoid too many false detections.
-
-
 
 Step 7: `~muse_origin.Detection`
     Detections on local maxima from the correlation and complementary cube,
