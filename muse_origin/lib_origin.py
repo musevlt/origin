@@ -7,8 +7,8 @@ from datetime import datetime
 from functools import wraps
 from time import time
 
-# import warnings
-# warnings.filterwarnings("ignore", category=RuntimeWarning)
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +21,7 @@ from astropy.stats import (
     sigma_clipped_stats,
 )
 from astropy.table import Column, Table, join
+from astropy.stats import sigma_clip
 from astropy.utils.exceptions import AstropyUserWarning
 from joblib import Parallel, delayed
 from mpdaf.obj import Image
@@ -892,7 +893,7 @@ def Compute_GreedyPCA(cube_in, test, thresO2, Noise_population, itermax):
     mapO2 = np.zeros(faint.shape[1])
     nstop = 0
 
-    with progressbar(total=npix, miniters=0) as bar:
+    with progressbar(total=npix, miniters=0, leave=False) as bar:
         # greedy loop based on test
         nbiter = 0
         while len(pypx) > 0:
@@ -973,7 +974,7 @@ def O2test(arr):
     return np.mean(arr ** 2, axis=0)
 
 
-def compute_thresh_gaussfit(data, pfa, bins='fd'):
+def compute_thresh_gaussfit(data, pfa, bins='fd', sigclip=10):
     """Compute a threshold with a gaussian fit of a distribution.
 
     Parameters
@@ -996,6 +997,8 @@ def compute_thresh_gaussfit(data, pfa, bins='fd'):
     """
     logger = logging.getLogger(__name__)
     data = data[data > 0]
+    data = sigma_clip(data, sigclip)
+    data = data.compressed()
     histO2, frecO2 = np.histogram(data, bins=bins, density=True)
     ind = np.argmax(histO2)
     mod = frecO2[ind]
