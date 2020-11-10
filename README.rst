@@ -30,7 +30,7 @@ the noise only configuration is estimated from that of the local minima.
 Citation
 --------
 ORIGIN is presented in the following paper:
-`Mary et al., A&A, 2020, in press <https://doi.org/10.1051/0004-6361/201937001>`_
+`Mary et al., A&A, 2020 <https://doi.org/10.1051/0004-6361/201937001>`_
 
 
 Links
