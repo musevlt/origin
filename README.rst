@@ -1,5 +1,5 @@
-.. image:: https://travis-ci.org/musevlt/origin.svg?branch=master
-  :target: https://travis-ci.org/musevlt/origin
+.. image:: https://github.com/musevlt/origin/workflows/Run%20unit%20tests/badge.svg
+  :target: https://github.com/musevlt/origin
 
 .. image:: https://codecov.io/gh/musevlt/origin/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/musevlt/origin
