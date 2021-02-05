@@ -96,6 +96,7 @@ def create_source(
     logger = logging.getLogger(__name__)
 
     # [0] is to get a Row not a table.
+    source_table = source_table.filled()
     source_info = source_table[source_table["ID"] == source_id][0]
 
     # The mask size is used for the cut-out size.
@@ -280,8 +281,19 @@ def create_source(
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
     if has_fsf:
-        a, b, beta, _ = source.get_FSF()
-        fwhm_fsf = b * data_cube.wave.coord() + a
+        lbda = data_cube.wave.coord()
+        try:
+            a, b, beta, _ = source.get_FSF()
+            fwhm_fsf = b * lbda + a
+        except TypeError:
+            # MPDAF 3.5+
+            model = source.get_FSF()
+            fwhm_fsf = model.get_fwhm(lbda)
+            beta = model.get_beta(lbda)
+            if np.unique(beta).size > 1:
+                raise NotImplementedError
+            beta = beta[0]
+
         source.extract_spectra(
             data_cube,
             obj_mask="ORI_MASK_OBJ",

@@ -98,12 +98,16 @@ read with MPDAF::
     >>> from mpdaf.MUSE import FSFModel
     >>> fsfmodel = FSFModel.read(CUBE)
     >>> fsfmodel
-    <OldMoffatModel(model=MOFFAT1)>
+    <MoffatModel2(model=2)>
     >>> fsfmodel.to_header().cards
-    ('FSFMODE', 'MOFFAT1', 'Old model with a fixed beta')
-    ('FSF00BET', 2.8, '')
-    ('FSF00FWA', 0.869, '')
-    ('FSF00FWB', -3.401e-05, '')
+    ('FSFMODE', 2, 'Circular MOFFAT beta=poly(lbda) fwhm=poly(lbda)')
+    ('FSFLB1', 5000, 'FSF Blue Ref Wave (A)')
+    ('FSFLB2', 9000, 'FSF Red Ref Wave (A)')
+    ('FSF00FNC', 2, 'FSF00 FWHM Poly Ncoef')
+    ('FSF00F00', -0.136046443480448, 'FSF00 FWHM Poly C00')
+    ('FSF00F01', 0.6312330752702884, 'FSF00 FWHM Poly C01')
+    ('FSF00BNC', 1, 'FSF00 BETA Poly Ncoef')
+    ('FSF00B00', 2.8, 'FSF00 BETA Poly C00')
 
 This model is used to get the FWHM for each wavelength plane, otherwise the
 full list must be provides as parameter::

@@ -111,7 +111,7 @@ def test_origin(caplog, tmpdir):
 
     cat = Catalog.read(str(tmpdir.join('tmp', 'Cat1.fits')))
     subcat = cat[cat['comp'] == 0]
-    assert np.all(np.isnan(subcat['STD']))
+    assert np.all(np.isnan(np.array(subcat['STD'])))
     # Test that the columns mask is correct. To be tested when we switch
     # back to a masked table
     # assert np.all(subcat['T_GLR'].mask == False)
