@@ -278,39 +278,6 @@ def create_source(
             source.cubes["ORI_CORREL"] * source.images["ORI_MASK_OBJ"]
         ).mean(axis=(1, 2))
 
-    # Add the FSF information to the source and use this information to compute
-    # the PSF weighted spectra.
-    if has_fsf:
-        lbda = data_cube.wave.coord()
-        try:
-            a, b, beta, _ = source.get_FSF()
-            fwhm_fsf = b * lbda + a
-        except TypeError:
-            # MPDAF 3.5+
-            model = source.get_FSF()
-            fwhm_fsf = model.get_fwhm(lbda)
-            beta = model.get_beta(lbda)
-            if np.unique(beta).size > 1:
-                raise NotImplementedError
-            beta = beta[0]
-
-        source.extract_spectra(
-            data_cube,
-            obj_mask="ORI_MASK_OBJ",
-            sky_mask="ORI_MASK_SKY",
-            skysub=True,
-            psf=fwhm_fsf,
-            beta=beta,
-        )
-        source.extract_spectra(
-            data_cube,
-            obj_mask="ORI_MASK_OBJ",
-            sky_mask="ORI_MASK_SKY",
-            skysub=False,
-            psf=fwhm_fsf,
-            beta=beta,
-        )
-
     # Per line data: the line table, the spectrum of each line, the narrow band
     # map from the data and from the correlation cube.
     # Content of the line table in the source
