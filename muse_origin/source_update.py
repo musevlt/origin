@@ -36,7 +36,7 @@ def merge_sources(
 
 
 def split_source(
-    source_id, num_lines_to_keep, source_table, source_lines, create_new=True
+    source_id, num_lines_to_keep, source_table, source_lines, create_new=True, new_id=None
 ):
     """Split an ORIGIN source into two.
 
@@ -53,6 +53,8 @@ def split_source(
         Catalogue of lines like the Cat3_lines one.
     create_new : bool
         If True a new entry is added in the catalog and the splitted lines are moved to it.
+    new_id : int
+        New source ID, if none it is automatically set as max + 1 of table source IDs
 
     Returns
     -------
@@ -85,7 +87,11 @@ def split_source(
 
     # find the new_id
     if create_new:
-        new_id = source_lines['ID'].max() + 1
+        if new_id is None:
+            new_id = source_lines['ID'].max() + 1
+        elif new_id in source_lines['ID'].tolist():
+            logger.error('New ID %d already exist in table', new_id)
+            return
         logger.debug('Create new source %d with %s lines', new_id, new_lines)
     else:
         logger.debug('Removing %s lines from the current source', new_lines)
