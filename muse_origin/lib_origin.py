@@ -113,9 +113,9 @@ def spatial_segmentation(Nx, Ny, NbSubcube, start=None):
 
     """
     # Segmentation of the rows vector in Nbsubcube parts from right to left
-    inty = np.linspace(Ny, 0, NbSubcube + 1, dtype=np.int)
+    inty = np.linspace(Ny, 0, NbSubcube + 1, dtype=int)
     # Segmentation of the columns vector in Nbsubcube parts from left to right
-    intx = np.linspace(0, Nx, NbSubcube + 1, dtype=np.int)
+    intx = np.linspace(0, Nx, NbSubcube + 1, dtype=int)
 
     if start is not None:
         inty += start[0]

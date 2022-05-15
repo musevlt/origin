@@ -522,7 +522,7 @@ class CreateAreas(Step):
     areamap = DataObj('image')
 
     def run(self, orig, pfa=0.2, minsize=100, maxsize=None):
-        nexpmap = (np.sum(~orig.mask, axis=0) > 0).astype(np.int)
+        nexpmap = (np.sum(~orig.mask, axis=0) > 0).astype(int)
         NbSubcube = np.maximum(1, int(np.sqrt(np.sum(nexpmap) / (minsize ** 2))))
         if NbSubcube > 1:
             if maxsize is None:
