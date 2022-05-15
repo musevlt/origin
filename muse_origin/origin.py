@@ -20,7 +20,7 @@ from mpdaf.obj import Cube, Image
 
 from . import steps
 from .lib_origin import timeit
-from .version import __version__
+from .version import version as __version__
 
 try:
     # With PyYaml 5.1, load and safe have been renamed to unsafe_* and

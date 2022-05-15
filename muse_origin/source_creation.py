@@ -2,23 +2,23 @@
 
 import logging
 import os
+import warnings
 from datetime import datetime
 
 import numpy as np
 from astropy import units as u
 from astropy.io import fits
+from astropy.io.fits.verify import VerifyWarning
 from astropy.table import Table
 from joblib import Parallel, delayed
+
 from mpdaf.obj import Cube, Image, Spectrum
 from mpdaf.sdetect.source import Source
 from mpdaf.tools import progressbar
 
-import warnings
-from astropy.io.fits.verify import VerifyWarning
+from .version import version as origin_version
 
 warnings.simplefilter('ignore', category=VerifyWarning)
-
-from .version import __version__ as origin_version
 
 __all__ = ("create_source", "create_all_sources")
 
@@ -281,10 +281,10 @@ def create_source(
     # Add the FSF information to the source and use this information to compute
     # the PSF weighted spectra.
     if has_fsf:
-        try:    
+        try:
             fsfmodel = source.get_FSF()
-            fwhm_fsf = fsfmodel.get_fwhm(data_cube.wave.coord()) 
-            beta_fsf = fsfmodel.get_beta(data_cube.wave.coord()) 
+            fwhm_fsf = fsfmodel.get_fwhm(data_cube.wave.coord())
+            beta_fsf = fsfmodel.get_beta(data_cube.wave.coord())
             source.extract_spectra(
                 data_cube,
                 obj_mask="ORI_MASK_OBJ",

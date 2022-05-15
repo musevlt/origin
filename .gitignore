@@ -14,6 +14,7 @@ dist/
 docs/api/
 docs/_build/
 htmlcov/
+muse_origin/version.py
 .ipynb_checkpoints/
 .pytest_cache/
 tmp*.log
